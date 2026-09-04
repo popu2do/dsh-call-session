@@ -1,0 +1,62 @@
+name: Release & Publish
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run (validate build and packaging without publishing to npm)'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  release:
+    name: Build, Release & Publish
+    runs-on: ubuntu-latest
+    env:
+      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js 20.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+          registry-url: 'https://registry.npmjs.org/'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run verification checks
+        run: npm run verify
+
+      - name: Build npm package tarball
+        run: |
+          TARBALL=$(npm pack --ignore-scripts)
+          echo "TARBALL_NAME=$TARBALL" >> $GITHUB_ENV
+          echo "Packed release tarball: $TARBALL"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: ${{ env.TARBALL_NAME }}
+          generate_release_notes: true
+          draft: false
+          prerelease: false
+
+      - name: Publish to npm
+        if: env.NPM_TOKEN != '' && (github.event_name != 'workflow_dispatch' || !inputs.dry_run)
+        run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ env.NPM_TOKEN }}

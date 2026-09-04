@@ -1,0 +1,81 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - master
+      - main
+  pull_request:
+    branches:
+      - master
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/master' && github.ref != 'refs/heads/main' }}
+
+jobs:
+  test:
+    name: Test (Node ${{ matrix.node-version }} on ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - windows-latest
+        node-version:
+          - 20.x
+          - 22.x
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Code syntax check (lint)
+        run: npm run lint
+
+      - name: TypeScript typecheck
+        if: hashFiles('tsconfig.json') != ''
+        run: npm run typecheck
+
+      - name: Run unit test suite
+        run: npm test
+
+      - name: Run test coverage
+        if: matrix.os == 'ubuntu-latest' && matrix.node-version == '22.x'
+        run: npm run test:coverage
+        continue-on-error: true
+
+  package-check:
+    name: Package Dry-Run & Tarball Inspection
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Verify package dry-run
+        run: npm pack --dry-run
+
+      - name: Inspect packed tarball contents
+        run: |
+          TARBALL=$(npm pack --ignore-scripts)
+          echo "Generated tarball: $TARBALL"
+          tar -tf "$TARBALL"

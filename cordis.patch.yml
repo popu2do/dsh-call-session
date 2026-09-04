@@ -1,0 +1,27 @@
+# dsh-call-session bundle patch: mounts the native cross-session collaboration plugin
+# into the host composition of a DSH profile.
+#
+# The plugin registers native tools into the shared `tools` registry:
+# - board_post: Post public milestone or task context (zero wakeup side effects)
+# - board_list: Query public announcements or tasks (titles_only supported)
+# - board_clear: Manage or clean blackboard entries
+# - session_call: Direct 1:1 in-process unicast agent call (steer/followup)
+# - session_query: Discover active/idle sessions in current workspace
+# And Web slash command:
+# - /dsh-call-session: Quick unicast command and visual board monitor
+#
+# Note:
+# When installed via `dsh plugin --profile <name> add <spec>`, DSH automatically
+# registers this bundle in `dsh.profile.bundles` and loads this patch.
+# Users do NOT need to manually copy `- insert:` blocks into their profile configuration.
+# To override settings, declare property overrides (`- id: dsh-call-session ...`) in
+# `~/.dsh/profiles/<profile>/cordis.patch.yml`.
+- insert:
+    - id: dsh-call-session
+      name: dsh-call-session
+      config:
+        enabled: true
+        # Debounce delay in ms for atomic blackboard flush (default: 300)
+        debounceMs: 300
+        # Maximum posts retained in blackboard memory (default: 200)
+        maxCapacity: 200
