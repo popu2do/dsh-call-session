@@ -1,0 +1,65 @@
+name: "Bug Report"
+description: "Report an issue, defect, or unexpected behavior in dsh-call-agent"
+title: "[Bug]: "
+labels: ["bug"]
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for reporting an issue! Please verify you have searched existing issues to prevent duplicates.
+
+  - type: input
+    id: environment
+    attributes:
+      label: "Runtime Environment"
+      description: "Node.js version, OS, and DeepSeek Harness version."
+      placeholder: "e.g. Node v20.12.0 / Windows 11 / DSH v0.1.1-rc.1"
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: "Bug Description"
+      description: "A clear and concise description of what the bug is."
+      placeholder: "When calling session_call with target_session_id..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: "Steps to Reproduce"
+      description: "Steps to reproduce the observed problem."
+      value: |
+        1. Configure plugin in `cordis.patch.yml` or DSH config
+        2. Run command or trigger tool call: ...
+        3. See error ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: "Expected Behavior"
+      description: "A clear and concise description of what you expected to happen."
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: "Console Logs / Error Output"
+      description: "Paste relevant command output, stack traces, or logs here."
+      render: shell
+
+  - type: checkboxes
+    id: validation
+    attributes:
+      label: "Checklist"
+      options:
+        - label: "I have confirmed this bug exists on the latest release."
+          required: true
+        - label: "I have verified there are no sensitive tokens or private keys in the logs above."
+          required: true

@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 📖 Documentation & Architecture Spec
+    url: https://github.com/popu2do/dsh-call-agent#readme
+    about: Read the official documentation, ADRs, and architecture specification before reporting issues.
+  - name: 💬 DSH Community Discussions
+    url: https://github.com/popu2do/dsh-call-agent/discussions
+    about: Join community discussions, ask questions, or exchange tips on multi-agent collaboration.

@@ -1,0 +1,44 @@
+name: "Feature Request"
+description: "Suggest an idea or enhancement for dsh-call-agent"
+title: "[Feature]: "
+labels: ["enhancement"]
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for suggesting an enhancement to `dsh-call-agent`!
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: "Problem or Motivation"
+      description: "Is your proposal related to a specific limitation or pain point?"
+      placeholder: "A clear and concise description of the problem..."
+    validations:
+      required: false
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: "Proposed Solution"
+      description: "Describe the functionality or change you would like to see."
+      placeholder: "Add support for..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: "Alternative Solutions"
+      description: "Describe any alternative solutions or workarounds considered."
+    validations:
+      required: false
+
+  - type: textarea
+    id: additional_context
+    attributes:
+      label: "Additional Context"
+      description: "Any extra information, mockups, or API examples."
+    validations:
+      required: false
