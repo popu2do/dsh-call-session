@@ -1,6 +1,6 @@
 /**
  * @module dsh-call-session/board-store
- * DSH 公共黑板持久化存储引擎与共享状态契约
+ * 公共黑板存储与数据契约
  */
 
 /** 黑板条目生命周期状态枚举 */
@@ -113,9 +113,9 @@ export interface BoardListOptions {
   crossWorkspace?: boolean;
   /** 是否跨工程穿透查询所有工作区的公告 (snake_case) */
   cross_workspace?: boolean;
-  /** 是否仅返回标题与摘要元数据（不含主体 content 大文本），以节约 Token (camelCase) */
+  /** 是否仅返回标题与元数据摘要（不含 content 正文）(camelCase) */
   titlesOnly?: boolean;
-  /** 是否仅返回标题与摘要元数据 (snake_case) */
+  /** 是否仅返回标题与元数据摘要 (snake_case) */
   titles_only?: boolean;
 }
 
@@ -145,7 +145,7 @@ export interface BoardClearOptions {
   id?: string;
   /** 按主题批量标记撤销（如 task:audit，当未指定 id 时有效） */
   topic?: string;
-  /** 清理动作：'archive' 软删除标记已处理；'delete' 彻底物理移除，默认 'archive' */
+  /** 清理动作：'archive' 归档；'delete' 删除，默认 'archive' */
   action?: BoardClearAction;
   /** 清理模式参数映射（工具入参）：'dismiss' 映射为 archive，'purge' 映射为 delete */
   mode?: 'dismiss' | 'purge';
@@ -163,7 +163,7 @@ export interface BoardClearResult {
   affectedCount: number;
   /** 实际执行的底层动作：'archive' | 'delete' */
   action: BoardClearAction;
-  /** 用户友好的操作反馈描述 */
+  /** 操作结果描述 */
   message: string;
 }
 
@@ -173,11 +173,11 @@ export interface BoardClearResult {
 export interface BoardStoreOptions {
   /** 主存储文件路径（默认指向插件目录下的 board.json） */
   storagePath?: string;
-  /** 容灾备份文件路径（默认 storagePath + '.bak'） */
+  /** 备份文件路径（默认 storagePath + '.bak'） */
   backupPath?: string;
-  /** 内存黑板保留的最大条目数上限（FIFO 淘汰策略），默认 200 */
+  /** 黑板保留条目上限（FIFO 淘汰），默认 200 */
   maxPosts?: number;
-  /** 数据原子写盘的防抖延迟时间（毫秒），默认 300ms */
+  /** 数据持久化防抖延迟（毫秒），默认 300 */
   debounceMs?: number;
   /** 自定义日志记录器对象 */
   logger?: {
@@ -206,12 +206,12 @@ export declare function normalizeWorkspace(rawPath: string | null | undefined): 
 export declare function extractTitle(post: BoardPost | Partial<BoardPost> | null | undefined): string;
 
 /**
- * DSH 公共黑板存储引擎：基于内存主索引的高性能读写、防抖原子持久化与 .bak 容灾自愈
+ * 公共黑板存储引擎：内存存储、防抖持久化与备份恢复
  */
 export declare class BoardStore {
   /** 主文件物理存储路径 */
   storagePath: string;
-  /** 容灾备份物理存储路径 */
+  /** 备份物理存储路径 */
   backupPath: string;
   /** 最大条目容量上限 */
   maxPosts: number;
@@ -231,12 +231,12 @@ export declare class BoardStore {
   constructor(options?: BoardStoreOptions);
 
   /**
-   * 同步初始化载入磁盘数据，主文件异常时自动降级从 .bak 容灾自愈
+   * 同步初始化载入磁盘数据，主文件异常时尝试从 .bak 恢复
    */
   loadSync(): void;
 
   /**
-   * 从 .bak 备份文件执行自愈恢复
+   * 从 .bak 备份文件执行恢复
    */
   recoverFromBackup(): void;
 
@@ -286,12 +286,12 @@ export declare class BoardStore {
   scheduleFlush(): void;
 
   /**
-   * 执行原子写盘：写入临时文件 -> 同步备份 -> 重命名替换主文件（带 Windows 文件锁重试）
+   * 执行原子写盘：写入临时文件后重命名替换主文件并备份
    */
   flushAtomic(): Promise<void>;
 
   /**
-   * 插件卸载或进程退出时立即关闭定时器并强制同步刷新未决写入
+   * 销毁实例并持久化数据
    */
   close(): Promise<void>;
 }

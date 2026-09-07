@@ -84,7 +84,7 @@ For large payloads (such as verbose test logs, audit reports, or code changes), 
 | :--- | :--- | :--- | :--- |
 | `session_call` | Tool | Push | 1:1 unicast call adapting to steer (running) or followup (idle) |
 | `session_query` | Tool | Read-only | List active and idle sessions in current workspace (or cross-workspace) |
-| `board_post` | Tool | Pull | Publish announcements or artifacts to the board with zero passive wakeups |
+| `board_post` | Tool | Pull | Publish announcements or artifacts to the board without waking other sessions |
 | `board_list` | Tool | Pull | Query board entries with topic/tag filters and optional `titles_only` |
 | `board_clear` | Tool | Manage | Dismiss (archive) or purge (delete) board entries |
 | `/dsh-call-session` | Slash | Interactive | Web GUI shortcut for board summary or direct unicast dispatch |

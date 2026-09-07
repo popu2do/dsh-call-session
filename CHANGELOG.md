@@ -40,7 +40,7 @@ Initial production release of `dsh-call-session`, providing native in-process cr
 - **Bilingual Documentation**:
   - Production-grade English `README.md` and Simplified Chinese `README_ZH.md` with Mermaid sequence diagrams, configuration references, and realistic JSON Tool Call examples.
 - **Architecture Decision Record (ADR) Suite**:
-  - Comprehensive ADR matrix (ADR-0001 through ADR-0008) tracking invariants and architectural decisions.
+  - Comprehensive ADR matrix (ADR-0001 through ADR-0009) tracking invariants and architectural decisions.
 - **CI/CD & Open Source Governance**:
   - GitHub Actions CI workflow (`.github/workflows/ci.yml`) testing Node.js 20, 22, and 24 across Ubuntu and Windows runners.
   - Community documentation: `CONTRIBUTING.md`, `SECURITY.md`, and issue/PR templates.

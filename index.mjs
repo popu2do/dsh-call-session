@@ -1,15 +1,15 @@
 /**
- * DSH Cross-Session Native Collaboration & Blackboard Plugin (Native Refactor Edition)
+ * DSH Cross-Session Collaboration & Blackboard Plugin
  *
  * Capabilities:
  * 1. Native Tools:
- *    - board_post, board_list, board_clear (Pull-based shared state, zero wakeup side effects)
- *    - session_call (Strict in-process unicast push, state-aware steer/followup, zero HTTP)
- *    - session_query (Two-state running/idle resolution, workspace isolation by default)
+ *    - board_post, board_list, board_clear: Shared state blackboard storage and queries
+ *    - session_call: In-process unicast communication (steer/followup)
+ *    - session_query: Active session discovery with workspace filtering
  * 2. Web Slash Command:
- *    - /dsh-call-session (Interactive human command and board digest in Web GUI)
+ *    - /dsh-call-session: Unicast command and board digest in Web GUI
  * 3. Lifecycle Disposal:
- *    - Reversible cleanup, atomic debounced flush on dispose.
+ *    - Reversible cleanup and state persistence on dispose
  */
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -50,9 +50,9 @@ try {
  */
 export const Config = zInstance ? zInstance.object({
   enabled: zInstance.boolean().default(true).description('是否启用跨会话通信与公共黑板插件'),
-  storagePath: zInstance.string().description('自定义黑板持久化存储文件路径（默认指向系统级存储目录）'),
-  debounceMs: zInstance.natural().default(300).description('黑板数据原子落盘的防抖时间（毫秒）'),
-  maxCapacity: zInstance.natural().min(10).max(10000).default(200).description('公共黑板最大保留有效条目上限（先进先出淘汰）'),
+  storagePath: zInstance.string().description('黑板持久化存储文件路径'),
+  debounceMs: zInstance.natural().default(300).description('黑板数据持久化防抖延迟（毫秒）'),
+  maxCapacity: zInstance.natural().min(10).max(10000).default(200).description('公共黑板保留条目上限（FIFO 淘汰）'),
   promptSectionOrder: zInstance.natural().default(118).description('注入全局 System Prompt 的排序权重'),
   slashCommand: zInstance.boolean().default(true).description('是否在 Web GUI 注册 /dsh-call-session 斜杠指令'),
 }) : Object.freeze({
@@ -72,10 +72,10 @@ export function usageSectionText() {
   return [
     '## Cross-Session Communication & Collaboration (dsh-call-session)',
     '',
-    'You can discover and coordinate with other active sessions in real time:',
-    '1. Discover sessions: Use `session_query` to find active sessions (scoped to current workspace by default; use `cross_workspace: true` for multi-repository tasks).',
-    '2. Unicast 1:1 call: Use `session_call` to send tasks, reports, or notices to a specific session (`target_session_id`). Wildcard broadcasting is strictly forbidden.',
-    '3. Shared blackboard: Use `board_post` to publish milestones, tasks, or shared state (pure pull model, zero passive wakeups). Use `board_list` to inspect blackboard posts, and `board_clear` to dismiss or purge them.',
+    'Coordinate with other active sessions in real time:',
+    '1. Discover sessions: Use `session_query` to find active sessions (scoped to current workspace by default; use `cross_workspace: true` for cross-workspace discovery).',
+    '2. Unicast call: Use `session_call` to send tasks, reports, or notices to a specific session (`target_session_id`). Wildcards (*, all) are not supported.',
+    '3. Shared blackboard: Use `board_post` to publish milestones, tasks, or shared state. Use `board_list` to query blackboard posts, and `board_clear` to dismiss or purge them.',
     '4. Web slash command: Users can invoke `/dsh-call-session <target_session_id> <message>` directly in the Web UI.'
   ].join('\n');
 }
@@ -160,7 +160,7 @@ export function apply(ctx, config = {}) {
 
     registerSafe({
       name: 'board_post',
-      description: '向原生公共黑板发布一条共享事实、任务交接或公告数据。该操作为纯拉取（Pull）模型，绝对不会触发任何会话的被动唤醒。若需通知特定会话，请在发布后显式调用 session_call 工具并附带返回的 postId。',
+      description: '向公共黑板发布共享事实、状态或公告数据。其他会话可通过 board_list 按需读取。若需直接通知目标会话，请在发布后调用 session_call 并附带返回的 postId。',
       isConcurrencySafe: true,
       parameters: {
         type: 'object',
@@ -169,30 +169,30 @@ export function apply(ctx, config = {}) {
             type: 'string',
             minLength: 1,
             maxLength: 128,
-            description: "主题/业务分类。推荐遵循命名空间风格，如 'task:audit', 'artifact:build', 'spec:api', 'status:system' 等。"
+            description: "主题/业务分类。推荐使用命名空间命名，例如 'task:audit'、'spec:api'。"
           },
           content: {
             type: 'string',
             minLength: 1,
             maxLength: 65536,
-            description: '发布的主体内容。支持 Markdown、纯文本或 JSON 序列化字符串（软限制最大 64KB）。'
+            description: '发布的主体内容。支持 Markdown、纯文本或 JSON 字符串（最大 64KB）。'
           },
           tags: {
             type: 'array',
             items: { type: 'string', minLength: 1, maxLength: 32 },
             maxItems: 10,
-            description: "可选标签列表，便于精确检索。如 ['p0', 'blocked', 'ready-for-review']。"
+            description: "标签列表，用于分类与检索。例如 ['p0', 'blocked']。"
           },
           ttl: {
             type: 'integer',
             minimum: 0,
             maximum: 86400,
             default: 3600,
-            description: '生存时间（秒）。默认 3600 秒（1小时），最大不超过 86400 秒（24小时）。设为 0 表示使用默认存活期。'
+            description: '生存时间（秒）。默认 3600 秒（1小时），最大 86400 秒（24小时）。设为 0 表示使用默认值。'
           },
           metadata: {
             type: 'object',
-            description: '可选的结构化元数据键值对，用于存放版本号、关联文件路径等辅助字段。'
+            description: '可选结构化元数据键值对，用于存储关联文件路径、版本号等。'
           }
         },
         required: ['topic', 'content']
@@ -215,7 +215,7 @@ export function apply(ctx, config = {}) {
         render(_args, value) {
           return [{
             type: 'text',
-            text: value?.message || (value?.success ? `[Board] 公共黑板已发布条目 (#${value?.postId})` : `[Board] 发布失败: ${value?.error}`)
+            text: value?.message || (value?.success ? `[Board] 已发布条目 (#${value?.postId})` : `[Board] 发布失败: ${value?.error}`)
           }];
         }
       },
@@ -256,7 +256,7 @@ export function apply(ctx, config = {}) {
             createdAt: post.createdAt,
             expiresAt: post.expiresAt,
             scope: post.scope,
-            message: `[Board] 公共黑板已成功发布条目 (#${post.id})，纯拉取模型，零被动唤醒副作用。`
+            message: `[Board] 已发布条目 (#${post.id})`
           };
         } catch (err) {
           logger.debug?.(`[dsh-call-session] board_post execution failed: ${err?.message || err}`);
@@ -267,44 +267,44 @@ export function apply(ctx, config = {}) {
 
     registerSafe({
       name: 'board_list',
-      description: '查询公共黑板上的有效公告与共享状态。纯拉取（Pull）操作，零被动唤醒。默认仅返回与调用方同一工作区的条目；跨工程协作请设置 cross_workspace: true。支持 titles_only 精简模式以节约 Token。',
+      description: '查询公共黑板上的有效公告与共享状态。默认仅返回当前工作区的条目；跨工作区查询请设置 cross_workspace: true。',
       isConcurrencySafe: true,
       parameters: {
         type: 'object',
         properties: {
           topic: {
             type: 'string',
-            description: '按完整主题过滤（如 task:audit）。'
+            description: '按完整主题过滤，例如 task:audit。'
           },
           topic_prefix: {
             type: 'string',
-            description: '按主题前缀模糊过滤（如 task: 可匹配 task:audit, task:verify）。'
+            description: '按主题前缀过滤，例如 task:。'
           },
           tag: {
             type: 'string',
-            description: '按单个标签检索（如 ready-for-review）。'
+            description: '按单个标签过滤。'
           },
           active_only: {
             type: 'boolean',
             default: true,
-            description: '是否仅返回未过期且未被撤销的活跃记录。默认为 true。'
+            description: '是否仅返回未过期且未归档的活跃记录。默认为 true。'
           },
           cross_workspace: {
             type: 'boolean',
             default: false,
-            description: '是否跨工程穿透查询所有工作区的公告。默认为 false（仅查当前工程）。'
+            description: '是否查询所有工作区的条目。默认为 false（仅当前工作区）。'
           },
           titles_only: {
             type: 'boolean',
             default: false,
-            description: '是否仅返回标题与摘要元数据（不含主体 content 大文本），极度节省 Token。'
+            description: '是否仅返回标题与元数据摘要（不含 content 正文）。默认为 false。'
           },
           limit: {
             type: 'integer',
             minimum: 1,
             maximum: 100,
             default: 20,
-            description: '返回结果数量限制。默认 20 条。'
+            description: '返回条数限制。默认 20，最大 100。'
           }
         }
       },
@@ -379,24 +379,24 @@ export function apply(ctx, config = {}) {
 
     registerSafe({
       name: 'board_clear',
-      description: '清理或撤销黑板上的指定条目或主题。纯拉取（Pull）管理操作，零唤醒副作用。',
+      description: '清理或归档黑板上的指定条目或主题。',
       isConcurrencySafe: true,
       parameters: {
         type: 'object',
         properties: {
           id: {
             type: 'string',
-            description: '待删除或撤销的条目唯一 ID（如 post-1725300000000-abcd）。'
+            description: '目标条目 ID（例如 post-1725300000000-abcd）。'
           },
           topic: {
             type: 'string',
-            description: '按主题批量标记撤销（如 task:audit）。当未指定 id 时有效。'
+            description: '按主题批量清理（例如 task:audit）。未指定 id 时生效。'
           },
           mode: {
             type: 'string',
             enum: ['dismiss', 'purge'],
             default: 'dismiss',
-            description: "清理模式：'dismiss' 软删除标记已处理（保留审计踪迹）；'purge' 彻底物理移除。默认 'dismiss'。"
+            description: "清理模式：'dismiss'（归档，保留记录）或 'purge'（物理删除）。默认 'dismiss'。"
           }
         }
       },
@@ -424,7 +424,7 @@ export function apply(ctx, config = {}) {
             return {
               success: false,
               clearedCount: 0,
-              error: 'board_clear 必须指定 id 或 topic 至少一个筛选条件。'
+              error: 'board_clear 必须指定 id 或 topic 筛选条件。'
             };
           }
 
@@ -454,7 +454,7 @@ export function apply(ctx, config = {}) {
 
     registerSafe({
       name: 'session_call',
-      description: '向指定活跃会话发起严格 1:1 DSH 原生进程内单播调用。纯推送模型，自适应支持目标 running（steer 引导）与 idle（followup 唤醒），严格禁止通配符广播与自身自呼叫。支持关联黑板条目（context_post_ids）。',
+      description: '向指定活跃会话发起单播调用。根据目标状态自动选择 steer（运行中引导）或 followup（空闲唤醒）。支持关联黑板条目（context_post_ids）。',
       isConcurrencySafe: true,
       parameters: {
         type: 'object',
@@ -463,24 +463,24 @@ export function apply(ctx, config = {}) {
             type: 'string',
             minLength: 8,
             maxLength: 128,
-            description: '目标会话 Session ID（支持精确匹配或 >=8 位唯一前缀，严禁 * 或广播通配符）。'
+            description: '目标会话 Session ID（支持精确匹配或 >=8 位唯一前缀；不支持通配符）。'
           },
           message: {
             type: 'string',
             minLength: 1,
             maxLength: 4000,
-            description: '纯净任务指令、汇报或交接内容（严禁假冒人类或拼装假信封）。'
+            description: '任务指令、进度汇报或通知内容（最大 4000 字符）。'
           },
           call_type: {
             type: 'string',
             enum: ['task_dispatch', 'task_report', 'notice'],
             default: 'task_dispatch',
-            description: '呼叫意图类型：task_dispatch（任务派发）、task_report（任务汇报）、notice（状态同步通知）。'
+            description: '呼叫意图类型：task_dispatch（任务派发）、task_report（任务汇报）、notice（状态同步通知）。默认 task_dispatch。'
           },
           context_post_ids: {
             type: 'array',
             items: { type: 'string' },
-            description: '可选引用的公共黑板条目 ID列表。'
+            description: '引用的公共黑板条目 ID 列表。'
           }
         },
         required: ['target_session_id', 'message']
@@ -518,36 +518,36 @@ export function apply(ctx, config = {}) {
 
     registerSafe({
       name: 'session_query',
-      description: '查询当前活跃会话。纯只读探索工具。默认仅返回当前工程工作区的会话；跨工程协作请设置 cross_workspace: true。状态严格规范化为 idle 与 running 两态。',
+      description: '查询当前活跃会话。默认仅返回当前工作区的会话；跨工作区查询请设置 cross_workspace: true。状态规范化为 running 或 idle。',
       isConcurrencySafe: true,
       parameters: {
         type: 'object',
         properties: {
           query: {
             type: 'string',
-            description: '模糊搜索关键词（匹配 Session ID 或 Title）。'
+            description: '搜索关键词（匹配 Session ID 或 Title）。'
           },
           running_only: {
             type: 'boolean',
             default: false,
-            description: '是否仅查询处于 running 运行态的会话。默认为 false（返回 running 和 idle）。'
+            description: '是否仅返回处于 running 状态的会话。默认为 false。'
           },
           cross_workspace: {
             type: 'boolean',
             default: false,
-            description: '是否跨工程穿透查询所有工作区的会话。默认为 false（仅查当前工程）。'
+            description: '是否查询所有工作区的会话。默认为 false（仅当前工作区）。'
           },
           top_level_only: {
             type: 'boolean',
             default: true,
-            description: '是否仅列出顶层根会话（排除子代理与匿名会话）。默认为 true。'
+            description: '是否仅列出顶层会话（排除子代理与临时会话）。默认为 true。'
           },
           limit: {
             type: 'integer',
             minimum: 1,
             maximum: 100,
             default: 50,
-            description: '返回结果数量限制。默认 50 条。'
+            description: '返回条数限制。默认 50，最大 100。'
           }
         }
       },
@@ -593,7 +593,7 @@ export function apply(ctx, config = {}) {
 
     cmdCtx.commands.register({
       name: 'dsh-call-session',
-      description: '向指定活跃会话发起 DSH 原生跨会话调度呼叫，或无参查阅看板有效标题',
+      description: '向指定会话发起单播呼叫，或不带参数查看当前黑板标题摘要',
       input: { hint: '[<target_session_id> <message>]' },
       recordInput: false,
       handler: async (invocation) => {
@@ -609,11 +609,11 @@ export function apply(ctx, config = {}) {
             return {
               kind: 'success',
               text: [
-                '📋 [工作区公告看板] 当前暂无有效公告。',
+                '[工作区公告看板] 当前暂无有效公告。',
                 '',
-                '💡 使用说明:',
-                '• 跨会话呼叫: /dsh-call-session <target_session_id> <message>',
-                '• 查阅可用会话: 调用 session_query 工具'
+                '使用说明:',
+                '- 跨会话呼叫: /dsh-call-session <target_session_id> <message>',
+                '- 查询可用会话: 调用 session_query 工具'
               ].join('\n')
             };
           }
@@ -622,7 +622,7 @@ export function apply(ctx, config = {}) {
             text: [
               digest,
               '',
-              '💡 提示: 输入 `/dsh-call-session <target_session_id> <message>` 可直接跨会话呼叫目标 Agent。'
+              '用法: /dsh-call-session <target_session_id> <message>'
             ].join('\n')
           };
         }
@@ -659,7 +659,7 @@ export function apply(ctx, config = {}) {
 
           return {
             kind: 'success',
-            text: `已通过原生单播 (${result.deliveryMode}) 成功呼叫会话 [${result.targetSessionId}]`
+            text: `已通过单播 (${result.deliveryMode}) 成功呼叫会话 [${result.targetSessionId}]`
           };
         } catch (error) {
           return {
@@ -681,7 +681,7 @@ export function apply(ctx, config = {}) {
     });
   }
 
-  logger.debug?.('[dsh-call-session] Plugin fully initialized with pure native board, session_call, session_query, and /dsh-call-session.');
+  logger.debug?.('[dsh-call-session] Plugin initialized.');
 }
 
 export default {

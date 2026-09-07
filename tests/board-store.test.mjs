@@ -187,7 +187,7 @@ test('BoardStore: 工作区作用域隔离与跨工程查询', async (t) => {
   await store.close();
 });
 
-test('BoardStore: titlesOnly 节约模式与格式化摘要', async (t) => {
+test('BoardStore: titlesOnly 摘要模式与格式化输出', async (t) => {
   const tmpDir = await createTempDir();
   t.after(async () => {
     await fs.rm(tmpDir, { recursive: true, force: true });
@@ -348,7 +348,7 @@ test('BoardStore: 容量限制与 FIFO 淘汰机制', async (t) => {
   await store.close();
 });
 
-test('BoardStore: 原子持久化与 .bak 容灾自愈测试', async (t) => {
+test('BoardStore: 持久化与 .bak 备份恢复测试', async (t) => {
   const tmpDir = await createTempDir();
   t.after(async () => {
     await fs.rm(tmpDir, { recursive: true, force: true });
@@ -377,10 +377,10 @@ test('BoardStore: 原子持久化与 .bak 容灾自愈测试', async (t) => {
   assert.ok(existsSync(storagePath), 'board.json 主文件应当已落盘');
   assert.ok(existsSync(backupPath), 'board.json.bak 备份文件应当已生成');
 
-  // 2. 模拟灾难场景：人为破坏主文件为乱码 JSON
+  // 2. 模拟主文件损坏
   writeFileSync(storagePath, 'INVALID_CORRUPTED_JSON_<<<>>>', 'utf8');
 
-  // 3. 重新实例化，断言自动从 .bak 备份恢复自愈
+  // 3. 重新实例化，验证从 .bak 备份恢复
   const store2 = new BoardStore({
     storagePath,
     backupPath,

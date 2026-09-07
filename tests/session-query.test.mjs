@@ -129,7 +129,7 @@ test('resolveAgentsService: 多上下文多路径探针', () => {
   assert.equal(resolveAgentsService({}), null);
 });
 
-test('executeSessionQuery: 严格两态规约 (running / idle)', () => {
+test('executeSessionQuery: 状态规范化 (running / idle)', () => {
   const aRunning = createMockAgent('sess-running', { status: 'running' });
   const aIdle = createMockAgent('sess-idle', { status: 'idle' });
   const aPaused = createMockAgent('sess-paused', { status: 'paused' });
@@ -198,7 +198,7 @@ test('executeSessionQuery: top_level_only 过滤子代理与空白会话', () =>
   assert.equal(resAll.count, 3);
 });
 
-test('executeSessionQuery: 工作区作用域隔离与跨工程穿透', () => {
+test('executeSessionQuery: 工作区作用域隔离与跨工程查询', () => {
   const caller = createMockAgent('caller-sess', { cwd: 'c:/repos/repo-alpha' });
   const peerInAlpha = createMockAgent('peer-alpha', { cwd: 'C:\\repos\\repo-alpha' });
   const peerInBeta = createMockAgent('peer-beta', { cwd: 'c:/repos/repo-beta' });

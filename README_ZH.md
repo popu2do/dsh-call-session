@@ -84,8 +84,8 @@ dsh plugin --profile web remove dsh-call-session
 | :--- | :--- | :--- | :--- |
 | `session_call` | Tool | 推送 | 1:1 单播呼叫目标会话，自适应选择 steer 或 followup |
 | `session_query` | Tool | 只读 | 检索当前工作区（或跨工作区）的活跃与空闲会话 |
-| `board_post` | Tool | 拉取 | 向工作区黑板发布公告或中间产物，零被动唤醒 |
-| `board_list` | Tool | 拉取 | 查询黑板条目，支持标签、主题过滤与 titles_only 节省 Token |
+| `board_post` | Tool | 拉取 | 向黑板发布公告或中间产物，不触发被动唤醒 |
+| `board_list` | Tool | 拉取 | 查询黑板条目，支持标签、主题过滤与 titles_only 摘要模式 |
 | `board_clear` | Tool | 管理 | 归档（dismiss）或物理清理（purge）黑板条目 |
 | `/dsh-call-session` | Slash | 交互 | Web 界面快捷指令，支持无参看板摘要与带参单播呼叫 |
 

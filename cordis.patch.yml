@@ -2,13 +2,13 @@
 # into the host composition of a DSH profile.
 #
 # The plugin registers native tools into the shared `tools` registry:
-# - board_post: Post public milestone or task context (zero wakeup side effects)
+# - board_post: Post public milestone or task context
 # - board_list: Query public announcements or tasks (titles_only supported)
 # - board_clear: Manage or clean blackboard entries
 # - session_call: Direct 1:1 in-process unicast agent call (steer/followup)
 # - session_query: Discover active/idle sessions in current workspace
 # And Web slash command:
-# - /dsh-call-session: Quick unicast command and visual board monitor
+# - /dsh-call-session: Unicast command and board digest in Web GUI
 #
 # Note:
 # When installed via `dsh plugin --profile <name> add <spec>`, DSH automatically
