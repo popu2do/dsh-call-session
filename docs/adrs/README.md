@@ -35,6 +35,9 @@ ADRs transition through the following states:
 | **ADR-0007** | Web Slash Command Integration and Visual UX Streamline | **Accepted** | 2026-09-04 | `index.mjs`, `package.json` | [0007-web-slash-command-and-visual-ux.md](./0007-web-slash-command-and-visual-ux.md) |
 | **ADR-0008** | Zero-Pollution Global Profile Mounting and Reversible Lifecycle Management | **Accepted** | 2026-09-04 | `index.mjs`, `cordis.patch.yml` | [0008-zero-pollution-global-profile-mounting.md](./0008-zero-pollution-global-profile-mounting.md) |
 | **ADR-0009** | Restrained Minimalist Technical Documentation and Anti-AI-Slop Governance | **Accepted** | 2026-09-04 | `README.md`, `README_ZH.md` | [0009-restrained-minimalist-docs-and-anti-ai-slop.md](./0009-restrained-minimalist-docs-and-anti-ai-slop.md) |
+| **ADR-0010** | Dynamic Blackboard State Mirror Projection and Controlled Peer Session Lifecycle | **Accepted** | 2026-09-07 | `index.mjs`, `lib/board-store.mjs`, `lib/session-create.mjs` | [0010-dynamic-state-mirror-and-peer-session-lifecycle.md](./0010-dynamic-state-mirror-and-peer-session-lifecycle.md) |
+| **ADR-0011** | Board List Token Governance, Exact ID Retrieval, and Prompt KV Cache Protection | **Accepted** | 2026-09-08 | `index.mjs`, `lib/board-store.mjs`, `types/board-store.d.ts` | [0011-board-list-token-governance-and-exact-retrieval.md](./0011-board-list-token-governance-and-exact-retrieval.md) |
+| **ADR-0012** | Visual Collaboration Canvas and In-Memory Call Telemetry Architecture | **Accepted** | 2026-09-09 | `lib/call-telemetry.mjs`, `lib/web-telemetry-route.mjs`, `lib/client.js`, `lib/session-call.mjs`, `index.mjs` | [0012-visual-collaboration-canvas-and-in-memory-call-telemetry.md](./0012-visual-collaboration-canvas-and-in-memory-call-telemetry.md) |
 
 ---
 

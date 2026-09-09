@@ -21,6 +21,7 @@ import {
   AtomicBoardStore,
   normalizeWorkspace,
   extractTitle,
+  formatAuthorReminderText,
   type BoardPost,
   type BoardPostStatus,
   type BoardClearAction,
@@ -56,6 +57,38 @@ import {
   type SessionQueryResult
 } from './session-query.js';
 
+import {
+  executeSessionCreate,
+  PEER_SESSION_CONSTANTS,
+  type SessionCreateArgs,
+  type SessionCreateResult
+} from './session-create.js';
+
+import {
+  CallTelemetryRingBuffer,
+  getCanvasTelemetry,
+  getCallTelemetry,
+  type CanvasCallType,
+  type CanvasDeliveryMode,
+  type CanvasSessionState,
+  type CallTelemetryRecord,
+  type CallTelemetryFilter,
+  type CanvasWorkspaceEntity,
+  type CanvasSessionEntity,
+  type CanvasBoardPostEntity,
+  type CanvasTelemetrySnapshot,
+  type GetCanvasTelemetryOptions
+} from './call-telemetry.js';
+
+import {
+  installTelemetryWebSurface,
+  authenticatedWebRoutes,
+  createTelemetryHandler,
+  TELEMETRY_ROUTE_PATH,
+  WEB_SERVER_KEYS,
+  type AuthenticatedWebRoutes
+} from './web-telemetry-route.js';
+
 /** Cordis 插件唯一识别名 */
 export declare const name = 'dsh-call-session';
 
@@ -85,8 +118,12 @@ export interface CallSessionConfig {
   debounceMs?: number;
   /** 黑板保留条目上限（FIFO 淘汰），默认 200 */
   maxCapacity?: number;
+  /** 跨会话调用遥测环形缓冲区保留上限（FIFO 淘汰），默认 200 */
+  telemetryCapacity?: number;
   /** 注入全局 System Prompt 的排序权重，默认 118 */
   promptSectionOrder?: number;
+  /** 记名提醒注入 System Prompt Context 的排序权重，默认 130 */
+  remindContextOrder?: number;
   /** 是否注册 /dsh-call-session 斜杠命令，默认 true */
   slashCommand?: boolean;
 }
@@ -125,6 +162,7 @@ export {
   AtomicBoardStore,
   normalizeWorkspace,
   extractTitle,
+  formatAuthorReminderText,
   getArchivedSessionIds,
   resolveSessionCwd,
   resolveSessionTitle,
@@ -132,7 +170,17 @@ export {
   executeSessionQuery,
   executeSessionCall,
   dispatchNativeMessage,
-  CALL_TYPE_INTENTS
+  CALL_TYPE_INTENTS,
+  executeSessionCreate,
+  PEER_SESSION_CONSTANTS,
+  CallTelemetryRingBuffer,
+  getCanvasTelemetry,
+  getCallTelemetry,
+  installTelemetryWebSurface,
+  authenticatedWebRoutes,
+  createTelemetryHandler,
+  TELEMETRY_ROUTE_PATH,
+  WEB_SERVER_KEYS
 };
 
 export type {
@@ -154,5 +202,18 @@ export type {
   NativeUserMessage,
   SessionInfo,
   SessionQueryArgs,
-  SessionQueryResult
+  SessionQueryResult,
+  SessionCreateArgs,
+  SessionCreateResult,
+  CanvasCallType,
+  CanvasDeliveryMode,
+  CanvasSessionState,
+  CallTelemetryRecord,
+  CallTelemetryFilter,
+  CanvasWorkspaceEntity,
+  CanvasSessionEntity,
+  CanvasBoardPostEntity,
+  CanvasTelemetrySnapshot,
+  GetCanvasTelemetryOptions,
+  AuthenticatedWebRoutes
 };

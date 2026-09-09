@@ -7,6 +7,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.1.1] - 2026-09-09
+
+### Summary
+Maintenance and feature release introducing Visual Collaboration Canvas, lightweight read-only Web telemetry routing, peer root session orchestration (`session_create`), board token governance, and pure-state idempotent author reminders.
+
+### Added
+- **Visual Collaboration Canvas (`lib/client.js`)**:
+  - Web GUI conversation view extension tab「看板」(`conversation.view`, id: `canvas`, order: 15).
+  - Multi-workspace swimlane clustering, session state nodes (`running` and `idle`), and blackboard hubs.
+  - Three-state time-decayed call edge rendering (`task_dispatch`, `task_report`, `notice`) with smooth Bezier curves.
+  - 60fps GPU acceleration via `translate3d`, `will-change`, and layout containment.
+  - L3 read-only inspector drawer with field copy, ESC dismissal, and zero-mutation guarantee.
+- **Read-Only Telemetry Web Surface (`lib/web-telemetry-route.mjs`)**:
+  - Host route `GET /plugins/dsh-call-session/telemetry` protected by Connection authentication fence (503/401/403).
+  - Strict read-only GET-only enforcement (non-GET intercepted with 405 Method Not Allowed).
+  - In-memory bounded ring buffer (`CallTelemetryRingBuffer`, default capacity 200, range 10-2000, FIFO eviction).
+  - Zero disk I/O, zero passive wake-ups, and graceful fallback in webless profiles.
+- **Native Peer Root Session Orchestration (`session_create`)**:
+  - Creation of independent root sessions directly in the current workspace with non-blocking fire-and-forget ignition.
+  - Reverse disambiguation semantic anchoring to clarify intent and prevent improper use of `subagent`.
+  - Tri-guard protection: workspace quota (10 active root sessions), rate limiting (5 creates/min per session), and generation cutoff (`Generation <= 2`).
+  - Automatic `session:bootstrap` blackboard post publication and context reference mounting.
+- **Board Token Governance & Exact ID Retrieval (ADR-0011)**:
+  - Default `titles_only: true` for catalog queries, eliminating bulky `content` to conserve LLM tokens and protect KV cache.
+  - Exact ID point retrieval (`id`) with automatic smart diversion to `titles_only: false` while respecting explicit caller intent.
+  - Complete elimination of volatile `remainingSeconds` to maintain prompt prefix stability.
+- **Pure-State Idempotent Author Reminder (ADR-0010)**:
+  - Dynamic author cleaning reminder mounted in `systemPrompt.context` (`board:remind`, order: 130).
+  - Pure state-idempotent formatting without volatile timestamps, ensuring 100% byte-for-byte cache invariance.
+- **Architecture Decision Records**:
+  - Added ADR-0010, ADR-0011, ADR-0012, and Collaboration Canvas PRD.
+
+### Security & Governance
+- **Zero-Trace Workspace Discipline**:
+  - Strict isolation and ignore rules for runtime artifacts (`.dsh-vision-toolkit/`).
+  - Zero unmanaged disk artifacts, zero console pollution in production paths, and complete test suite cleanup.
+- **KV Cache Defense (ADR-0012 Invariant 4)**:
+  - Telemetry and canvas interfaces strictly excluded from LLM tools and system prompts.
+
 ## [0.1.0] - 2026-09-02
 
 ### Summary

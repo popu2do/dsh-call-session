@@ -53,12 +53,6 @@ jspm_packages/
 # =============================================================================
 # Plugin Temporary & Backup Storage (Blackboard Artifacts)
 # =============================================================================
-board.json
-board.json.bak
-board.json.tmp.*
-board*.json
-board*.json.bak
-board*.json.tmp.*
 *.tmp
 *.temp
 
@@ -66,6 +60,7 @@ board*.json.tmp.*
 # DSH Framework, AI Agent & Workspace Local States
 # =============================================================================
 .dsh/
+.dsh-vision-toolkit/
 .agent-teams/
 .reasonix/
 .repowise/
