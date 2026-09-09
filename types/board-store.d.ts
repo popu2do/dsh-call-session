@@ -79,8 +79,6 @@ export interface BoardTitleItem {
   createdAt: string;
   /** 距离过期的剩余分钟数 */
   remainingMinutes: number;
-  /** 距离过期的剩余秒数 */
-  remainingSeconds?: number;
   /** 当前状态 */
   status?: BoardPostStatus;
   /** 扩展元数据 */
@@ -91,6 +89,8 @@ export interface BoardTitleItem {
  * 查询黑板条目参数选项
  */
 export interface BoardListOptions {
+  /** 按条目唯一 ID 精确检索（如 post-1725300000000-abcd） */
+  id?: string;
   /** 按完整主题过滤（如 task:audit） */
   topic?: string;
   /** 按主题前缀模糊过滤 (camelCase) */
@@ -113,9 +113,9 @@ export interface BoardListOptions {
   crossWorkspace?: boolean;
   /** 是否跨工程穿透查询所有工作区的公告 (snake_case) */
   cross_workspace?: boolean;
-  /** 是否仅返回标题与元数据摘要（不含 content 正文）(camelCase) */
+  /** 是否仅返回标题与元数据摘要（不含 content 正文）。未指定 id 时默认为 true，指定 id 时默认为 false (camelCase) */
   titlesOnly?: boolean;
-  /** 是否仅返回标题与元数据摘要 (snake_case) */
+  /** 是否仅返回标题与元数据摘要。未指定 id 时默认为 true，指定 id 时默认为 false (snake_case) */
   titles_only?: boolean;
 }
 
@@ -206,6 +206,15 @@ export declare function normalizeWorkspace(rawPath: string | null | undefined): 
 export declare function extractTitle(post: BoardPost | Partial<BoardPost> | null | undefined): string;
 
 /**
+ * 将作者的未清理活跃条目格式化为纯状态幂等的简明记名提醒文本
+ * 严禁包含动态时间戳（如 Date.now() 或剩余时间），以保护 LLM KV 前缀缓存
+ *
+ * @param posts 活跃条目列表
+ * @returns 记名提醒文本，无条目时返回空字符串 ''
+ */
+export declare function formatAuthorReminderText(posts?: BoardPost[] | null): string;
+
+/**
  * 公共黑板存储引擎：内存存储、防抖持久化与备份恢复
  */
 export declare class BoardStore {
@@ -259,6 +268,14 @@ export declare class BoardStore {
    * 根据唯一 ID 获取黑板条目
    */
   get(id: string): BoardPost | undefined;
+
+  /**
+   * 查找由指定 Session 发布的、当前仍处于活跃且未过期的黑板条目列表
+   *
+   * @param authorSessionId 作者 Session ID
+   * @param callerWorkspace 调用方规范化工作区路径（用于工作区隔离，可选）
+   */
+  findActiveByAuthor(authorSessionId: string, callerWorkspace?: string): BoardPost[];
 
   /**
    * 按条件检索与过滤黑板条目列表

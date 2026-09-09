@@ -114,11 +114,21 @@ test('BoardStore: 基础 CRUD、条目查询与标签过滤', async (t) => {
   assert.ok(retrieved);
   assert.equal(retrieved.topic, 'task:audit');
 
-  // list: 全量查询
+  // list: 全量查询 (默认 titlesOnly: true 保护 Token 与 KV Cache)
   const listAll = store.list({ callerWorkspace: 'c:/repo' });
   assert.equal(listAll.total, 2);
   assert.equal(listAll.returned, 2);
+  assert.equal(listAll.titlesOnly, true);
   assert.equal(listAll.posts[0].id, 'post-2'); // 倒序排序
+  assert.equal(listAll.posts[0].content, undefined, '默认全量列表不得包含 content 正文');
+  assert.equal(listAll.posts[0].remainingSeconds, undefined, '绝对严禁输出易逝 remainingSeconds');
+
+  // list: 显式指定 titlesOnly: false 全量拉取详情
+  const listFull = store.list({ callerWorkspace: 'c:/repo', titlesOnly: false });
+  assert.equal(listFull.total, 2);
+  assert.equal(listFull.titlesOnly, false);
+  assert.equal(listFull.posts[0].content, 'Build artifact published');
+  assert.equal(listFull.posts[0].remainingSeconds, undefined);
 
   // list: 按 topic 精确或前缀匹配
   const auditList = store.list({ topic: 'task:audit', callerWorkspace: 'c:/repo' });
@@ -396,4 +406,175 @@ test('BoardStore: 持久化与 .bak 备份恢复测试', async (t) => {
 
 test('AtomicBoardStore: 别名导出一致性', () => {
   assert.equal(BoardStore, AtomicBoardStore);
+});
+
+test('BoardStore: ADR-0011 规范验证 (默认 titlesOnly: true、id 精确查阅智能分流与显式覆盖)', async (t) => {
+  const tmpDir = await createTempDir();
+  t.after(async () => {
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  });
+
+  const store = new BoardStore({
+    storagePath: path.join(tmpDir, 'board.json'),
+    debounceMs: 50
+  });
+
+  const now = Date.now();
+  store.post({
+    id: 'post-adr-1',
+    topic: 'task:architecture',
+    content: '# ADR-0011 Token Governance\nMassive 64KB architecture spec text goes here...',
+    tags: ['adr', 'spec'],
+    authorSessionId: 'sess-arch',
+    authorTitle: 'Chief Architect',
+    authorWorkspace: 'c:/repo',
+    createdAt: new Date(now).toISOString(),
+    createdAtMs: now,
+    expiresAt: new Date(now + 3600 * 1000).toISOString(),
+    expiresAtMs: now + 3600 * 1000,
+    status: 'active',
+    metadata: { version: '1.0' }
+  });
+
+  store.post({
+    id: 'post-adr-2',
+    topic: 'task:implementation',
+    content: '## Implementation Detail\nSource code changes in lib/board-store.mjs...',
+    tags: ['dev', 'core'],
+    authorSessionId: 'sess-dev',
+    authorTitle: 'Senior Dev',
+    authorWorkspace: 'c:/repo',
+    createdAt: new Date(now + 100).toISOString(),
+    createdAtMs: now + 100,
+    expiresAt: new Date(now + 3600 * 1000).toISOString(),
+    expiresAtMs: now + 3600 * 1000,
+    status: 'active'
+  });
+
+  // 1. 默认集合查询：未传 id 且未传 titlesOnly，严格默认为 titlesOnly: true，彻底剔除 content
+  const defaultList = store.list({ callerWorkspace: 'c:/repo' });
+  assert.equal(defaultList.titlesOnly, true, '集合查询未显式指定时 titlesOnly 必须默认为 true');
+  assert.equal(defaultList.total, 2);
+  assert.equal(defaultList.returned, 2);
+  for (const post of defaultList.posts) {
+    assert.equal(post.content, undefined, '默认摘要模式严禁包含 content 正文');
+    assert.equal(post.remainingSeconds, undefined, '条目中严禁包含易逝 remainingSeconds 字段');
+    assert.ok(post.id);
+    assert.ok(post.title);
+    assert.ok(post.topic);
+    assert.ok(typeof post.remainingMinutes === 'number');
+  }
+
+  // 2. 单条点查智能分流：传入 id 且未传 titlesOnly，自动分流默认为 titlesOnly: false，直取完整 content
+  const pointDetail = store.list({ id: 'post-adr-1', callerWorkspace: 'c:/repo' });
+  assert.equal(pointDetail.titlesOnly, false, '指定 id 且未指定 titlesOnly 时必须智能分流为 false');
+  assert.equal(pointDetail.total, 1);
+  assert.equal(pointDetail.returned, 1);
+  assert.equal(pointDetail.posts[0].id, 'post-adr-1');
+  assert.equal(pointDetail.posts[0].content, '# ADR-0011 Token Governance\nMassive 64KB architecture spec text goes here...');
+  assert.equal(pointDetail.posts[0].remainingSeconds, undefined, '详情模式依然绝对剔除 remainingSeconds');
+
+  // 3. 显式意图优先 (Caller Intent Supremacy)：传入 id 且显式传 titlesOnly: true，依然返回摘要
+  const pointDigest = store.list({ id: 'post-adr-1', titlesOnly: true, callerWorkspace: 'c:/repo' });
+  assert.equal(pointDigest.titlesOnly, true);
+  assert.equal(pointDigest.total, 1);
+  assert.equal(pointDigest.posts[0].id, 'post-adr-1');
+  assert.equal(pointDigest.posts[0].content, undefined, '显式声明 titlesOnly: true 必须剥离 content');
+
+  // 3b. 蛇形参数别名 titles_only: true 同样遵循显式意图
+  const pointDigestSnake = store.list({ id: 'post-adr-1', titles_only: true, callerWorkspace: 'c:/repo' });
+  assert.equal(pointDigestSnake.titlesOnly, true);
+  assert.equal(pointDigestSnake.posts[0].content, undefined);
+
+  // 4. 显式意图优先：未传 id 但显式指定 titlesOnly: false，全量返回包含 content
+  const fullList = store.list({ titlesOnly: false, callerWorkspace: 'c:/repo' });
+  assert.equal(fullList.titlesOnly, false);
+  assert.equal(fullList.total, 2);
+  assert.equal(fullList.posts[0].content, '## Implementation Detail\nSource code changes in lib/board-store.mjs...');
+  assert.equal(fullList.posts[1].content, '# ADR-0011 Token Governance\nMassive 64KB architecture spec text goes here...');
+
+  // 4b. 蛇形参数别名 titles_only: false 同样生效
+  const fullListSnake = store.list({ titles_only: false, callerWorkspace: 'c:/repo' });
+  assert.equal(fullListSnake.titlesOnly, false);
+  assert.ok(fullListSnake.posts[0].content);
+
+  // 5. 不存在的 id 精确查询返回空列表
+  const nonExistent = store.list({ id: 'post-does-not-exist', callerWorkspace: 'c:/repo' });
+  assert.equal(nonExistent.total, 0);
+  assert.equal(nonExistent.returned, 0);
+  assert.deepEqual(nonExistent.posts, []);
+
+  // 6. Prompt KV Cache 深度防御：断言所有返回结果序列化字符串均不包含 remainingSeconds
+  for (const res of [defaultList, pointDetail, pointDigest, fullList, nonExistent]) {
+    const serialized = JSON.stringify(res);
+    assert.equal(serialized.includes('remainingSeconds'), false, '返回结果序列化中绝对不得包含 remainingSeconds');
+  }
+
+  await store.close();
+});
+
+test('BoardStore: id 精确查阅的工作区隔离机制与跨工程穿透', async (t) => {
+  const tmpDir = await createTempDir();
+  t.after(async () => {
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  });
+
+  const store = new BoardStore({
+    storagePath: path.join(tmpDir, 'board.json'),
+    debounceMs: 50
+  });
+
+  const now = Date.now();
+  store.post({
+    id: 'post-isolated-frontend',
+    topic: 'ui:theme',
+    content: 'Frontend theme specification',
+    authorWorkspace: 'c:/workspaces/frontend-app',
+    createdAtMs: now,
+    status: 'active'
+  });
+
+  store.post({
+    id: 'post-isolated-backend',
+    topic: 'api:auth',
+    content: 'Backend auth specification',
+    authorWorkspace: 'c:/workspaces/backend-service',
+    createdAtMs: now + 50,
+    status: 'active'
+  });
+
+  const callerWs = 'c:/workspaces/frontend-app';
+
+  // 1. 同工作区内精确检索目标条目：成功返回且默认分流包含 content
+  const sameWsRes = store.list({ id: 'post-isolated-frontend', callerWorkspace: callerWs });
+  assert.equal(sameWsRes.total, 1);
+  assert.equal(sameWsRes.posts[0].id, 'post-isolated-frontend');
+  assert.equal(sameWsRes.posts[0].content, 'Frontend theme specification');
+
+  // 2. 跨工作区精确检索目标条目：默认 crossWorkspace: false 严格隔离，返回 0 条
+  const crossIsolated = store.list({ id: 'post-isolated-backend', callerWorkspace: callerWs });
+  assert.equal(crossIsolated.total, 0, '未开启 crossWorkspace 时不得查阅外部工程条目');
+  assert.equal(crossIsolated.returned, 0);
+
+  // 3. 跨工作区精确检索目标条目：开启 crossWorkspace: true 成功穿透，获取详情
+  const crossAllowed = store.list({
+    id: 'post-isolated-backend',
+    callerWorkspace: callerWs,
+    crossWorkspace: true
+  });
+  assert.equal(crossAllowed.total, 1, '开启 crossWorkspace: true 允许穿透跨工作区查阅目标 ID');
+  assert.equal(crossAllowed.posts[0].id, 'post-isolated-backend');
+  assert.equal(crossAllowed.posts[0].content, 'Backend auth specification');
+  assert.equal(crossAllowed.titlesOnly, false);
+
+  // 4. 蛇形参数 cross_workspace: true 同样支持
+  const crossSnakeAllowed = store.list({
+    id: 'post-isolated-backend',
+    callerWorkspace: callerWs,
+    cross_workspace: true
+  });
+  assert.equal(crossSnakeAllowed.total, 1);
+  assert.equal(crossSnakeAllowed.posts[0].id, 'post-isolated-backend');
+
+  await store.close();
 });

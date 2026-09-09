@@ -224,7 +224,7 @@ test('executeSessionCall: 归档会话过滤', async () => {
       args: { target_session_id: 'archived-session-33334444', message: 'ping' },
       exec
     }),
-    /session_call: 未找到匹配 "archived-session-33334444" 的活跃会话（或已归档）/
+    /session_call: 未找到匹配 "archived-session-33334444" 的活跃会话/
   );
 });
 
