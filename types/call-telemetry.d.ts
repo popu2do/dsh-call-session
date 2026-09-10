@@ -12,6 +12,9 @@ export type CanvasDeliveryMode = 'steer' | 'followup';
 /** 会话运行状态 */
 export type CanvasSessionState = 'running' | 'idle';
 
+/** 黑板条目三态状态 */
+export type CanvasBoardPostStatus = 'active' | 'archived' | 'expired';
+
 /**
  * 内存调用遥测记录
  */
@@ -114,6 +117,8 @@ export interface CanvasWorkspaceEntity {
 export interface CanvasSessionEntity {
   /** 会话唯一标识 */
   id: string;
+  /** 8 位规范化小写会话短码（剥离 session- 前缀） */
+  shortId: string;
   /** 会话展示标题 */
   title: string;
   /** 所属工作区根路径 */
@@ -154,13 +159,15 @@ export interface CanvasBoardPostEntity {
   createdAt: number;
   /** 过期时间戳 */
   expiresAt: number;
-  /** 剩余生存毫秒数 */
+  /** 剩余生存毫秒数（非 active 条目归零） */
   ttlRemainingMs: number;
   /** 完整正文内容 */
   content: string;
   /** 扩展元数据 */
   metadata?: Record<string, unknown>;
-  /** 是否已被清理或过期 */
+  /** 条目规范化三态状态：active、archived 或 expired */
+  status: CanvasBoardPostStatus;
+  /** 是否已被清理或过期（兼容旧版布尔字段） */
   isDismissed: boolean;
 }
 
@@ -186,6 +193,7 @@ export interface CanvasTelemetrySnapshot {
     runningSessions: number;
     activeCalls: number;
     totalPosts: number;
+    activePosts: number;
   };
 }
 
@@ -216,6 +224,21 @@ export declare function getCallTelemetry(
   ctxOrOptions?: any,
   rawOptions?: any
 ): CallTelemetryRingBuffer;
+
+/**
+ * 计算规范化 8 位会话短码
+ * 剥离 session- 前缀与非字母数字字符，统一为 8 位小写字符串
+ */
+export declare function computeSessionShortId(rawId?: string | null): string;
+
+/**
+ * 解析会话展示标题，针对 AgentTeams 入场文案及空值进行角色优先/短码保底回退
+ */
+export declare function resolveCanvasSessionDisplayTitle(
+  rawTitle: string | null | undefined,
+  agent: any,
+  shortId?: string
+): string;
 
 /**
  * 聚合全景画板遥测快照，只读且不唤醒目标会话

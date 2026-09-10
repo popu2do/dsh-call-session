@@ -6,7 +6,8 @@ import path from 'node:path';
 import {
   CallTelemetryRingBuffer,
   getCanvasTelemetry,
-  getCallTelemetry
+  getCallTelemetry,
+  computeSessionShortId
 } from '../lib/call-telemetry.mjs';
 import { executeSessionCall } from '../lib/session-call.mjs';
 import { AtomicBoardStore } from '../lib/board-store.mjs';
@@ -788,4 +789,169 @@ test('内存遥测操作延迟验证', () => {
   // 5,000 次写入与 100 次过滤查询耗时验证
   assert.ok(totalDuration < 150, `内存遥测操作耗时在预期范围内，当前耗时: ${totalDuration}ms`);
   assert.equal(buffer.size(), 100);
+});
+
+test('computeSessionShortId: 规范化 8 位会话短码单元测试 (session- 前缀与裸 uuid 两种形态)', () => {
+  // 1. session- 前缀标准形态
+  assert.equal(
+    computeSessionShortId('session-da929b7d-7912-4e03-a95a-8e76231ed1b7'),
+    'da929b7d'
+  );
+  // 大小写混合与大写 session- 前缀
+  assert.equal(
+    computeSessionShortId('SESSION-A1B2C3D4-E5F6-7890-ABCD-EF1234567890'),
+    'a1b2c3d4'
+  );
+  // 短于 8 位的 session- 前缀
+  assert.equal(computeSessionShortId('session-abc'), 'abc');
+
+  // 2. 裸 uuid 形态 (无 session- 前缀)
+  assert.equal(
+    computeSessionShortId('da929b7d-7912-4e03-a95a-8e76231ed1b7'),
+    'da929b7d'
+  );
+  assert.equal(
+    computeSessionShortId('A1B2C3D4-E5F6-7890-ABCD-EF1234567890'),
+    'a1b2c3d4'
+  );
+  assert.equal(computeSessionShortId('148cf8bd15154caa'), '148cf8bd');
+  assert.equal(computeSessionShortId('xyz123'), 'xyz123');
+
+  // 3. 异常边界输入
+  assert.equal(computeSessionShortId(null), 'unknown');
+  assert.equal(computeSessionShortId(undefined), 'unknown');
+  assert.equal(computeSessionShortId(''), 'unknown');
+  assert.equal(computeSessionShortId(123456), 'unknown');
+  assert.equal(computeSessionShortId('session-'), 'unknown');
+  assert.equal(computeSessionShortId('---___---'), 'unknown');
+});
+
+test('getCanvasTelemetry: 黑板条目状态三态区分与 metrics 计数口径一致性 (无矛盾断言)', async () => {
+  const agent = createMockAgent('session-agent-01', { status: 'running', cwd: 'c:/workspace/app' });
+  const ringBuffer = new CallTelemetryRingBuffer(10);
+  const now = Date.now();
+
+  const mockBoardStore = {
+    list: () => [
+      // 1. 活跃未过期条目 1
+      {
+        id: 'post-act-1',
+        topic: 'task:build',
+        tags: ['ci'],
+        authorSessionId: 'session-agent-01',
+        authorWorkspace: 'c:/workspace/app',
+        createdAtMs: now - 60000,
+        expiresAtMs: now + 3600000,
+        content: 'Build in progress',
+        status: 'active'
+      },
+      // 2. 活跃未过期条目 2
+      {
+        id: 'post-act-2',
+        topic: 'task:lint',
+        tags: ['qa'],
+        authorSessionId: 'session-agent-01',
+        authorWorkspace: 'c:/workspace/app',
+        createdAtMs: now - 30000,
+        expiresAtMs: now + 1800000,
+        content: 'Lint passed',
+        status: 'active'
+      },
+      // 3. 自然到期过期条目 (status 为 active 但 expiresAtMs < now)
+      {
+        id: 'post-exp-natural',
+        topic: 'task:old',
+        authorSessionId: 'session-agent-01',
+        authorWorkspace: 'c:/workspace/app',
+        createdAtMs: now - 7200000,
+        expiresAtMs: now - 1000,
+        content: 'Old notice',
+        status: 'active'
+      },
+      // 4. 显式已过期条目
+      {
+        id: 'post-exp-explicit',
+        topic: 'task:expired',
+        authorSessionId: 'session-agent-01',
+        authorWorkspace: 'c:/workspace/app',
+        createdAtMs: now - 3600000,
+        expiresAtMs: now + 10000,
+        content: 'Explicitly expired',
+        status: 'expired'
+      },
+      // 5. 已撤销/归档条目 1 (status: archived)
+      {
+        id: 'post-archived-1',
+        topic: 'task:archived',
+        authorSessionId: 'session-agent-01',
+        authorWorkspace: 'c:/workspace/app',
+        createdAtMs: now - 10000,
+        expiresAtMs: now + 3600000,
+        content: 'Archived post',
+        status: 'archived'
+      },
+      // 6. 已撤销/软删除条目 2 (status: dismissed)
+      {
+        id: 'post-dismissed-2',
+        topic: 'task:dismissed',
+        authorSessionId: 'session-agent-01',
+        authorWorkspace: 'c:/workspace/app',
+        createdAtMs: now - 10000,
+        expiresAtMs: now + 3600000,
+        content: 'Dismissed post',
+        status: 'dismissed'
+      }
+    ]
+  };
+
+  const ctx = createMockCtx({
+    agentsList: [agent],
+    callTelemetry: ringBuffer,
+    boardStore: mockBoardStore
+  });
+
+  const snapshot = await getCanvasTelemetry(ctx, { workspace: 'c:/workspace/app' });
+
+  // 1. 快照包含全部 6 条帖子实体
+  assert.equal(snapshot.posts.length, 6);
+
+  // 2. 状态严格分类为 active、expired、archived
+  const activePosts = snapshot.posts.filter(p => p.status === 'active');
+  const expiredPosts = snapshot.posts.filter(p => p.status === 'expired');
+  const archivedPosts = snapshot.posts.filter(p => p.status === 'archived');
+
+  assert.equal(activePosts.length, 2, '活跃条目数量应为 2');
+  assert.equal(expiredPosts.length, 2, '过期条目数量应为 2 (含自然过期与显式过期)');
+  assert.equal(archivedPosts.length, 2, '撤销归档条目数量应为 2 (含 archived 与 dismissed)');
+
+  // 3. 核心口径一致性断言：同一快照内 metrics 与 posts 筛选结果严格无矛盾
+  assert.equal(
+    snapshot.metrics.totalPosts,
+    activePosts.length,
+    'metrics.totalPosts 必须严格等于 active 状态条目数，不包含过期和归档条目'
+  );
+  assert.equal(
+    snapshot.metrics.activePosts,
+    activePosts.length,
+    'metrics.activePosts 必须严格等于 active 状态条目数'
+  );
+  assert.notEqual(
+    snapshot.metrics.totalPosts,
+    snapshot.posts.length,
+    '存在过期与归档条目时，metrics.totalPosts 决不能等于 posts.length (防止语义矛盾)'
+  );
+
+  // 4. 剩余 TTL 与 isDismissed 标记断言
+  for (const post of activePosts) {
+    assert.ok(post.ttlRemainingMs > 0, `活跃条目 ${post.id} 的 ttlRemainingMs 应大于 0`);
+    assert.equal(post.isDismissed, false, `活跃条目 ${post.id} 的 isDismissed 应为 false`);
+  }
+  for (const post of expiredPosts) {
+    assert.equal(post.ttlRemainingMs, 0, `过期条目 ${post.id} 的 ttlRemainingMs 必须归零`);
+    assert.equal(post.isDismissed, true, `过期条目 ${post.id} 的 isDismissed 必须为 true`);
+  }
+  for (const post of archivedPosts) {
+    assert.equal(post.ttlRemainingMs, 0, `撤销条目 ${post.id} 的 ttlRemainingMs 必须归零`);
+    assert.equal(post.isDismissed, true, `撤销条目 ${post.id} 的 isDismissed 必须为 true`);
+  }
 });

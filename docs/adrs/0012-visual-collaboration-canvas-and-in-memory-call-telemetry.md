@@ -17,12 +17,12 @@
 
 然而，在多智能体协作与团队编排（如 AgentTeams）复杂任务场景下，用户与开发者面临严重的**可观测性真空**（Observability Vacuum）：
 - **调用痕迹瞬态丢失**：`session_call` 直接在内存中以事件方式分发至目标 Agent，调用完成后无结构化轨迹留存，无法回顾「谁调用了谁」、「何时触发了什么协作任务」；
-- **全景拓扑盲区**：用户仅能在对话列表单条会话内查看折叠行通知，缺乏全局视角的拓扑画板，无法直观感知跨工作区、多 Agent 之间的拓扑连接度与黑板条目关联；
+- **全景拓扑盲区**：用户仅能在对话列表单条会话内查看折叠行通知，缺乏全局视角的协作看板，无法直观感知跨工作区、多 Agent 之间的拓扑连接度与黑板条目关联；
 - **排障成本高**：发生多 Agent 死锁、调用级联风暴或任务交接断裂时，开发者只能通过零散的系统日志或人工逐个会话排查。
 
 ### 1.2 Architectural Forces & Constraints
-- **Strict Read-Only Boundary**：可视化画板仅作为系统的观察界面，不提供修改状态、删除记录或主动触发调用的入口。
-- **Zero Passive Wake-up (ADR-0001)**：画板状态获取与遥测为只读读取，不触发 Agent 实例被动唤醒。
+- **Strict Read-Only Boundary**：协作看板仅作为系统的观察界面，不提供修改状态、删除记录或主动触发调用的入口。
+- **Zero Passive Wake-up (ADR-0001)**：看板状态获取与遥测为只读读取，不触发 Agent 实例被动唤醒。
 - **Workspace-Scoped Isolation by Default (ADR-0003)**：遥测数据与拓扑节点保持工作区边界隔离，跨工作区透视需显式声明。
 - **Prompt KV Cache Invariant & Anti-Slop (ADR-0010, ADR-0011, ADR-0009)**：
   - 遥测接口不注册为大模型的 Native Tool，避免 Agent 上下文膨胀与 Prompt KV Cache 失效；
@@ -36,7 +36,7 @@
 - **Driver 1 (Non-Intrusive Observability)**：在不修改 `session_call` 和 `board-store` 核心语义的前提下，构建只读遥测。
 - **Driver 2 (Bounded RingBuffer Lifecycle)**：采用固定容量内存环形缓冲区（FIFO 淘汰），保证 O(1) 记录与查询性能，内存占用受控。
 - **Driver 3 (Workspace Isolation Alignment)**：记录调用的发起工作区与目标工作区，遵循 ADR-0003 隔离过滤规范。
-- **Driver 4 (Prompt KV Cache Defense)**：将画板遥测与 Agent LLM 工具集隔离，避免 Token 消耗与 KV Cache 抖动。
+- **Driver 4 (Prompt KV Cache Defense)**：将看板遥测与 Agent LLM 工具集隔离，避免 Token 消耗与 KV Cache 抖动。
 - **Driver 5 (Web Native Slot Integration)**：挂载至 DSH Web `conversation.view` 扩展插槽，提供视觉拓扑展示。
 
 ---
@@ -72,7 +72,7 @@
 ### 4.1 架构原则
 
 1. **Invariant 1 (Strict Read-Only Boundary)**：
-   看板画板与遥测服务作为只读观察者，不包含修改数据、删除会话或反向触发调用的入口。
+   看板与遥测服务作为只读观察者，不包含修改数据、删除会话或反向触发调用的入口。
 2. **Invariant 2 (Zero Passive Wake-up Invariant)**：
    获取拓扑快照和遥测记录直接在内存中读取，不调用任何会话的 `steer`, `followup`, `send` 或触发 prompt 执行。
 3. **Invariant 3 (Bounded FIFO Memory Invariant)**：
@@ -195,7 +195,7 @@ export function getCanvasTelemetry(
 
 #### 4.3.3 路由契约
 
-浏览器端画板无法直接访问宿主进程内存，遥测快照必须经由一条宿主注册的只读 HTTP 路由暴露。该路由是画板唯一的数据入口：
+浏览器端看板无法直接访问宿主进程内存，遥测快照必须经由一条宿主注册的只读 HTTP 路由暴露。该路由是看板唯一的数据入口：
 
 ```javascript
 export const TELEMETRY_ROUTE_PATH = '/plugins/dsh-call-session/telemetry';
