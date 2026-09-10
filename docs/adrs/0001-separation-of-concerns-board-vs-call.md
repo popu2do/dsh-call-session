@@ -126,15 +126,15 @@ This architectural coupling produced severe operational failures in production:
 ## 5. Consequences
 
 ### 5.1 Positive Consequences (Benefits)
-- **Eliminated Cascading Token Costs**: Eradicated spurious agent wakeups; token consumption during multi-agent collaboration reduced to purposeful interactions.
+- **Eliminated Cascading Token Costs**: Prevents spurious agent wakeups; token consumption during multi-agent collaboration is limited to intentional interactions.
 - **Deterministic Workflows**: Multi-step orchestrations can reliably await subagent completion through point-to-point task dispatches and structured `task_report` replies.
-- **Clear Separation of Concerns**: Developers and LLMs understand intuitively whether an action publishes durable state or requests an immediate turn.
+- **Clear Separation of Concerns**: Developers and LLMs understand whether an action publishes durable state or requests an immediate turn.
 
 ### 5.2 Negative Consequences (Tradeoffs & Mitigations)
 - **Two-Step Publishing for Notifications**: If an agent must post 10KB of audit data and notify the lead, it must call `board_post` first to get a `postId`, then call `session_call` with `context_post_ids: [postId]`.
   - *Mitigation*: The `session_call` prompt template automatically instructs the recipient to read `board_list(cross_workspace=true)` for referenced post IDs.
 - **Stricter Prefix Requirements**: Users cannot pass 4-character shorthand session IDs.
-  - *Mitigation*: The 8-character floor completely eliminates collision hazards in high-concurrency environments.
+  - *Mitigation*: The 8-character floor prevents collision hazards in high-concurrency environments.
 
 ### 5.3 Neutral & Operational Shifts
 - Agents must be instructed in system prompts to check the board when referenced via `context_post_ids`, rather than expecting complete payload dumps inside unicast notification messages.

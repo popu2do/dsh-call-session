@@ -38,7 +38,7 @@ However, operational field analysis and multi-agent execution in AgentTeams reve
 
 - **Driver 1 (Token Governance by Default)**: Establish catalog indexing as the safe default for collection queries, slashing exploratory token consumption by 85%–98%.
 - **Driver 2 (Symmetric Context Handoff via Exact ID Lookup)**: Bridge `session_call` context references (`context_post_ids`) with instantaneous point retrieval by `id`.
-- **Driver 3 (Context-Aware Intelligent Dispatch)**: Seamlessly infer caller intent: collection queries default to lightweight summaries (`titles_only: true`), while targeted point queries default to full content retrieval (`titles_only: false`).
+- **Driver 3 (Context-Aware Intelligent Dispatch)**: Infer caller intent: collection queries default to lightweight summaries (`titles_only: true`), while targeted point queries default to full content retrieval (`titles_only: false`).
 - **Driver 4 (Prompt KV Cache Invariant Enforcement)**: Excise volatile per-second countdowns (`remainingSeconds`) while preserving static, deterministic ISO timestamps (`createdAt`, `expiresAt`).
 
 ---
@@ -260,10 +260,10 @@ When `effectiveTitlesOnly === false`:
 ## 5. Consequences
 
 ### 5.1 Positive Consequences (Benefits)
-- **Massive Token Conservation**: Catalog queries default to lightweight title summaries, preventing accidental 500k-token blowups and cutting token usage by >90% in typical board inspections.
-- **Symmetric Handoff**: Sessions receiving `session_call` with `context_post_ids` can now call `board_list({ id: '...' })` directly to retrieve complete context payloads in one shot.
-- **Prompt KV Cache Stability**: Removal of `remainingSeconds` guarantees byte-for-byte idempotent tool output across turns within the same minute, drastically improving prompt caching hit ratios.
-- **Developer Safety**: Eliminates the `!!args.titles_only` coercion bug where `undefined` silently mapped to `false`.
+- **Token Conservation**: Catalog queries default to lightweight title summaries, avoiding unintended full-content dumps during exploratory scans.
+- **Symmetric Handoff**: Sessions receiving `session_call` with `context_post_ids` can invoke `board_list({ id: '...' })` directly to retrieve the referenced payload.
+- **Prompt KV Cache Stability**: Removal of `remainingSeconds` guarantees idempotent tool output across turns within the same minute, improving prompt caching hit ratios.
+- **Coercion Fix**: Resolves the `!!args.titles_only` issue where `undefined` previously mapped to `false`.
 
 ### 5.2 Negative Consequences (Tradeoffs & Mitigations)
 - **Behavioral Shift for Batch Fetching**: Callers requiring full contents for multiple posts must now explicitly set `"titles_only": false`.

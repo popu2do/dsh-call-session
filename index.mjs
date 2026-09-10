@@ -696,7 +696,7 @@ export function apply(ctx, config = {}) {
             type: 'string',
             minLength: 1,
             maxLength: 60,
-            description: '同级会话的人类可读标题。禁止特权前缀与换行符。'
+            description: '同级会话标题，不包含特权前缀与换行符。'
           },
           initial_message: {
             type: 'string',

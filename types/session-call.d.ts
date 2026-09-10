@@ -6,7 +6,7 @@
 /** 单播呼叫意图类型：任务派发、任务汇报、状态同步通知 */
 export type CallType = 'task_dispatch' | 'task_report' | 'notice';
 
-/** 原生两态分发模式：运行态注入 steer（即刻引导），空闲态注入 followup（唤醒下轮） */
+/** 两态分发模式：运行态 steer 引导，空闲态 followup 唤醒 */
 export type DeliveryMode = 'steer' | 'followup';
 
 /** 会话规范化状态 */
@@ -25,9 +25,9 @@ export declare const CALL_TYPE_INTENTS: Readonly<{
  * session_call 工具调用入参
  */
 export interface SessionCallArgs {
-  /** 目标会话 Session ID（支持精确匹配或 >=8 位唯一前缀；不支持通配符） */
+  /** 目标会话 Session ID，支持精确匹配或至少 8 位唯一前缀，不支持通配符 */
   target_session_id: string;
-  /** 任务指令、汇报或通知内容（最大 4000 字符） */
+  /** 任务指令、汇报或通知内容，最大 4000 字符 */
   message: string;
   /** 呼叫意图分类：'task_dispatch' | 'task_report' | 'notice'，默认为 'task_dispatch' */
   call_type?: CallType;
@@ -57,12 +57,12 @@ export interface SessionCallResult {
   contextPostIds?: string[];
   /** 执行结果描述 */
   message?: string;
-  /** 失败原因描述（仅在失败时提供） */
+  /** 失败原因描述 */
   error?: string;
 }
 
 /**
- * 原生进程内 UserMessage 语义载荷结构（完全符合 DSH 宿主内部协议）
+ * 进程内 UserMessage 语义载荷结构
  */
 export interface NativeUserMessage {
   /** 消息唯一全局 UUID */
@@ -74,7 +74,7 @@ export interface NativeUserMessage {
     type: 'text';
     text: string;
   }>;
-  /** 语义源标识（由宿主与前端原生解析） */
+  /** 语义源标识 */
   source: {
     kind: 'plugin';
     plugin: 'dsh-call-session';
@@ -101,13 +101,13 @@ export declare function dispatchNativeMessage(
  * 执行 session_call 单播投递
  *
  * 校验规则与流程：
- * 1. 校验目标 Session ID（不支持通配符、不支持调用自身、前缀至少 8 位且唯一）
+ * 1. 校验目标 Session ID，不支持通配符与自身调用，前缀至少 8 位且唯一
  * 2. 检索目标活跃会话
- * 3. 根据目标状态分发（running 使用 steer，idle 使用 followup）
+ * 3. 根据目标状态分发，running 使用 steer，idle 使用 followup
  *
  * @param ctxOrOptions Cordis 根上下文或包裹参数对象
  * @param rawArgs session_call 入参
- * @param rawExec 工具执行上下文（包含调用方 agent 实例）
+ * @param rawExec 工具执行上下文
  * @param rawOptions 扩展配置选项
  * @returns 单播调用结果 Promise
  */

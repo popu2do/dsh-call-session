@@ -28,7 +28,7 @@ export declare function authenticatedWebRoutes(
 ): AuthenticatedWebRoutes;
 
 /**
- * 构造 GET-only 只读遥测处理器（非 GET 返回 405）。
+ * 构造 GET-only 只读遥测处理器，非 GET 请求返回 405。
  */
 export declare function createTelemetryHandler(
   ctx: any,

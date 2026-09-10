@@ -5,8 +5,6 @@ All notable changes to the `dsh-call-session` project are documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
----
-
 ## [0.1.1] - 2026-09-09
 
 ### Summary
@@ -27,7 +25,7 @@ Maintenance and feature release introducing Visual Collaboration Canvas, lightwe
 - **Native Peer Root Session Orchestration (`session_create`)**:
   - Creation of independent root sessions directly in the current workspace with non-blocking fire-and-forget ignition.
   - Reverse disambiguation semantic anchoring to clarify intent and prevent improper use of `subagent`.
-  - Tri-guard protection: workspace quota (10 active root sessions), rate limiting (5 creates/min per session), and generation cutoff (`Generation <= 2`).
+  - Resource safeguards: workspace quota (10 active root sessions), rate limiting (5 creates/min per session), and generation cutoff (`Generation <= 2`).
   - Automatic `session:bootstrap` blackboard post publication and context reference mounting.
 - **Board Token Governance & Exact ID Retrieval (ADR-0011)**:
   - Default `titles_only: true` for catalog queries, eliminating bulky `content` to conserve LLM tokens and protect KV cache.
@@ -77,7 +75,7 @@ Initial production release of `dsh-call-session`, providing native in-process cr
 - **Automated Test Suite (`tests/`)**:
   - Lightweight automated test suites using `node:test` and `node:assert/strict` covering Blackboard CRUD, concurrency, debounce, `.bak` crash recovery, unicast dispatch, security fuses, session discovery, and lifecycle disposal.
 - **Bilingual Documentation**:
-  - Production-grade English `README.md` and Simplified Chinese `README_ZH.md` with Mermaid sequence diagrams, configuration references, and realistic JSON Tool Call examples.
+  - Production-grade English `README.md` and Simplified Chinese `README_ZH.md` with configuration references and realistic JSON Tool Call examples.
 - **Architecture Decision Record (ADR) Suite**:
   - Comprehensive ADR matrix (ADR-0001 through ADR-0009) tracking invariants and architectural decisions.
 - **CI/CD & Open Source Governance**:

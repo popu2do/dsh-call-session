@@ -21,12 +21,12 @@ Fixes #
 <!-- Describe how you verified these changes. -->
 - [ ] Ran `npm run lint` (syntax check passed)
 - [ ] Ran `npm test` (all unit test suites passed)
-- [ ] Verified cross-version Node.js compatibility (Node 18 / 20 / 22)
+- [ ] Verified Node.js runtime compatibility (Node 20 / 22)
 - [ ] Ran `npm pack --dry-run` to confirm package bundle purity and size
 
 ## Quality & Compliance Checklist
 
-- [ ] My code adheres to the project coding style and zero-trace principle.
+- [ ] Code adheres to project coding style and zero-trace principle.
 - [ ] I have updated corresponding documentation and type definitions if applicable.
 - [ ] No sensitive credentials, private tokens, or test keys are committed.
 - [ ] Git diff is clean and contains no residual debugging artifacts.

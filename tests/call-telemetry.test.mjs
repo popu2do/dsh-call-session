@@ -139,8 +139,8 @@ test('CallTelemetryRingBuffer: 记录元数据清洗与摘要截断 (<= 120 字�
   const rec = buffer.record({
     callerSessionId: 'sess-a',
     targetSessionId: 'sess-b',
-    callerWorkspace: 'C:\\Users\\ASHH\\Project\\App',
-    targetWorkspace: 'C:/Users/ASHH/Project/App',
+    callerWorkspace: 'C:\\Workspace\\Project\\App',
+    targetWorkspace: 'C:/Workspace/Project/App',
     messagePayload: `Line 1\n\nLine 2\t${longText}`
   });
 
@@ -150,8 +150,8 @@ test('CallTelemetryRingBuffer: 记录元数据清洗与摘要截断 (<= 120 字�
   assert.equal(rec.deliveryMode, 'followup');
   assert.ok(rec.messageSnippet.length <= 120);
   assert.ok(rec.messageSnippet.endsWith('...'));
-  assert.equal(rec.callerWorkspace, 'c:/Users/ASHH/Project/App');
-  assert.equal(rec.targetWorkspace, 'c:/Users/ASHH/Project/App');
+  assert.equal(rec.callerWorkspace, 'c:/Workspace/Project/App');
+  assert.equal(rec.targetWorkspace, 'c:/Workspace/Project/App');
 });
 
 test('CallTelemetryRingBuffer: 工作区隔离查询与跨工程透视 (ADR-0003 & ADR-0012)', () => {
@@ -292,8 +292,8 @@ test('getCanvasTelemetry: 零被动唤醒验证 (ADR-0012 Invariant 2 & Gate 2)'
     assert.equal(snapshot.sessions.length, 3);
   }
 
-  // 断言被动唤醒次数严格为 0
-  assert.equal(wakeCount, 0, 'Zero Passive Wake-up Invariant: 读取画板遥测绝对不能唤醒任何 Agent');
+  // 断言被动唤醒次数为 0
+  assert.equal(wakeCount, 0, '读取画板遥测不触发 Agent 唤醒');
 });
 
 test('getCanvasTelemetry: 全景快照结构完整性与离线级联对齐', async () => {
@@ -377,7 +377,7 @@ test('Prompt KV Cache 防御与工具集物理隔离 (ADR-0012 Invariant 4 & Gat
   const storagePath = path.join(tmpDir, 'board.json');
   apply(ctx, { storagePath });
 
-  // 检验 ctx.tools 注册清单：遥测接口严禁暴露给大模型
+  // 检验 ctx.tools 注册清单：遥测接口不暴露给大模型
   assert.ok(!registeredTools.has('getCanvasTelemetry'), '禁止将 getCanvasTelemetry 暴露为大模型工具');
   assert.ok(!registeredTools.has('call_telemetry'), '禁止将 call_telemetry 暴露为大模型工具');
   assert.ok(!registeredTools.has('canvas_telemetry'), '禁止将 canvas_telemetry 暴露为大模型工具');
@@ -389,7 +389,7 @@ test('Prompt KV Cache 防御与工具集物理隔离 (ADR-0012 Invariant 4 & Gat
   }
 });
 
-test('CallTelemetryRingBuffer: 极限容量与大规模吞吐 FIFO 溢出淘汰压测 (1000 次写入/容量 50)', () => {
+test('CallTelemetryRingBuffer: 容量上限与 FIFO 溢出淘汰测试', () => {
   const buffer = new CallTelemetryRingBuffer(50);
   assert.equal(buffer.capacity(), 50);
 
@@ -403,12 +403,12 @@ test('CallTelemetryRingBuffer: 极限容量与大规模吞吐 FIFO 溢出淘汰�
   }
   const elapsedMs = Date.now() - startMs;
 
-  // 验证内存占用恒定，严格保持上限 50
+  // 验证内存占用恒定，保持上限 50
   assert.equal(buffer.size(), 50);
-  // 验证 1000 次纯内存记录极速执行（耗时应在 100ms 内，验证零 I/O 阻塞）
+  // 验证 1000 次内存记录执行耗时在 100ms 内
   assert.ok(elapsedMs < 100, `1000 次写入耗时异常: ${elapsedMs}ms`);
 
-  // 验证精确 FIFO 淘汰：前 950 条被安全移除，剩余 50 条为 caller-951 到 caller-1000
+  // 验证 FIFO 淘汰：前 950 条被移除，剩余 50 条为 caller-951 到 caller-1000
   const records = buffer.query({ limit: 50, crossWorkspace: true });
   assert.equal(records.length, 50);
   assert.equal(records[0].callerSessionId, 'caller-951');
@@ -417,7 +417,7 @@ test('CallTelemetryRingBuffer: 极限容量与大规模吞吐 FIFO 溢出淘汰�
   assert.equal(records[49].messagePayload, 'Telemetry payload #1000');
 });
 
-test('CallTelemetryRingBuffer: 异常参数容错、非法输入保护与多维 query 过滤组合', () => {
+test('CallTelemetryRingBuffer: 异常参数处理与 query 过滤组合', () => {
   // 1. 非法构造参数安全钳位
   const buffer = new CallTelemetryRingBuffer('invalid');
   assert.equal(buffer.capacity(), 200, '非法容量回退至默认 200');
@@ -497,11 +497,11 @@ test('CallTelemetryRingBuffer: 异常参数容错、非法输入保护与多维 
   assert.equal(limitQuery2[0].messagePayload, 'new active msg');
 });
 
-test('session_call: 遥测写入异常隔离保护 (Telemetry Failure Isolation)', async () => {
+test('session_call: 遥测写入异常隔离', async () => {
   const caller = createMockAgent('caller-node-safe', { cwd: 'c:/workspace/app', title: 'Caller' });
   const target = createMockAgent('target-node-safe', { cwd: 'c:/workspace/app', title: 'Target', status: 'idle' });
 
-  // 构造一个故意在 record 时抛出异常的破坏性 Mock RingBuffer
+  // 构造一个在 record 时抛出异常的 Mock RingBuffer
   const faultRingBuffer = {
     record: () => {
       throw new Error('Simulated RingBuffer Telemetry Hardware Failure');
@@ -515,7 +515,7 @@ test('session_call: 遥测写入异常隔离保护 (Telemetry Failure Isolation)
 
   const exec = { agent: caller };
 
-  // session_call 应当优雅捕获遥测异常，不阻断单播通信
+  // session_call 捕获遥测异常，不阻断单播通信
   const callRes = await executeSessionCall({
     ctx,
     args: {
@@ -701,12 +701,12 @@ test('端到端生命周期总线级联清理测试 (Cordis session/archive, ses
   const [c4] = ringBuffer.query({ sessionId: 'sess-worker-1', status: 'active', crossWorkspace: true });
   assert.equal(c4.messagePayload, 'call 4');
 
-  // 4. 触发 ctx dispose 彻底清空
+  // 4. 触发 ctx dispose 清空
   await mockCtx.emit('dispose');
-  assert.equal(ringBuffer.size(), 0, 'dispose 之后必须清空调用遥测缓存');
+  assert.equal(ringBuffer.size(), 0, 'dispose 之后清空调用遥测缓存');
 });
 
-test('getCanvasTelemetry: 大规模多 Agent 拓扑聚合与 100% 零被动唤醒并发压测', async () => {
+test('getCanvasTelemetry: 多 Agent 拓扑聚合与并发查询不唤醒 Agent', async () => {
   let wakeEvents = 0;
   const spyWake = () => { wakeEvents++; };
 
@@ -760,11 +760,11 @@ test('getCanvasTelemetry: 大规模多 Agent 拓扑聚合与 100% 零被动唤�
   assert.equal(snap.metrics.runningSessions, 4);
   assert.equal(snap.metrics.activeCalls, 1);
 
-  // 绝对零被动唤醒硬断言
-  assert.equal(wakeEvents, 0, 'Zero Passive Wake-up Invariant: 无论并发多少次只读遥测查询，被动唤醒次数严格为 0');
+  // 验证被动唤醒次数为 0
+  assert.equal(wakeEvents, 0, '并发遥测查询不产生被动唤醒');
 });
 
-test('零磁盘 I/O 阻塞与超低纳秒级操作延迟验证 (Zero Disk I/O Invariant)', () => {
+test('内存遥测操作延迟验证', () => {
   const buffer = new CallTelemetryRingBuffer(100);
 
   // 连续记录 5,000 条调用
@@ -785,7 +785,7 @@ test('零磁盘 I/O 阻塞与超低纳秒级操作延迟验证 (Zero Disk I/O In
   }
   const totalDuration = Date.now() - start;
 
-  // 5,000 次写入与 100 次复杂过滤查询纯内存耗时必须 < 150ms
-  assert.ok(totalDuration < 150, `纯内存遥测操作应在微秒级完成，当前耗时: ${totalDuration}ms`);
+  // 5,000 次写入与 100 次过滤查询耗时验证
+  assert.ok(totalDuration < 150, `内存遥测操作耗时在预期范围内，当前耗时: ${totalDuration}ms`);
   assert.equal(buffer.size(), 100);
 });

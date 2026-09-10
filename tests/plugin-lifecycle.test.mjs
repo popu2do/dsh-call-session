@@ -347,8 +347,8 @@ test('六大原生工具集成执行链路 (execute 端到端测试)', async (t)
   assert.equal(listRes.count, 1);
   assert.equal(listRes.titlesOnly, true, '未传 id 且未传 titles_only 时必须默认为 true');
   assert.equal(listRes.posts[0].id, postRes.postId);
-  assert.equal(listRes.posts[0].content, undefined, '默认摘要模式下 posts 不得包含 content');
-  assert.equal(listRes.posts[0].remainingSeconds, undefined, '严禁输出易逝 remainingSeconds 保护 KV Cache');
+  assert.equal(listRes.posts[0].content, undefined, '默认摘要模式下 posts 不包含 content');
+  assert.equal(listRes.posts[0].remainingSeconds, undefined, '不输出 remainingSeconds');
 
   // 2a. board_list (通过 id 精确点查，智能分流为 titlesOnly: false)
   const pointRes = await ctx.tools.get('board_list').execute({
@@ -356,7 +356,7 @@ test('六大原生工具集成执行链路 (execute 端到端测试)', async (t)
   }, exec);
   assert.equal(pointRes.success, true);
   assert.equal(pointRes.count, 1);
-  assert.equal(pointRes.titlesOnly, false, '传入 id 时未指定 titles_only 智能分流为 false');
+  assert.equal(pointRes.titlesOnly, false, '传入 id 时未指定 titles_only 则 titlesOnly 为 false');
   assert.equal(pointRes.posts[0].id, postRes.postId);
   assert.equal(pointRes.posts[0].content, 'All tasks completed');
   assert.equal(pointRes.posts[0].remainingSeconds, undefined);
@@ -420,7 +420,7 @@ test('六大原生工具集成执行链路 (execute 端到端测试)', async (t)
   await ctx.emit('dispose');
 });
 
-test('官方 ctx.logger 规范接入与生命周期降噪 (全部日志收敛至 debug 级别)', async (t) => {
+test('ctx.logger 接入与日志级别收敛至 debug', async (t) => {
   const tmpDir = await createTempDir();
   t.after(async () => {
     await fs.rm(tmpDir, { recursive: true, force: true });
@@ -453,7 +453,7 @@ test('官方 ctx.logger 规范接入与生命周期降噪 (全部日志收敛至
 
   // 3. 验证所有生命周期日志均为 debug 级别，绝不使用 info 产生控制台噪音
   const nonDebugLogs = capturedLogs.filter(l => l.level !== 'debug');
-  assert.equal(nonDebugLogs.length, 0, '生命周期正常流程下不得输出 info/warn/error 级别日志，避免控制台污染');
+  assert.equal(nonDebugLogs.length, 0, '生命周期正常流程下不输出 info/warn/error 级别日志，避免控制台污染');
 
   const activationLog = capturedLogs.find(l => l.args[0]?.includes('Activating pure DSH Native Collaboration Plugin'));
   assert.ok(activationLog, '必须包含插件激活 debug 日志');
@@ -511,7 +511,7 @@ test('支持 ctx.get("logger") 备选注入与无 logger 时的 noopLogger 安�
   await bareCtx.emit('dispose');
 });
 
-test('端到端全局无裸 console 污染断言 (Full Lifecycle & Tools Execution)', async (t) => {
+test('全局无直接 console 输出 (Full Lifecycle & Tools Execution)', async (t) => {
   const tmpDir = await createTempDir();
   t.after(async () => {
     await fs.rm(tmpDir, { recursive: true, force: true });
@@ -605,7 +605,7 @@ test('端到端全局无裸 console 污染断言 (Full Lifecycle & Tools Executi
   );
 });
 
-test('静态合规审查：index.mjs 与 lib/*.mjs 生产代码 0 处裸 console 调用', async () => {
+test('静态合规审查：生产代码无 console 调用', async () => {
   const projectDir = path.resolve(__dirname, '..');
   const filesToScan = [
     path.join(projectDir, 'index.mjs'),
@@ -631,7 +631,7 @@ test('静态合规审查：index.mjs 与 lib/*.mjs 生产代码 0 处裸 console
   }
 });
 
-test('board_list 原生工具专项：Schema契约、默认摘要、id精确点查智能分流与工作区隔离端到端', async (t) => {
+test('board_list 原生工具：Schema 契约、默认摘要、id 点查分流与工作区隔离', async (t) => {
   const tmpDir = await createTempDir();
   t.after(async () => {
     await fs.rm(tmpDir, { recursive: true, force: true });

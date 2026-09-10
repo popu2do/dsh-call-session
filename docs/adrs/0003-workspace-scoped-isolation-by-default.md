@@ -50,7 +50,7 @@ In naive shared-memory or single-board designs:
 
 ### Option 3 (Chosen): Path-Normalized Workspace Isolation with Explicit Cross-Workspace Opt-in
 - **Description**: The plugin automatically inspects the caller's session working directory (`cwd`), canonicalizes it through `normalizeWorkspace`, and automatically filters all board posts and session queries to match that workspace. To view or dispatch across repos, the caller must explicitly specify `cross_workspace: true`.
-- **Pros**: Zero cognitive burden on normal agents (isolation is automatic and fail-safe); cross-repo orchestration remains fully supported via explicit opt-in; cross-platform path quirks are safely handled.
+- **Pros**: Isolation is automatic by default; cross-repo orchestration is supported via explicit opt-in; cross-platform path differences are normalized.
 - **Cons**: Requires caller session cwd resolution logic inside the plugin.
 
 ---
@@ -143,9 +143,9 @@ In naive shared-memory or single-board designs:
 ## 5. Consequences
 
 ### 5.1 Positive Consequences (Benefits)
-- **Zero Cross-Project Contamination**: Subagents working on parallel tasks in distinct repos never see foreign task items or code notices.
-- **Accident-Proof Deletions**: A junior agent running `board_clear({ topic: 'temp' })` will only clear temporary markers in its own repo.
-- **Cross-Platform Determinism**: Eliminates subtle Windows path bugs where uppercase drive letters or mixed slashes broke string matching.
+- **Cross-Project Isolation**: Subagents working on parallel tasks in distinct repos do not receive foreign task items or code notices.
+- **Scoped Deletions**: Running `board_clear({ topic: 'temp' })` clears temporary markers only within the caller repo.
+- **Cross-Platform Determinism**: Eliminates Windows path discrepancies where uppercase drive letters or mixed slashes broke string matching.
 
 ### 5.2 Negative Consequences (Tradeoffs & Mitigations)
 - **Overlooked Global Data**: If a multi-repo orchestrator fails to pass `cross_workspace: true`, it will fail to see subagent reports across linked worktrees.

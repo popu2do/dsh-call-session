@@ -21,23 +21,23 @@
 - **排障成本高**：发生多 Agent 死锁、调用级联风暴或任务交接断裂时，开发者只能通过零散的系统日志或人工逐个会话排查。
 
 ### 1.2 Architectural Forces & Constraints
-- **Strict Read-Only Boundary**：可视化画板仅作为系统的观察镜，严禁提供任何反向修改状态、删除记录或主动触发调用的破坏性入口。
-- **Zero Passive Wake-up (ADR-0001)**：画板状态获取与遥测必须是纯拉取/只读监听，绝对不能触发任何 Agent 实例的被动唤醒。
-- **Workspace-Scoped Isolation by Default (ADR-0003)**：遥测数据与拓扑节点必须保持工作区边界隔离，跨工作区透视需显式声明。
+- **Strict Read-Only Boundary**：可视化画板仅作为系统的观察界面，不提供修改状态、删除记录或主动触发调用的入口。
+- **Zero Passive Wake-up (ADR-0001)**：画板状态获取与遥测为只读读取，不触发 Agent 实例被动唤醒。
+- **Workspace-Scoped Isolation by Default (ADR-0003)**：遥测数据与拓扑节点保持工作区边界隔离，跨工作区透视需显式声明。
 - **Prompt KV Cache Invariant & Anti-Slop (ADR-0010, ADR-0011, ADR-0009)**：
-  - 遥测接口严禁注册为大模型面对的 Native Tool（避免 Agent 上下文无端膨胀并击穿 Prompt KV Cache）；
-  - 遥测数据结构遵循标准纯英文紧凑契约，无装饰性 Emoji 与虚构元数据。
-- **Bounded In-Memory Footprint & Zero Disk Contention**：瞬态调用痕迹属于遥测观测数据，严禁无限制增长导致浏览器或 Node.js 宿主 OOM，严禁引入沉重文件锁与磁盘 I/O 争用。
+  - 遥测接口不注册为大模型的 Native Tool，避免 Agent 上下文膨胀与 Prompt KV Cache 失效；
+  - 遥测数据结构遵循标准英文紧凑契约，无装饰性符号与冗余元数据。
+- **Bounded In-Memory Footprint & Zero Disk Contention**：瞬态调用痕迹属于遥测观测数据，容量受限，避免内存泄漏与磁盘 I/O 争用。
 
 ---
 
 ## 2. Decision Drivers
 
-- **Driver 1 (Non-Intrusive Observability)**：在对原有 `session_call` 和 `board-store` 零破坏、零延迟阻断的前提下，构建高保真只读遥测。
-- **Driver 2 (Bounded RingBuffer Lifecycle)**：采用确定性容量的内存环形缓冲区（FIFO 淘汰），保证 O(1) 记录与查询性能，内存恒定受控。
-- **Driver 3 (Workspace Isolation Alignment)**：精准记录每笔调用的发起工作区与目标工作区，严格遵循 ADR-0003 隔离过滤规范。
-- **Driver 4 (Prompt KV Cache Defense)**：将画板遥测与 Agent LLM 工具集物理隔离，零 Token 消耗，零 KV Cache 扰动。
-- **Driver 5 (Web Native Slot Integration)**：无缝挂载至 DSH Web `conversation.view` 扩展插槽，提供 60fps 硬件加速视觉拓扑体验。
+- **Driver 1 (Non-Intrusive Observability)**：在不修改 `session_call` 和 `board-store` 核心语义的前提下，构建只读遥测。
+- **Driver 2 (Bounded RingBuffer Lifecycle)**：采用固定容量内存环形缓冲区（FIFO 淘汰），保证 O(1) 记录与查询性能，内存占用受控。
+- **Driver 3 (Workspace Isolation Alignment)**：记录调用的发起工作区与目标工作区，遵循 ADR-0003 隔离过滤规范。
+- **Driver 4 (Prompt KV Cache Defense)**：将画板遥测与 Agent LLM 工具集隔离，避免 Token 消耗与 KV Cache 抖动。
+- **Driver 5 (Web Native Slot Integration)**：挂载至 DSH Web `conversation.view` 扩展插槽，提供视觉拓扑展示。
 
 ---
 
@@ -60,7 +60,7 @@
   3. 提供只读门面接口 `getCanvasTelemetry({ workspace, crossWorkspace, limit })` 聚合会话、黑板与连线；
   4. 遥测接口作为 Cordis 服务或内部查询暴露给 Web 前端，绝不向 Agent 暴露为 LLM Tool，捍卫 KV Cache；
   5. 前端通过 `conversation.view` 插槽挂载「看板」视图，采用 SVG + DOM 分层渲染与 RAF 节流实现 60fps。
-- **Pros**: 极致轻量、零 I/O、绝对零被动唤醒、内存绝对恒定、KV Cache 零扰动、完全契合 DSH 原生扩展规范。
+- **Pros**: 内存开销小、无磁盘 I/O、无被动唤醒、内存占用受限、不影响 Prompt KV Cache、契合 DSH 原生扩展规范。
 - **Cons**: 宿主进程重启后瞬态连线重置（拓扑自动基于存活会话与黑板重新投影，符合实时遥测预期）。
 
 ---
@@ -72,15 +72,15 @@
 ### 4.1 架构原则
 
 1. **Invariant 1 (Strict Read-Only Boundary)**：
-   看板画板与遥测服务是绝对只读的观察者，不包含任何修改数据、删除会话或反向触发调用的入口。
+   看板画板与遥测服务作为只读观察者，不包含修改数据、删除会话或反向触发调用的入口。
 2. **Invariant 2 (Zero Passive Wake-up Invariant)**：
-   获取拓扑快照和遥测记录纯粹在内存中读取，严禁调用任何会话的 `steer`, `followup`, `send` 或触发 prompt 执行。
+   获取拓扑快照和遥测记录直接在内存中读取，不调用任何会话的 `steer`, `followup`, `send` 或触发 prompt 执行。
 3. **Invariant 3 (Bounded FIFO Memory Invariant)**：
-   `CallTelemetryRingBuffer` 设置硬容量上限（默认 200 条，配置项 `telemetryCapacity`，范围 10~2000）。当缓冲区满时，最旧记录自动弹出，绝不允许内存无限泄露。
+   `CallTelemetryRingBuffer` 设置容量上限（默认 200 条，配置项 `telemetryCapacity`，范围 10~2000）。当缓冲区满时，最旧记录自动弹出，防止内存无限增长。
 4. **Invariant 4 (Prompt KV Cache Defense Invariant)**：
-   遥测查询接口禁止作为 Tool 注入给智能体。智能体无法也不应当通过 LLM 提示词调用拓扑遥测，保护服务端 Prefix KV Cache 幂等命中。
+   遥测查询接口不作为 Tool 注入给智能体。保护服务端 Prefix KV Cache 幂等命中。
 5. **Invariant 5 (Workspace Isolation Invariant)**：
-   遥测查询默认严格隔离在当前工作区；只有在显式传递 `cross_workspace: true` 时才返回所有工作区数据。
+   遥测查询默认隔离在当前工作区；只有显式传递 `cross_workspace: true` 时才返回所有工作区数据。
 
 ### 4.2 拓扑数据
 
@@ -219,7 +219,7 @@ export function installTelemetryWebSurface(ctx: any, deps?: { logger?: any }): {
 - **认证围栏强制**：原生 WebServer 路由不继承 Connection 的认证语义，因此每个请求先经 `connection.requestRejection(req)` 校验。Connection 服务缺失返回 503，未授权返回 401，越权返回 403，围栏之前绝不序列化任何工作区状态；
 - **GET-only 只读**：仅接受 GET；`POST`/`PUT`/`PATCH`/`DELETE`/`HEAD`/`OPTIONS` 一律返回 405 并携带 `allow: GET`。绝不提供任何写入、清理或触发单播的路由；
 - **无缓存响应**：响应头固定 `cache-control: no-store`，避免过期拓扑被浏览器缓存复用；
-- **懒加载与优雅降级**：通过 `ctx.get('webServer') ?? ctx.get('httpServer')` 探针获取宿主服务，缺失时直接返回并监听 `internal/service` 事件补挂载。Headless 组态下插件保持 tool-only，绝不阻塞启动；
+- **懒加载与降级**：通过 `ctx.get('webServer') ?? ctx.get('httpServer')` 探针获取宿主服务，缺失时直接返回并监听 `internal/service` 事件补挂载。Headless 组态下插件保持 tool-only，不阻塞启动；
 - **生命周期自动摘除**：注册经 `ctx.effect` 挂载，插件卸载时路由随之移除；
 - **错误不泄漏**：聚合异常统一降级为 500 `telemetry unavailable`，绝不将内部堆栈或路径写入响应体。
 
@@ -243,17 +243,17 @@ ctx.slots.inject('conversation.view', () => ctx.slots.register({
 ## 5. Consequences
 
 ### 5.1 Positive Consequences (Benefits)
-- **零成本可观测性**：即时呈现全系统多 Agent 交互拓扑与黑板状态，显著降低复杂多智能体协作排障成本；
-- **零安全与状态破坏风险**：纯只读透视，无反向控制渠道，绝不发生误触引发的会话篡改或黑板误删；
-- **绝对零被动唤醒**：遥测读取完全依赖只读内存镜像，符合 ADR-0001 架构底线；
-- **Prompt KV Cache 零损耗**：遥测服务不暴露为 LLM Tool，系统提示词不变，保持百毫秒级首字响应；
-- **恒定内存消耗**：环形缓冲区严格受限（默认 200），无内存泄露风险，零磁盘 I/O 阻塞。
+- **只读可观测性**：呈现多 Agent 交互拓扑与黑板状态，辅助多智能体协作排障；
+- **无状态破坏风险**：纯只读透视，无反向控制渠道，避免会话或黑板数据误删；
+- **无被动唤醒**：遥测读取完全依赖内存镜像，符合 ADR-0001 架构底线；
+- **不影响 Prompt KV Cache**：遥测服务不暴露为 LLM Tool，系统提示词不变，保持首字响应性能；
+- **恒定内存消耗**：环形缓冲区大小受限（默认 200），内存占用受控，无磁盘 I/O 阻塞。
 
 ### 5.2 Negative Consequences & Mitigations
 - **瞬态调用在宿主重启后清空**：
-  - *Mitigation*: 会话实体与黑板条目通过原有机制保留与持久化，拓扑图基于存活状态重新投影。调用连线作为瞬态遥测流动，重启后干净重置符合预期。
+  - *Mitigation*: 会话实体与黑板条目通过原有机制保留与持久化，拓扑图基于存活状态重新投影。调用连线作为瞬态遥测流动，重启后重置。
 - **高频调用时的前端渲染负载**：
-  - *Mitigation*: 严格执行 PRD 规定的 RAF 批量合并调度与视口裁剪，连线流光采用 GPU CSS 合成，确保维持 60fps。
+  - *Mitigation*: 执行 RAF 批量合并调度与视口裁剪，连线粒子动效采用 GPU CSS 合成。
 
 ---
 
@@ -261,13 +261,13 @@ ctx.slots.inject('conversation.view', () => ctx.slots.register({
 
 1. **RingBuffer 单元测试**：
    - 验证边界容量约束，测试 250 次写入后容量恒定为 200，并正确 FIFO 淘汰最旧数据；
-   - 验证工作区隔离过滤正确性，验证 `crossWorkspace: false` 严格阻断非本工程记录。
+   - 验证工作区隔离过滤正确性，验证 `crossWorkspace: false` 阻断非本工程记录。
 2. **Zero-Wakeup 验证**：
-   - 在有 3 个处于 idle 状态的会话时，连续调用 100 次 `getCanvasTelemetry()`，验证 3 个会话的被动唤醒次数严格为 0。
+   - 在有 3 个处于 idle 状态的会话时，连续调用 100 次 `getCanvasTelemetry()`，验证 3 个会话的被动唤醒次数为 0。
 3. **KV Cache 验证**：
-   - 检查 Agent `tools` 列表与 System Prompt，确认无新增 LLM 遥测工具，保证提示词指纹绝对幂等。
+   - 检查 Agent `tools` 列表与 System Prompt，确认无新增 LLM 遥测工具，保证提示词指纹幂等。
 4. **端到端链路验证**：
-   - 断言前端请求路径与宿主注册路径字符串完全一致，杜绝仅靠 mock 掩盖的链路断裂；
+   - 断言前端请求路径与宿主注册路径字符串完全一致，防止链路断裂；
    - 验证认证围栏在 Connection 缺失（503）、未授权（401）、越权（403）三态下均在处理器执行前拦截；
    - 验证非 GET 方法一律 405 拦截，响应头携带 `allow: GET`；
    - 验证无 Web 宿主时 `installTelemetryWebSurface` 返回未注册且不抛错，插件保持 tool-only；

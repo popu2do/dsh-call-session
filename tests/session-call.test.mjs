@@ -86,7 +86,7 @@ test('dispatchNativeMessage: 状态分发 (steer / followup / send)', () => {
   assert.equal(mode2, 'followup');
   assert.equal(idleAgent.received[0].type, 'followup');
 
-  // 3. target 仅具备 send 方法时优雅降级为 followup
+  // 3. target 仅具备 send 方法时降级为 followup
   const sendOnlyAgent = {
     id: 'agent-send',
     status: 'idle',
@@ -301,7 +301,7 @@ test('executeSessionCall: 兼容多重调用传参签名 executeSessionCall(ctx,
   assert.equal(res.targetSessionId, 'target-sig-test-2222');
 });
 
-test('executeSessionCall: 规范接入 ctx.logger("dsh-call-session") 并降噪至 debug', async () => {
+test('executeSessionCall: 接入 ctx.logger("dsh-call-session") 并记录 debug 日志', async () => {
   const caller = createMockAgent('caller-logger-1111');
   const target = createMockAgent('target-logger-2222', { status: 'idle' });
 
@@ -337,5 +337,5 @@ test('executeSessionCall: 规范接入 ctx.logger("dsh-call-session") 并降噪�
   assert.equal(res.success, true);
   assert.equal(loggerScope, 'dsh-call-session');
   assert.ok(captured.some(l => l.level === 'debug' && l.args[0]?.includes('Successfully dispatched')));
-  assert.equal(captured.filter(l => l.level !== 'debug').length, 0, '禁止产生非 debug 级别的控制台噪音');
+  assert.equal(captured.filter(l => l.level !== 'debug').length, 0, '不产生非 debug 级别的控制台日志');
 });

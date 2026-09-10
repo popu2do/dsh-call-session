@@ -23,15 +23,15 @@ export interface SessionInfo {
  * session_query 工具调用入参
  */
 export interface SessionQueryArgs {
-  /** 模糊搜索关键词（大小写不敏感匹配 Session ID 或 Title） */
+  /** 模糊搜索关键词，匹配 Session ID 或 Title */
   query?: string;
-  /** 是否仅查询处于 running 运行态的会话，默认 false（返回 running 和 idle） */
+  /** 是否仅查询 running 状态的会话，默认 false */
   running_only?: boolean;
-  /** 活跃会话查询别名（兼容性传参） */
+  /** 活跃会话查询别名 */
   active_only?: boolean | 'running';
-  /** 是否跨工作区查询所有会话，默认 false（仅当前工作区） */
+  /** 是否跨工作区查询会话，默认 false */
   cross_workspace?: boolean;
-  /** 是否仅列出顶层会话（排除子代理与临时会话），默认 true */
+  /** 是否仅列出顶层会话，排除子代理与临时会话，默认 true */
   top_level_only?: boolean;
   /** 返回结果数量上限，默认 50，最大 100 */
   limit?: number;
@@ -45,18 +45,18 @@ export interface SessionQueryResult {
   success: boolean;
   /** 实际匹配到的会话数量 */
   count: number;
-  /** 本次查询生效的作用域（当前工作区路径或 'global'） */
+  /** 本次查询生效的作用域 */
   scope: string;
   /** 是否跨工作区查询 */
   crossWorkspace: boolean;
   /** 匹配的会话明细列表 */
   sessions: SessionInfo[];
-  /** 错误信息描述（仅在失败时提供） */
+  /** 失败错误信息 */
   error?: string;
 }
 
 /**
- * 获取已被归档或废弃的 Session ID 集合（不区分大小写检索）
+ * 获取已被归档或废弃的 Session ID 集合
  *
  * @param ctx Cordis 上下文
  * @returns 包含全部归档会话 ID 的 Set 集合
@@ -95,7 +95,7 @@ export declare function resolveAgentsService(ctx: any, exec?: any): any;
  *
  * @param ctxOrOptions Cordis 根上下文或包裹参数对象
  * @param rawArgs session_query 入参
- * @param rawExec 工具执行上下文（用于提取调用方所在工作区）
+ * @param rawExec 工具执行上下文
  * @returns 符合规约的查询结果结构
  */
 export declare function executeSessionQuery(

@@ -238,7 +238,7 @@ test('Web Telemetry Route: 认证围栏拒绝未授权与服务缺失请求', as
   assert.equal(handlerRuns, 1);
 });
 
-test('Web Telemetry Route: 严格只读 GET-only，非 GET 一律 405 拦截', async () => {
+test('Web Telemetry Route: 只读 GET-only，非 GET 返回 405', async () => {
   const ctx = createMockCtx({ agentsList: [] });
   const handler = createTelemetryHandler(ctx, { logger: silentLogger });
 
@@ -338,7 +338,7 @@ test('Web Telemetry Route: 无 ctx.effect 的宿主仍能直接挂载', () => {
   assert.equal(webServer.registered.length, 1);
 });
 
-test('Web Telemetry Route: apply 端到端挂载遥测路由且零唤醒', async () => {
+test('Web Telemetry Route: apply 挂载遥测路由且不唤醒 Agent', async () => {
   const webServer = createMockWebServer();
   const wakeups = [];
   const agents = [
