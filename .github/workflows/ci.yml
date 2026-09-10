@@ -16,6 +16,31 @@ concurrency:
   cancel-in-progress: ${{ github.ref != 'refs/heads/master' && github.ref != 'refs/heads/main' }}
 
 jobs:
+  secret-scan:
+    name: Secret Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js 20.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+
+      - name: Scan tracked files for credentials
+        run: node scripts/scan-secrets.mjs --all
+
+      - name: Validate commit messages
+        if: github.event_name == 'pull_request'
+        run: |
+          for sha in $(git rev-list "origin/${{ github.base_ref }}..HEAD"); do
+            git log -1 --format=%B "$sha" > /tmp/commit-msg
+            node scripts/check-commit-msg.mjs /tmp/commit-msg
+          done
+
   test:
     name: Test (Node ${{ matrix.node-version }} on ${{ matrix.os }})
     runs-on: ${{ matrix.os }}

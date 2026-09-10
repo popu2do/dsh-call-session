@@ -136,6 +136,7 @@ We enforce the [Conventional Commits](https://www.conventionalcommits.org/) stan
 - `build`: Changes that affect the build system or external dependencies
 - `ci`: Changes to our CI configuration files and scripts
 - `chore`: Other changes that do not modify `src` or test files
+- `revert`: Reverts a previous commit
 
 **Example:**
 ```
@@ -146,6 +147,23 @@ and refuse ambiguous matches across concurrent sessions.
 
 Fixes #24
 ```
+
+### Local Git Hooks
+
+`npm install` points `core.hooksPath` at `.githooks/`, which installs two hooks:
+
+- `pre-commit` scans the staged content for credentials, then runs `npm run verify`.
+- `commit-msg` enforces the commit message convention above.
+
+The credential scanner (`scripts/scan-secrets.mjs`) matches issuer-specific key
+formats and credential-shaped assignments. It also accepts explicit file paths
+and `--all`, which is how CI scans the whole tree. A genuine false positive is
+waived with a trailing `secret-scan:allow` comment on the offending line.
+
+Both hooks are advisory: `--no-verify` bypasses them, and a contributor can
+unset `core.hooksPath` at will. They exist to fail in seconds rather than after
+a CI round trip. The enforced boundary is the CI secret scan plus branch
+protection on `master`, neither of which can be bypassed from a clone.
 
 ## 6. Submitting a Pull Request (PR)
 
