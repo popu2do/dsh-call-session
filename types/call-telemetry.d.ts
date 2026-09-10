@@ -9,14 +9,14 @@ export type CanvasCallType = 'task_dispatch' | 'task_report' | 'notice';
 /** 原生交付模式 */
 export type CanvasDeliveryMode = 'steer' | 'followup';
 
-/** 会话运行状态（两态协议） */
+/** 会话运行状态 */
 export type CanvasSessionState = 'running' | 'idle';
 
 /**
  * 内存调用遥测记录
  */
 export interface CallTelemetryRecord {
-  /** 唯一标识 (如 call-1725800000000-a1b2c3d4) */
+  /** 唯一标识，例如 call-1725800000000-a1b2c3d4 */
   id: string;
   /** 调用方会话 Session ID */
   callerSessionId: string;
@@ -34,15 +34,15 @@ export interface CallTelemetryRecord {
   callType: CanvasCallType;
   /** 原生分发模式 */
   deliveryMode: CanvasDeliveryMode;
-  /** 发生时间戳（毫秒） */
+  /** 发生时间戳，单位毫秒 */
   timestamp: number;
-  /** 执行投递耗时（毫秒） */
+  /** 执行投递耗时，单位毫秒 */
   durationMs: number;
   /** 关联引用的黑板条目 ID 列表 */
   contextPostIds: string[];
-  /** 消息纯文本摘要（最多 120 字符） */
+  /** 消息摘要，最多 120 字符 */
   messageSnippet: string;
-  /** 完整消息内容（只读） */
+  /** 完整消息内容 */
   messagePayload: string;
   /** 记录状态：活跃或已落定 */
   status: 'active' | 'settled';
@@ -58,11 +58,11 @@ export interface CallTelemetryFilter {
   crossWorkspace?: boolean;
   /** cross_workspace 兼容别名 */
   cross_workspace?: boolean;
-  /** 返回记录条数限制（默认 50，最大等于容量） */
+  /** 返回记录条数限制，默认 50 */
   limit?: number;
   /** 时间戳增量下限过滤 */
   since?: number;
-  /** 指定会话 ID 过滤（发起方或目标方匹配） */
+  /** 指定会话 ID 过滤 */
   sessionId?: string;
   /** 状态过滤 */
   status?: 'active' | 'settled';
@@ -90,7 +90,7 @@ export declare class CallTelemetryRingBuffer {
   query(filter?: CallTelemetryFilter): CallTelemetryRecord[];
   /** 级联落定指定会话的调用连线 */
   settleSession(sessionId: string): number;
-  /** 会话注销级联清理（支持落定或彻底移除） */
+  /** 会话注销级联清理 */
   cleanupSession(sessionId: string, action?: 'settle' | 'purge' | 'delete'): number;
 }
 
@@ -195,7 +195,7 @@ export interface CanvasTelemetrySnapshot {
 export interface GetCanvasTelemetryOptions {
   /** 目标工作区路径 */
   workspace?: string;
-  /** 是否允许跨工作区透视 */
+  /** 是否允许跨工作区查询 */
   crossWorkspace?: boolean;
   /** cross_workspace 兼容别名 */
   cross_workspace?: boolean;
@@ -218,7 +218,7 @@ export declare function getCallTelemetry(
 ): CallTelemetryRingBuffer;
 
 /**
- * 聚合全景画板遥测快照（纯只读，零被动唤醒，零磁盘 I/O）
+ * 聚合全景画板遥测快照，只读且不唤醒目标会话
  */
 export declare function getCanvasTelemetry(
   ctx: any,

@@ -5,7 +5,7 @@
  * 核心功能：
  * 1. 工具：
  *    - board_post, board_list, board_clear: 共享黑板发布、查询与管理
- *    - session_call: 进程内会话单播通信（steer/followup）
+ *    - session_call: 进程内会话单播通信
  *    - session_query: 会话发现、工作区过滤与状态规范化
  * 2. Web 命令：
  *    - /dsh-call-session: 单播呼叫与黑板标题摘要
@@ -92,7 +92,7 @@ import {
 /** Cordis 插件唯一识别名 */
 export declare const name = 'dsh-call-session';
 
-/** 声明式依赖注入服务清单（必需与渐进增强可选服务） */
+/** 声明式依赖注入服务清单 */
 export declare const inject: readonly ['agents', 'tools', 'commands', 'systemPrompt'];
 
 /** 跨会话调度相关常量集合 */
@@ -114,11 +114,11 @@ export interface CallSessionConfig {
   enabled?: boolean;
   /** 黑板持久化文件存储路径，默认指向插件根目录下 board.json */
   storagePath?: string;
-  /** 黑板数据持久化防抖延迟（毫秒），默认 300 */
+  /** 黑板数据持久化防抖延迟，单位毫秒，默认 300 */
   debounceMs?: number;
-  /** 黑板保留条目上限（FIFO 淘汰），默认 200 */
+  /** 黑板保留条目上限，按 FIFO 淘汰，默认 200 */
   maxCapacity?: number;
-  /** 跨会话调用遥测环形缓冲区保留上限（FIFO 淘汰），默认 200 */
+  /** 跨会话调用遥测环形缓冲区保留上限，按 FIFO 淘汰，默认 200 */
   telemetryCapacity?: number;
   /** 注入全局 System Prompt 的排序权重，默认 118 */
   promptSectionOrder?: number;

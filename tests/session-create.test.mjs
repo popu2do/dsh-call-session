@@ -5,6 +5,7 @@ import {
   resolvePeerTitle,
   resetRateLimits,
   checkRateLimit,
+  inspectWorkspaceActiveSessions,
   PEER_SESSION_CONSTANTS
 } from '../lib/session-create.mjs';
 
@@ -231,7 +232,7 @@ test('executeSessionCreate: 工作区防重名拦截 ([DuplicateTitle])', async 
   );
 });
 
-test('executeSessionCreate: 工作区配额拦截 (10 个活跃根会话上限 [QuotaExceeded])', async () => {
+test('executeSessionCreate: 工作区配额拦截 (10 个活跃根会话上限)', async () => {
   resetRateLimits();
   const caller = createMockAgent('caller-root');
   // 创建 9 个同工作区活跃会话，加上 caller 共 10 个
@@ -284,7 +285,7 @@ test('executeSessionCreate: 工作区隔离（跨工程会话不占用配额，�
   assert.equal(res.title, 'Alpha Peer Worker');
 });
 
-test('executeSessionCreate: 衍生代际深度熔断 (Generation <= 2 [GenerationLimitExceeded])', async () => {
+test('executeSessionCreate: 衍生代际深度限制 (Generation <= 2)', async () => {
   resetRateLimits();
   // 1. Root 会话 (Gen 0) -> 创建 Gen 1
   const rootAgent = createMockAgent('root-session', { generation: 0 });
@@ -318,7 +319,7 @@ test('executeSessionCreate: 衍生代际深度熔断 (Generation <= 2 [Generatio
   );
 });
 
-test('executeSessionCreate: 单会话限频拦截 (5 次/分钟 [RateLimitExceeded])', async () => {
+test('executeSessionCreate: 单会话限频拦截 (5 次/分钟)', async () => {
   resetRateLimits();
   const caller = createMockAgent('frequent-caller');
   const ctx = createMockCtx({ agentsList: [caller] });
@@ -345,7 +346,7 @@ test('executeSessionCreate: 单会话限频拦截 (5 次/分钟 [RateLimitExceed
   resetRateLimits();
 });
 
-test('executeSessionCreate: 异步非阻塞点火与 Context Post 关联挂载 (Fire-and-Forget)', async () => {
+test('executeSessionCreate: 初始消息分发与 Context Post 关联', async () => {
   resetRateLimits();
   const caller = createMockAgent('caller-ignite');
   const boardStore = createMockBoardStore();
@@ -428,4 +429,102 @@ test('executeSessionCreate: 支持对象签名与位置参数签名', async () =
     exec
   );
   assert.equal(resPos.success, true);
+});
+
+test('executeSessionCreate: 宿主 SessionController 契约与冻结 SessionHeader 测试', async () => {
+  resetRateLimits();
+  let capturedCreatePayload = null;
+
+  // 模拟真实宿主行为：严格执行 SessionHeader 规范校验
+  const realHostAgentsSvc = {
+    list: () => [],
+    get: () => undefined,
+    create: async (payload) => {
+      capturedCreatePayload = payload;
+      // 真实宿主底层强校验：如果 meta 含有非 'subagent' 的 origin，抛出 DSH 官方异常
+      if (payload.meta?.origin !== undefined && payload.meta?.origin !== 'subagent') {
+        throw new Error('session header origin must be "subagent"');
+      }
+
+      // 真实宿主底层构造冻结的 SessionHeader
+      const header = Object.freeze({
+        version: 0,
+        id: payload.sessionId,
+        createdAt: Date.now(),
+        cwd: payload.meta?.cwd,
+        isSeeded: false
+      });
+
+      const mockRealAgent = {
+        id: payload.sessionId,
+        title: payload.title,
+        status: 'idle',
+        session: {
+          id: payload.sessionId,
+          header,
+          get cwd() { return header.cwd; }
+        },
+        followup: () => {},
+        steer: () => {}
+      };
+
+      return { agent: mockRealAgent };
+    }
+  };
+
+  const mockCtx = {
+    root: { agents: realHostAgentsSvc },
+    agents: realHostAgentsSvc,
+    logger: () => ({ debug() {}, info() {}, warn() {}, error() {} }),
+    get: (n) => (n === 'agents' ? realHostAgentsSvc : undefined)
+  };
+
+  const res = await executeSessionCreate(mockCtx, {
+    title: 'Minimal Contract Worker',
+    initial_message: 'Verify DSH Host Contract'
+  }, { agent: createMockAgent('caller-root') });
+
+  assert.equal(res.success, true);
+  assert.equal(res.title, 'Minimal Contract Worker');
+
+  // 验证传给底层 agentsService.create 的契约：
+  assert.ok(capturedCreatePayload);
+  assert.equal(capturedCreatePayload.header, undefined, 'createPayload 不包含 header 字段');
+  assert.equal(capturedCreatePayload.meta.origin, undefined, 'meta.origin 保持为 undefined');
+  assert.equal(capturedCreatePayload.meta.parentSession, undefined, '平级独立会话不可携带 parentSession');
+});
+
+test('inspectWorkspaceActiveSessions: 准确识别真实宿主下 session.header.origin 为 subagent 的子代理', () => {
+  const rootAgent = createMockAgent('root-session', { cwd: 'c:/workspace/app' });
+
+  // 真实宿主生成的子代理：agent 属性本身无 origin，但 session.header.origin === 'subagent'
+  const subagentWithHeader = {
+    id: 'subagent-1',
+    status: 'idle',
+    session: {
+      id: 'subagent-1',
+      header: Object.freeze({
+        version: 0,
+        id: 'subagent-1',
+        origin: 'subagent',
+        parentSession: 'root-session',
+        cwd: 'c:/workspace/app'
+      })
+    }
+  };
+
+  const agentsSvc = {
+    list: () => [rootAgent, subagentWithHeader]
+  };
+
+  const { count, activeTitles } = inspectWorkspaceActiveSessions(
+    agentsSvc,
+    'c:/workspace/app',
+    new Set(),
+    {}
+  );
+
+  // subagent 必须被过滤排除，只有 rootAgent 计入
+  assert.equal(count, 1, '子代理被过滤排除，活跃会话计数为 1');
+  assert.ok(activeTitles.has(rootAgent.title.toLowerCase()));
 });

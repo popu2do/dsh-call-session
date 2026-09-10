@@ -288,7 +288,7 @@ test('Format Helpers: formatTTL and formatTime compact outputs', () => {
   assert.equal(formatTime(null), '-');
 });
 
-test('L3 Read-Only Inspector Drawer: Strict read-only integrity (Anti-Side-Effect)', () => {
+test('L3 Read-Only Inspector Drawer: Read-only integrity', () => {
   const plugin = loadClientBundle();
   const t = (k) => plugin.zh[k] || k;
 
@@ -388,4 +388,334 @@ test('GPU Hardware Acceleration & 60fps Style Invariants: translate3d, will-chan
   assert.ok(code.includes('cubic-bezier(0.16, 1, 0.3, 1)'), 'Must apply PRD 6.1 high-performance easing curve');
   assert.ok(code.includes('0.18s'), '1-hop dimming transition must be 180ms per PRD');
   assert.ok(code.includes('contain: layout style'), 'Must use CSS containment for reflow isolation');
+});
+
+test('Scope & AST Audit: Slot Scope and Mutation Check', () => {
+  const clientPath = path.join(rootDir, 'lib', 'client.js');
+  const code = fs.readFileSync(clientPath, 'utf8');
+
+  // 1. Strict Unique Slot Scope Verification
+  const slotInjectMatches = [...code.matchAll(/ctx\.slots\.inject\(\s*['"]([^'"]+)['"]/g)].map(m => m[1]);
+  assert.equal(slotInjectMatches.length, 1, 'ctx.slots.inject must be called exactly once');
+  assert.equal(slotInjectMatches[0], 'conversation.view', 'Slot injection target must strictly be conversation.view');
+
+  // Check slots.register parameters
+  assert.ok(code.includes("name: 'conversation.view'"), 'Registered slot name must be conversation.view');
+  assert.ok(code.includes("id: 'canvas'"), 'Registered slot id must be canvas');
+  assert.ok(code.includes('order: 15'), 'Registered slot order must be 15');
+
+  // 2. Zero Tool / Command / Slash Registration
+  assert.equal(/ctx\.(?:tools|tool|command|slash)\s*\./.test(code), false, 'Client must not register any tools or commands');
+
+  // 3. Zero Mutative HTTP Methods
+  assert.equal(/method\s*:\s*['"](?:POST|PUT|DELETE|PATCH)['"]/i.test(code), false, 'Client must not make mutative HTTP requests');
+
+  // 4. Zero Form / Editable Input Elements
+  assert.equal(/h\(\s*['"](?:input|textarea|select|form)['"]/i.test(code), false, 'Client must not render form input elements');
+  assert.equal(/contenteditable/i.test(code), false, 'Client must not declare contentEditable elements');
+
+  // 5. Zero Emoji Across Entire File
+  const emojiRegex = /[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/u;
+  assert.equal(emojiRegex.test(code), false, 'lib/client.js must contain zero emojis');
+});
+
+test('Drawer Mutation Resistance: Element Traversal and Mutation Action Check', () => {
+  const plugin = loadClientBundle();
+  const t = (k) => plugin.zh[k] || k;
+
+  function traverseElements(element, callback) {
+    if (!element || typeof element !== 'object') return;
+    callback(element);
+    if (Array.isArray(element.children)) {
+      for (const child of element.children) {
+        traverseElements(child, callback);
+      }
+    }
+  }
+
+  const entities = [
+    {
+      kind: 'session',
+      id: 'session-001',
+      title: 'Worker Session',
+      workspace: '/workspace/app',
+      status: 'running',
+      agentType: 'engineer',
+      stats: { inboundCalls: 2, outboundCalls: 5, postsCount: 3 }
+    },
+    {
+      kind: 'call',
+      id: 'call-001',
+      callType: 'task_dispatch',
+      deliveryMode: 'steer',
+      durationMs: 42,
+      timestamp: Date.now(),
+      callerSessionId: 'sess-a',
+      callerTitle: 'Caller',
+      targetSessionId: 'sess-b',
+      targetTitle: 'Target',
+      contextPostIds: ['p1', 'p2'],
+      messageSnippet: 'Dispatch payload',
+      messagePayload: 'Detailed payload to review',
+      status: 'active'
+    },
+    {
+      kind: 'post',
+      id: 'post-001',
+      topic: 'task:build',
+      tags: ['build', 'ci'],
+      ttlRemainingMs: 1800000,
+      authorSessionId: 'sess-author',
+      workspace: '/workspace/app',
+      content: 'CI build passed'
+    }
+  ];
+
+  const forbiddenActionWords = [
+    '编辑', '删除', '重发', '派发', '新建', '修改', '发送',
+    'edit', 'delete', 'resend', 'dispatch', 'create', 'modify', 'send'
+  ];
+
+  for (const entity of entities) {
+    let closeButtonCount = 0;
+    let copyButtonCount = 0;
+    let otherInteractiveCount = 0;
+
+    const drawer = plugin.CanvasDrawer({
+      entity,
+      onClose: () => {},
+      t,
+      copiedKey: null,
+      setCopiedKey: () => {}
+    });
+
+    traverseElements(drawer, (el) => {
+      const tag = String(el.type || '').toLowerCase();
+      assert.notEqual(tag, 'input');
+      assert.notEqual(tag, 'textarea');
+      assert.notEqual(tag, 'select');
+      assert.notEqual(tag, 'form');
+
+      if (el.props) {
+        assert.equal(el.props.contentEditable, undefined);
+        assert.equal(el.props.disabled, undefined);
+      }
+
+      if (tag === 'button') {
+        const className = String(el.props?.className || '');
+        const childrenText = (el.children || []).map(c => typeof c === 'string' ? c : '').join(' ');
+
+        for (const word of forbiddenActionWords) {
+          assert.equal(
+            childrenText.toLowerCase().includes(word),
+            false,
+            `Drawer button must not contain mutative word "${word}", found "${childrenText}"`
+          );
+        }
+
+        if (className.includes('dsh-canvas-copy-btn')) {
+          copyButtonCount++;
+        } else if (className.includes('dsh-canvas-btn') && (childrenText === '关闭' || childrenText === 'Close')) {
+          closeButtonCount++;
+        } else {
+          otherInteractiveCount++;
+        }
+      }
+    });
+
+    assert.equal(closeButtonCount, 1, `Drawer for ${entity.kind} must have exactly 1 close button`);
+    assert.ok(copyButtonCount >= 1, `Drawer for ${entity.kind} must have at least 1 copy button`);
+    assert.equal(otherInteractiveCount, 0, `Drawer for ${entity.kind} must have 0 non-read-only interactive buttons`);
+  }
+});
+
+test('Clipboard Copy Functionality: navigator.clipboard mock verification', async () => {
+  const clientPath = path.join(rootDir, 'lib', 'client.js');
+  const code = fs.readFileSync(clientPath, 'utf8');
+
+  let clipboardWritten = null;
+  let copiedKeySet = null;
+
+  let registration = null;
+  const mockWindow = {
+    __ModuleLoader__: {
+      load: (payload) => {
+        registration = payload;
+      }
+    },
+    requestAnimationFrame: (cb) => cb()
+  };
+
+  const sandbox = {
+    window: mockWindow,
+    navigator: {
+      clipboard: {
+        writeText: async (text) => {
+          clipboardWritten = text;
+        }
+      }
+    },
+    console,
+    Date,
+    Set,
+    Map,
+    Array,
+    Object,
+    String,
+    Math,
+    JSON,
+    URLSearchParams,
+    setInterval,
+    clearInterval,
+    setTimeout: (fn, delay) => {
+      fn();
+      return 1;
+    },
+    clearTimeout
+  };
+
+  vm.createContext(sandbox);
+  vm.runInContext(code, sandbox);
+  assert.ok(registration, 'ModuleLoader registration must be invoked');
+  const plugin = registration.factory(() => null);
+
+  const t = (k) => plugin.zh[k] || k;
+  const drawer = plugin.CanvasDrawer({
+    entity: {
+      kind: 'post',
+      id: 'post-clip-test',
+      topic: 'test:copy',
+      tags: ['copy'],
+      content: 'Secret payload to copy',
+      ttlRemainingMs: 100000
+    },
+    onClose: () => {},
+    t,
+    copiedKey: null,
+    setCopiedKey: (k) => { copiedKeySet = k; }
+  });
+
+  let copyContentBtn = null;
+  function findBtn(el) {
+    if (!el || typeof el !== 'object') return;
+    if (el.type === 'button' && el.props?.className?.includes('dsh-canvas-copy-btn')) {
+      if (el.props.onClick) {
+        copyContentBtn = el;
+      }
+    }
+    if (Array.isArray(el.children)) el.children.forEach(findBtn);
+  }
+  findBtn(drawer);
+
+  assert.ok(copyContentBtn, 'Copy button for content must exist');
+  copyContentBtn.props.onClick();
+
+  await new Promise(r => setImmediate(r));
+
+  assert.equal(clipboardWritten, 'Secret payload to copy');
+  assert.equal(copiedKeySet, null, 'CopiedKey must reset after timeout in mock');
+});
+
+test('Three-State Time-Decayed Bezier: Exact Millisecond Boundary Assertions', () => {
+  const plugin = loadClientBundle();
+  const { getCallEdgeDecay, calculateBezierPath } = plugin;
+  const now = 1726000000000;
+
+  // 1. Exact Boundary 0s -> State 1
+  const decay0 = getCallEdgeDecay({ timestamp: now, status: 'active' }, now);
+  assert.equal(decay0.opacity, 1.0);
+  assert.equal(decay0.strokeWidth, 2.2);
+  assert.equal(decay0.isFlowing, true);
+  assert.equal(decay0.className, 'dsh-flow-edge');
+
+  // 2. Exact Boundary 14,999ms (< 15s) -> State 1
+  const decay14s = getCallEdgeDecay({ timestamp: now - 14999, status: 'active' }, now);
+  assert.equal(decay14s.opacity, 1.0);
+  assert.equal(decay14s.isFlowing, true);
+  assert.equal(decay14s.className, 'dsh-flow-edge');
+
+  // 3. Exact Boundary 15,001ms (> 15s && <= 60s) -> State 2
+  const decay15s = getCallEdgeDecay({ timestamp: now - 15001, status: 'active' }, now);
+  assert.equal(decay15s.opacity, 0.65);
+  assert.equal(decay15s.strokeWidth, 1.6);
+  assert.equal(decay15s.isFlowing, true);
+  assert.equal(decay15s.className, 'dsh-flow-edge-slow');
+
+  // 4. Exact Boundary 59,999ms (<= 60s) -> State 2
+  const decay59s = getCallEdgeDecay({ timestamp: now - 59999, status: 'active' }, now);
+  assert.equal(decay59s.opacity, 0.65);
+  assert.equal(decay59s.isFlowing, true);
+  assert.equal(decay59s.className, 'dsh-flow-edge-slow');
+
+  // 5. Exact Boundary 60,001ms (> 60s) -> State 3
+  const decay60s = getCallEdgeDecay({ timestamp: now - 60001, status: 'active' }, now);
+  assert.equal(decay60s.opacity, 0.3);
+  assert.equal(decay60s.strokeWidth, 1.2);
+  assert.equal(decay60s.isFlowing, false);
+  assert.equal(decay60s.className, '');
+
+  // 6. Settled status overrides timestamp -> State 3
+  const decaySettled = getCallEdgeDecay({ timestamp: now - 1000, status: 'settled' }, now);
+  assert.equal(decaySettled.opacity, 0.3);
+  assert.equal(decaySettled.isFlowing, false);
+  assert.equal(decaySettled.className, '');
+
+  // 7. Parallel Bezier curves offset spread verification
+  const pathIdx0 = calculateBezierPath(100, 100, 300, 100, 0, 4);
+  const pathIdx1 = calculateBezierPath(100, 100, 300, 100, 1, 4);
+  assert.notEqual(pathIdx0, pathIdx1, 'Parallel paths with different indices must have distinct control points');
+
+  // 8. Self-loop Bezier curve verification
+  const selfPath = calculateBezierPath(200, 200, 200, 200, 0, 1);
+  assert.ok(selfPath.includes('C '), 'Self-loop must use cubic Bezier (C)');
+});
+
+test('Multi-Workspace Swimlanes & Layout: Empty State, Boundary Separation and Isolation', () => {
+  const plugin = loadClientBundle();
+  const { computeLayout } = plugin;
+
+  // Case 1: Empty workspaces array, fallback to currentWorkspace
+  const emptyLayout = computeLayout([], [{ id: 's1', workspace: '/repo/root' }], [], '/repo/root', false);
+  assert.equal(emptyLayout.workspaceBounds.length, 1);
+  assert.equal(emptyLayout.workspaceBounds[0].id, '/repo/root');
+  assert.ok(emptyLayout.nodePositions['s1']);
+
+  // Case 2: 4 distinct workspaces with 10 sessions
+  const multiWorkspaces = [
+    { id: '/ws/1', name: 'ws-1', isCurrent: true, sessionIds: ['s1', 's2', 's3', 's4'] },
+    { id: '/ws/2', name: 'ws-2', isCurrent: false, sessionIds: ['s5', 's6'] },
+    { id: '/ws/3', name: 'ws-3', isCurrent: false, sessionIds: ['s7'] },
+    { id: '/ws/4', name: 'ws-4', isCurrent: false, sessionIds: ['s8', 's9', 's10'] }
+  ];
+  const allSessions = [
+    { id: 's1', workspace: '/ws/1' }, { id: 's2', workspace: '/ws/1' },
+    { id: 's3', workspace: '/ws/1' }, { id: 's4', workspace: '/ws/1' },
+    { id: 's5', workspace: '/ws/2' }, { id: 's6', workspace: '/ws/2' },
+    { id: 's7', workspace: '/ws/3' },
+    { id: 's8', workspace: '/ws/4' }, { id: 's9', workspace: '/ws/4' }, { id: 's10', workspace: '/ws/4' }
+  ];
+
+  // Default: crossWorkspace: false
+  const isolatedLayout = computeLayout(multiWorkspaces, allSessions, [], '/ws/1', false);
+  assert.equal(isolatedLayout.workspaceBounds.length, 1);
+  assert.equal(isolatedLayout.workspaceBounds[0].id, '/ws/1');
+  assert.ok(isolatedLayout.nodePositions['s1']);
+  assert.ok(isolatedLayout.nodePositions['s4']);
+  assert.equal(isolatedLayout.nodePositions['s5'], undefined, 'Cross-workspace session s5 must be excluded');
+  assert.equal(isolatedLayout.nodePositions['s8'], undefined, 'Cross-workspace session s8 must be excluded');
+
+  // Permissive: crossWorkspace: true
+  const fullLayout = computeLayout(multiWorkspaces, allSessions, [], '/ws/1', true);
+  assert.equal(fullLayout.workspaceBounds.length, 4);
+  for (let i = 0; i < fullLayout.workspaceBounds.length - 1; i++) {
+    const curr = fullLayout.workspaceBounds[i];
+    const next = fullLayout.workspaceBounds[i + 1];
+    assert.ok(
+      next.x >= curr.x + curr.width + 30,
+      `Swimlane ${i+1} (${next.name}) must be separated from ${i} (${curr.name}) by at least 30px`
+    );
+  }
+  for (const s of allSessions) {
+    assert.ok(fullLayout.nodePositions[s.id], `Session ${s.id} must be positioned in multi-workspace layout`);
+  }
 });

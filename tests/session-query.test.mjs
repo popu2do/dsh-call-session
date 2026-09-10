@@ -147,9 +147,9 @@ test('executeSessionQuery: 状态规范化 (running / idle)', () => {
   const statusMap = Object.fromEntries(res.sessions.map(s => [s.sessionId, s.status]));
   assert.equal(statusMap['sess-running'], 'running');
   assert.equal(statusMap['sess-idle'], 'idle');
-  assert.equal(statusMap['sess-paused'], 'idle', '非 running 状态必须规范化为 idle');
-  assert.equal(statusMap['sess-ready'], 'idle', '非 running 状态必须规范化为 idle');
-  assert.equal(statusMap['sess-unknown'], 'idle', '非 running 状态必须规范化为 idle');
+  assert.equal(statusMap['sess-paused'], 'idle', '非 running 状态规范化为 idle');
+  assert.equal(statusMap['sess-ready'], 'idle', '非 running 状态规范化为 idle');
+  assert.equal(statusMap['sess-unknown'], 'idle', '非 running 状态规范化为 idle');
 });
 
 test('executeSessionQuery: 归档过滤与 running_only 过滤', () => {

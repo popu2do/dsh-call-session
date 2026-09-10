@@ -1,5 +1,5 @@
 name: "Feature Request"
-description: "Suggest an idea or enhancement for dsh-call-agent"
+description: "Propose an enhancement for dsh-call-session"
 title: "[Feature]: "
 labels: ["enhancement"]
 
@@ -7,13 +7,13 @@ body:
   - type: markdown
     attributes:
       value: |
-        Thank you for suggesting an enhancement to `dsh-call-agent`!
+        Submit proposals with concrete technical rationale and expected behavior.
 
   - type: textarea
     id: problem
     attributes:
       label: "Problem or Motivation"
-      description: "Is your proposal related to a specific limitation or pain point?"
+      description: "Describe the operational limitation or constraint this addresses."
       placeholder: "A clear and concise description of the problem..."
     validations:
       required: false

@@ -20,7 +20,7 @@ test('normalizeWorkspace: 路径标准化与盘符规约', () => {
   assert.equal(normalizeWorkspace(undefined), '');
   assert.equal(normalizeWorkspace(''), '');
   assert.equal(normalizeWorkspace('   '), '');
-  assert.equal(normalizeWorkspace('C:\\Users\\ASHH\\Project'), 'c:/Users/ASHH/Project');
+  assert.equal(normalizeWorkspace('C:\\Workspace\\Project'), 'c:/Workspace/Project');
   assert.equal(normalizeWorkspace('D:\\Workspace\\Repo\\\\\\'), 'd:/Workspace/Repo');
   assert.equal(normalizeWorkspace('/home/user/project/'), '/home/user/project');
   assert.equal(normalizeWorkspace('e:/repos/app'), 'e:/repos/app');
@@ -120,8 +120,8 @@ test('BoardStore: 基础 CRUD、条目查询与标签过滤', async (t) => {
   assert.equal(listAll.returned, 2);
   assert.equal(listAll.titlesOnly, true);
   assert.equal(listAll.posts[0].id, 'post-2'); // 倒序排序
-  assert.equal(listAll.posts[0].content, undefined, '默认全量列表不得包含 content 正文');
-  assert.equal(listAll.posts[0].remainingSeconds, undefined, '绝对严禁输出易逝 remainingSeconds');
+  assert.equal(listAll.posts[0].content, undefined, '默认全量列表不包含 content 正文');
+  assert.equal(listAll.posts[0].remainingSeconds, undefined, '不输出 remainingSeconds');
 
   // list: 显式指定 titlesOnly: false 全量拉取详情
   const listFull = store.list({ callerWorkspace: 'c:/repo', titlesOnly: false });
@@ -303,7 +303,7 @@ test('BoardStore: clear 清理与归档操作', async (t) => {
   assert.equal(clearIdRes.action, 'archive');
   assert.equal(store.get('p1').status, 'archived');
 
-  // 3. 按 id 彻底删除 (purge)
+  // 3. 按 id 物理删除 (purge)
   const purgeIdRes = store.clear({ id: 'p1', action: 'delete' });
   assert.equal(purgeIdRes.affectedCount, 1);
   assert.equal(purgeIdRes.action, 'delete');
@@ -451,14 +451,14 @@ test('BoardStore: ADR-0011 规范验证 (默认 titlesOnly: true、id 精确查�
     status: 'active'
   });
 
-  // 1. 默认集合查询：未传 id 且未传 titlesOnly，严格默认为 titlesOnly: true，彻底剔除 content
+  // 1. 默认集合查询：未传 id 且未传 titlesOnly 时默认为 titlesOnly: true，不包含 content
   const defaultList = store.list({ callerWorkspace: 'c:/repo' });
-  assert.equal(defaultList.titlesOnly, true, '集合查询未显式指定时 titlesOnly 必须默认为 true');
+  assert.equal(defaultList.titlesOnly, true, '集合查询未显式指定时 titlesOnly 默认为 true');
   assert.equal(defaultList.total, 2);
   assert.equal(defaultList.returned, 2);
   for (const post of defaultList.posts) {
-    assert.equal(post.content, undefined, '默认摘要模式严禁包含 content 正文');
-    assert.equal(post.remainingSeconds, undefined, '条目中严禁包含易逝 remainingSeconds 字段');
+    assert.equal(post.content, undefined, '默认摘要模式不包含 content 正文');
+    assert.equal(post.remainingSeconds, undefined, '条目中不包含 remainingSeconds 字段');
     assert.ok(post.id);
     assert.ok(post.title);
     assert.ok(post.topic);
@@ -467,19 +467,19 @@ test('BoardStore: ADR-0011 规范验证 (默认 titlesOnly: true、id 精确查�
 
   // 2. 单条点查智能分流：传入 id 且未传 titlesOnly，自动分流默认为 titlesOnly: false，直取完整 content
   const pointDetail = store.list({ id: 'post-adr-1', callerWorkspace: 'c:/repo' });
-  assert.equal(pointDetail.titlesOnly, false, '指定 id 且未指定 titlesOnly 时必须智能分流为 false');
+  assert.equal(pointDetail.titlesOnly, false, '指定 id 且未指定 titlesOnly 时 titlesOnly 为 false');
   assert.equal(pointDetail.total, 1);
   assert.equal(pointDetail.returned, 1);
   assert.equal(pointDetail.posts[0].id, 'post-adr-1');
   assert.equal(pointDetail.posts[0].content, '# ADR-0011 Token Governance\nMassive 64KB architecture spec text goes here...');
-  assert.equal(pointDetail.posts[0].remainingSeconds, undefined, '详情模式依然绝对剔除 remainingSeconds');
+  assert.equal(pointDetail.posts[0].remainingSeconds, undefined, '详情模式不包含 remainingSeconds');
 
   // 3. 显式意图优先 (Caller Intent Supremacy)：传入 id 且显式传 titlesOnly: true，依然返回摘要
   const pointDigest = store.list({ id: 'post-adr-1', titlesOnly: true, callerWorkspace: 'c:/repo' });
   assert.equal(pointDigest.titlesOnly, true);
   assert.equal(pointDigest.total, 1);
   assert.equal(pointDigest.posts[0].id, 'post-adr-1');
-  assert.equal(pointDigest.posts[0].content, undefined, '显式声明 titlesOnly: true 必须剥离 content');
+  assert.equal(pointDigest.posts[0].content, undefined, '显式指定 titlesOnly: true 时不包含 content');
 
   // 3b. 蛇形参数别名 titles_only: true 同样遵循显式意图
   const pointDigestSnake = store.list({ id: 'post-adr-1', titles_only: true, callerWorkspace: 'c:/repo' });
@@ -504,16 +504,16 @@ test('BoardStore: ADR-0011 规范验证 (默认 titlesOnly: true、id 精确查�
   assert.equal(nonExistent.returned, 0);
   assert.deepEqual(nonExistent.posts, []);
 
-  // 6. Prompt KV Cache 深度防御：断言所有返回结果序列化字符串均不包含 remainingSeconds
+  // 6. 断言所有返回结果序列化字符串均不包含 remainingSeconds
   for (const res of [defaultList, pointDetail, pointDigest, fullList, nonExistent]) {
     const serialized = JSON.stringify(res);
-    assert.equal(serialized.includes('remainingSeconds'), false, '返回结果序列化中绝对不得包含 remainingSeconds');
+    assert.equal(serialized.includes('remainingSeconds'), false, '返回结果序列化中不包含 remainingSeconds');
   }
 
   await store.close();
 });
 
-test('BoardStore: id 精确查阅的工作区隔离机制与跨工程穿透', async (t) => {
+test('BoardStore: id 精确查阅的工作区隔离与跨工作区查询', async (t) => {
   const tmpDir = await createTempDir();
   t.after(async () => {
     await fs.rm(tmpDir, { recursive: true, force: true });
@@ -553,16 +553,16 @@ test('BoardStore: id 精确查阅的工作区隔离机制与跨工程穿透', as
 
   // 2. 跨工作区精确检索目标条目：默认 crossWorkspace: false 严格隔离，返回 0 条
   const crossIsolated = store.list({ id: 'post-isolated-backend', callerWorkspace: callerWs });
-  assert.equal(crossIsolated.total, 0, '未开启 crossWorkspace 时不得查阅外部工程条目');
+  assert.equal(crossIsolated.total, 0, '未开启 crossWorkspace 时不查阅外部工作区条目');
   assert.equal(crossIsolated.returned, 0);
 
-  // 3. 跨工作区精确检索目标条目：开启 crossWorkspace: true 成功穿透，获取详情
+  // 3. 跨工作区精确检索目标条目：开启 crossWorkspace: true 获取详情
   const crossAllowed = store.list({
     id: 'post-isolated-backend',
     callerWorkspace: callerWs,
     crossWorkspace: true
   });
-  assert.equal(crossAllowed.total, 1, '开启 crossWorkspace: true 允许穿透跨工作区查阅目标 ID');
+  assert.equal(crossAllowed.total, 1, '开启 crossWorkspace: true 允许跨工作区查阅目标 ID');
   assert.equal(crossAllowed.posts[0].id, 'post-isolated-backend');
   assert.equal(crossAllowed.posts[0].content, 'Backend auth specification');
   assert.equal(crossAllowed.titlesOnly, false);

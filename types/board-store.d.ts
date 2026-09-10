@@ -29,15 +29,15 @@ export interface BoardPost {
   authorWorkspace: string;
   /** 创建时间 ISO 8601 格式字符串 */
   createdAt: string;
-  /** 创建时间戳（毫秒） */
+  /** 创建时间戳，单位毫秒 */
   createdAtMs: number;
   /** 过期时间 ISO 8601 格式字符串 */
   expiresAt: string;
-  /** 过期时间戳（毫秒） */
+  /** 过期时间戳，单位毫秒 */
   expiresAtMs: number;
   /** 当前状态：活跃 active、归档 archived、过期 expired */
   status: BoardPostStatus;
-  /** 可见性作用域（工作区规范化路径或 'global'） */
+  /** 可见性作用域 */
   scope: string;
   /** 结构化扩展元数据键值对 */
   metadata: Record<string, any>;
@@ -49,18 +49,18 @@ export interface BoardPost {
 export interface BoardPostArgs {
   /** 业务分类或主题名，必填 */
   topic: string;
-  /** 消息主体正文（最大 64KB），必填 */
+  /** 消息主体正文，最大 64KB */
   content: string;
-  /** 可选标签列表（最多 10 个） */
+  /** 可选标签列表，最多 10 个 */
   tags?: string[];
-  /** 生存时间（秒），默认 3600 秒（1小时），最大不超过 86400 秒（24小时） */
+  /** 生存时间，单位秒，默认 3600，最大 86400 */
   ttl?: number;
   /** 可选的结构化元数据键值对 */
   metadata?: Record<string, any>;
 }
 
 /**
- * 黑板标题摘要条目（精简模式）
+ * 黑板标题摘要条目
  */
 export interface BoardTitleItem {
   /** 条目 ID */
@@ -89,15 +89,15 @@ export interface BoardTitleItem {
  * 查询黑板条目参数选项
  */
 export interface BoardListOptions {
-  /** 按条目唯一 ID 精确检索（如 post-1725300000000-abcd） */
+  /** 按条目唯一 ID 精确检索，例如 post-1725300000000-abcd */
   id?: string;
-  /** 按完整主题过滤（如 task:audit） */
+  /** 按完整主题过滤，例如 task:audit */
   topic?: string;
   /** 按主题前缀模糊过滤 (camelCase) */
   topicPrefix?: string;
   /** 按主题前缀模糊过滤 (snake_case) */
   topic_prefix?: string;
-  /** 按单个标签检索（如 ready-for-review） */
+  /** 按单个标签检索 */
   tag?: string;
   /** 按作者会话 ID 检索 */
   author?: string;
@@ -113,7 +113,7 @@ export interface BoardListOptions {
   crossWorkspace?: boolean;
   /** 是否跨工程穿透查询所有工作区的公告 (snake_case) */
   cross_workspace?: boolean;
-  /** 是否仅返回标题与元数据摘要（不含 content 正文）。未指定 id 时默认为 true，指定 id 时默认为 false (camelCase) */
+  /** 是否仅返回标题与元数据摘要。未指定 id 时默认为 true，指定 id 时默认为 false (camelCase) */
   titlesOnly?: boolean;
   /** 是否仅返回标题与元数据摘要。未指定 id 时默认为 true，指定 id 时默认为 false (snake_case) */
   titles_only?: boolean;
@@ -133,7 +133,7 @@ export interface BoardListResult {
   crossWorkspace: boolean;
   /** 是否仅返回标题模式 */
   titlesOnly: boolean;
-  /** 条目列表（包含完整内容或精简标题摘要） */
+  /** 条目列表 */
   posts: (BoardPost | BoardTitleItem)[];
 }
 
@@ -141,15 +141,15 @@ export interface BoardListResult {
  * 清理或撤销黑板条目入参
  */
 export interface BoardClearOptions {
-  /** 待删除或撤销的条目唯一 ID（如 post-1725300000000-abcd） */
+  /** 待清理条目唯一 ID，例如 post-1725300000000-abcd */
   id?: string;
-  /** 按主题批量标记撤销（如 task:audit，当未指定 id 时有效） */
+  /** 按主题批量清理，例如 task:audit，未指定 id 时生效 */
   topic?: string;
   /** 清理动作：'archive' 归档；'delete' 删除，默认 'archive' */
   action?: BoardClearAction;
-  /** 清理模式参数映射（工具入参）：'dismiss' 映射为 archive，'purge' 映射为 delete */
+  /** 清理模式参数映射：'dismiss' 映射为 archive，'purge' 映射为 delete */
   mode?: 'dismiss' | 'purge';
-  /** 调用方工作区路径（用于主题级批量清理的作用域隔离保护） */
+  /** 调用方工作区路径 */
   callerWorkspace?: string;
 }
 
@@ -171,13 +171,13 @@ export interface BoardClearResult {
  * BoardStore 构造配置选项
  */
 export interface BoardStoreOptions {
-  /** 主存储文件路径（默认指向插件目录下的 board.json） */
+  /** 主存储文件路径，默认指向插件目录下的 board.json */
   storagePath?: string;
-  /** 备份文件路径（默认 storagePath + '.bak'） */
+  /** 备份文件路径，默认为 storagePath 追加 .bak */
   backupPath?: string;
-  /** 黑板保留条目上限（FIFO 淘汰），默认 200 */
+  /** 黑板保留条目上限，按 FIFO 淘汰，默认 200 */
   maxPosts?: number;
-  /** 数据持久化防抖延迟（毫秒），默认 300 */
+  /** 数据持久化防抖延迟，单位毫秒，默认 300 */
   debounceMs?: number;
   /** 自定义日志记录器对象 */
   logger?: {
@@ -189,7 +189,7 @@ export interface BoardStoreOptions {
 }
 
 /**
- * 规范化工程工作区路径（统一正斜杠、盘符小写、剔除末尾斜杠）
+ * 规范化工程工作区路径：统一正斜杠、盘符小写并去除末尾斜杠
  *
  * @param rawPath 原始文件或目录路径
  * @returns 统一格式的规范化 POSIX 风格路径
@@ -198,7 +198,7 @@ export declare function normalizeWorkspace(rawPath: string | null | undefined): 
 
 /**
  * 从黑板条目中安全提取人类可读标题
- * 优先读取 metadata.title，次选正文首行提取并裁剪（去 Markdown 标题标记）
+ * 优先读取 metadata.title，次选正文首行提取并去除 Markdown 标记
  *
  * @param post 黑板条目对象
  * @returns 提取得到的标题文本，默认 '(无标题内容)'
@@ -206,8 +206,8 @@ export declare function normalizeWorkspace(rawPath: string | null | undefined): 
 export declare function extractTitle(post: BoardPost | Partial<BoardPost> | null | undefined): string;
 
 /**
- * 将作者的未清理活跃条目格式化为纯状态幂等的简明记名提醒文本
- * 严禁包含动态时间戳（如 Date.now() 或剩余时间），以保护 LLM KV 前缀缓存
+ * 将作者的未清理活跃条目格式化为纯状态幂等的记名提醒文本。
+ * 不包含动态时间戳，避免影响大模型缓存。
  *
  * @param posts 活跃条目列表
  * @returns 记名提醒文本，无条目时返回空字符串 ''
@@ -273,7 +273,7 @@ export declare class BoardStore {
    * 查找由指定 Session 发布的、当前仍处于活跃且未过期的黑板条目列表
    *
    * @param authorSessionId 作者 Session ID
-   * @param callerWorkspace 调用方规范化工作区路径（用于工作区隔离，可选）
+   * @param callerWorkspace 调用方工作区路径，可选
    */
   findActiveByAuthor(authorSessionId: string, callerWorkspace?: string): BoardPost[];
 

@@ -162,10 +162,10 @@ function createMockHarness({
 }
 
 // ---------------------------------------------------------------------------
-// Suite 1: 需求一全链路与对抗测试 (Remind Idempotency, Session Isolation, Zero Side Effects, Natural Expiration)
+// Suite 1: 需求一全链路测试 (Remind Idempotency, Session Isolation, Zero Side Effects, Natural Expiration)
 // ---------------------------------------------------------------------------
 
-test('需求一端到端：跨会话多轮对话状态幂等性与 LLM Prompt Cache 保护 (ADR-0010 Invariant 1)', async (t) => {
+test('需求一端到端：跨会话多轮对话状态幂等性 (ADR-0010 Invariant 1)', async (t) => {
   const tmpDir = await createTempDir();
   t.after(async () => {
     await fs.rm(tmpDir, { recursive: true, force: true });
@@ -193,7 +193,7 @@ test('需求一端到端：跨会话多轮对话状态幂等性与 LLM Prompt Ca
 
   assert.ok(alphaPost?.postId);
 
-  // 1. 模拟连续 50 轮对话 step，断言文本绝对字节全等（无时间戳/易逝数据，保护 KV Cache）
+  // 1. 模拟连续 50 轮对话 step，断言文本一致（无时间戳/易逝数据，保护 KV Cache）
   const initialText = remindContext.text({ agent: sessionAlpha });
   assert.ok(initialText.includes('1 条尚未清理的有效条目'));
   assert.ok(initialText.includes(alphaPost.postId));
@@ -201,10 +201,10 @@ test('需求一端到端：跨会话多轮对话状态幂等性与 LLM Prompt Ca
 
   for (let step = 1; step <= 50; step++) {
     const stepText = remindContext.text({ agent: sessionAlpha });
-    assert.strictEqual(stepText, initialText, `Step ${step} 文本必须与初始文本严格 100% 字节全等`);
+    assert.strictEqual(stepText, initialText, `Step ${step} 文本应与初始文本一致`);
   }
 
-  // 2. Beta 在同一工作区发布 5 条条目，Alpha 的提醒依然保持严格幂等，绝对不受污染
+  // 2. Beta 在同一工作区发布 5 条条目，Alpha 的提醒依然保持幂等
   for (let i = 1; i <= 5; i++) {
     await boardPostTool.execute({
       topic: 'task:feature',
@@ -213,18 +213,18 @@ test('需求一端到端：跨会话多轮对话状态幂等性与 LLM Prompt Ca
   }
 
   const alphaTextAfterBetaPosts = remindContext.text({ agent: sessionAlpha });
-  assert.strictEqual(alphaTextAfterBetaPosts, initialText, '其他会话发布条目绝不能影响 Alpha 的提醒文本');
+  assert.strictEqual(alphaTextAfterBetaPosts, initialText, '其他会话发布条目不影响 Alpha 的提醒文本');
 
-  // 3. Beta 的提醒文本只包含 Beta 自己的条目（共 5 条，前 3 条展示并提示等共 5 条）
+  // 3. Beta 的提醒文本仅包含 Beta 自身条目，前 3 条展示并附带总数提示
   const betaText = remindContext.text({ agent: sessionBeta });
   assert.ok(betaText.includes('5 条尚未清理的有效条目'));
-  assert.ok(!betaText.includes(alphaPost.postId), 'Beta 的提醒中严禁出现 Alpha 的条目');
+  assert.ok(!betaText.includes(alphaPost.postId), 'Beta 的提醒中不出现 Alpha 的条目');
   assert.ok(betaText.includes('等共 5 条'));
 
   await ctx.emit('dispose');
 });
 
-test('需求一端到端：条目清理即刻消除与自然过期适配 (TTL Expiration)', async (t) => {
+test('需求一端到端：条目清理消除与自然过期 (TTL Expiration)', async (t) => {
   const tmpDir = await createTempDir();
   t.after(async () => {
     await fs.rm(tmpDir, { recursive: true, force: true });
@@ -254,7 +254,7 @@ test('需求一端到端：条目清理即刻消除与自然过期适配 (TTL Ex
   // 2. 清理条目 (dismiss) -> 提醒立即变为空字符串 (0 token)
   await boardClearTool.execute({ id: normalPost.postId, mode: 'dismiss' }, { agent: sessionAlpha });
   const textAfterDismiss = remindContext.text({ agent: sessionAlpha });
-  assert.strictEqual(textAfterDismiss, '', '条目 dismiss 标记归档后提醒必须立即为空');
+  assert.strictEqual(textAfterDismiss, '', '条目 dismiss 标记归档后提醒为空');
 
   // 3. 自然过期底层校验：超时条目自然失效，无需额外销毁逻辑
   const memStore = new BoardStore({
@@ -283,10 +283,10 @@ test('需求一端到端：条目清理即刻消除与自然过期适配 (TTL Ex
 });
 
 // ---------------------------------------------------------------------------
-// Suite 2: 需求二高并发极端对抗测试 (10-Active Quota Interception, Rate Limit, Boundary Titles, Orphan Prevention)
+// Suite 2: 需求二并发与边界测试 (10-Active Quota Interception, Rate Limit, Boundary Titles, Orphan Prevention)
 // ---------------------------------------------------------------------------
 
-test('需求二端到端：快速连续/并发创建触发 10 个活跃配额硬拦截与配额释放', async () => {
+test('需求二端到端：活跃会话达配额上限拦截与配额释放', async () => {
   resetRateLimits();
   const initialAgent = createMockAgent('root-session', { cwd: 'c:/workspace/project-alpha' });
   const { ctx } = createMockHarness({ initialAgents: [initialAgent] });
@@ -327,7 +327,7 @@ test('需求二端到端：快速连续/并发创建触发 10 个活跃配额硬
 
   // 验证孤儿防范：被拦截的会话绝未遗留在 agents 服务中
   const liveCount = ctx.agents.list().length;
-  assert.equal(liveCount, 10, '活跃会话总数必须严格保持为 10');
+  assert.equal(liveCount, 10, '活跃会话总数保持为 10');
 
   // 模拟归档其中 1 个会话，释放 1 个配额
   const archivedId = createdSessions[0];
@@ -343,7 +343,7 @@ test('需求二端到端：快速连续/并发创建触发 10 个活跃配额硬
   assert.equal(retryRes.title, 'Peer Worker 11 Recovered');
 });
 
-test('需求二端到端：单会话 5 次/分钟滑动窗口限频拦截与时间恢复', async () => {
+test('需求二端到端：单会话限频拦截与时间窗口恢复', async () => {
   resetRateLimits();
   const { ctx } = createMockHarness();
   const caller = createMockAgent('caller-rapid-fire');
@@ -378,7 +378,7 @@ test('需求二端到端：单会话 5 次/分钟滑动窗口限频拦截与时�
   assert.equal(recoveredRes.success, true);
 });
 
-test('需求二端到端：代际深度熔断 (Generation <= 2) 与因果链路追踪元数据', async () => {
+test('需求二端到端：代际深度限制 (Generation <= 2) 与因果链路追踪元数据', async () => {
   resetRateLimits();
   const { ctx } = createMockHarness();
 
@@ -423,7 +423,7 @@ test('需求二端到端：代际深度熔断 (Generation <= 2) 与因果链路�
   );
 });
 
-test('需求二极端边界测试：空消息、长消息、特殊字符与特权前缀过滤', () => {
+test('需求二边界测试：空消息、长消息、特殊字符与特权前缀过滤', () => {
   const activeTitles = new Set(['existing session']);
 
   // 1. 空消息、纯空白消息 -> 降级为 Peer-<8位UUID>
@@ -481,7 +481,7 @@ test('需求二极端边界测试：空消息、长消息、特殊字符与特�
 // Suite 3: 双需求协同流转端到端闭环测试 (Peer Creation + Blackboard + Remind + Session Call)
 // ---------------------------------------------------------------------------
 
-test('双需求端到端全链路联动：创建同级会话 -> 黑板任务派发 -> 记名提醒隔离 -> 单播通知 -> 清理闭环', async (t) => {
+test('端到端全链路联动：创建同级会话、黑板任务派发、记名提醒隔离与单播通知', async (t) => {
   resetRateLimits();
   const tmpDir = await createTempDir();
   t.after(async () => {
@@ -550,12 +550,12 @@ test('双需求端到端全链路联动：创建同级会话 -> 黑板任务派�
 
   // Step 5: 校验 Worker 的记名提醒目前为空（隔离性：只提醒当前会话自己发布的条目）
   const workerRemind1 = remindContext.text({ agent: workerAgent });
-  assert.strictEqual(workerRemind1, '', 'Worker 尚未发布任何条目，提醒必须为空');
+  assert.strictEqual(workerRemind1, '', 'Worker 尚未发布条目时提醒为空');
 
   // Step 6: Worker 执行完毕，向黑板发布成果条目
   const resultRes = await boardPostTool.execute({
     topic: 'artifact:report',
-    content: '测试报告：100% 通过，0 缺陷',
+    content: '测试报告：全部通过，0 缺陷',
     tags: ['report', 'passed']
   }, { agent: workerAgent });
 
@@ -602,7 +602,7 @@ test('双需求端到端全链路联动：创建同级会话 -> 黑板任务派�
   // Captain 继续清理 bootstrap 条目
   await boardClearTool.execute({ id: bootstrapId, mode: 'dismiss' }, { agent: rootAgent });
   const captainRemind3 = remindContext.text({ agent: rootAgent });
-  assert.strictEqual(captainRemind3, '', 'Captain 全部清理后其提醒即刻归零');
+  assert.strictEqual(captainRemind3, '', 'Captain 全部清理后其提醒为空');
 
   // Worker 的提醒保持完好
   const workerRemind3 = remindContext.text({ agent: workerAgent });
@@ -611,7 +611,7 @@ test('双需求端到端全链路联动：创建同级会话 -> 黑板任务派�
   // Step 10: Worker 清理成果条目
   await boardClearTool.execute({ id: resultId, mode: 'purge' }, { agent: workerAgent });
   const workerRemind4 = remindContext.text({ agent: workerAgent });
-  assert.strictEqual(workerRemind4, '', 'Worker 清理后其提醒也即刻归零');
+  assert.strictEqual(workerRemind4, '', 'Worker 清理后其提醒为空');
 
   // 此时全系统无遗留未处理提醒，0 Token 额外开销
   assert.strictEqual(remindContext.text({ agent: rootAgent }), '');
@@ -621,13 +621,13 @@ test('双需求端到端全链路联动：创建同级会话 -> 黑板任务派�
 });
 
 // ---------------------------------------------------------------------------
-// Suite 4: 极端异常与容错鲁棒性 (Robustness & Fault Tolerance)
+// Suite 4: 异常与容错测试 (Robustness & Fault Tolerance)
 // ---------------------------------------------------------------------------
 
-test('极端异常处理：agents.create 失败、点火消息分发异常与黑板发布降级', async () => {
+test('异常处理：agents.create 失败、点火消息分发异常与黑板发布降级', async () => {
   resetRateLimits();
 
-  // 1. 点火分发失败时优雅捕获，降级为 status: 'idle'，不导致整体创建崩溃
+  // 1. 点火分发失败时安全捕获，降级为 status: 'idle'，不导致整体创建异常中断
   const faultyAgent = createMockAgent('faulty-target', {
     followupFn: () => {
       throw new Error('Connection reset during ignition');

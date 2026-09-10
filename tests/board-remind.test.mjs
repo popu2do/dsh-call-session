@@ -307,7 +307,7 @@ test('条目清理后提醒自动消失：board_clear 归档与物理删除生�
   await store.close();
 });
 
-test('自然过期适配：条目超时自然失效，提醒自动消除无需复杂归档逻辑', async (t) => {
+test('自然过期适配：条目超时失效后提醒自动消除', async (t) => {
   const tmpDir = await createTempDir();
   t.after(async () => {
     await fs.rm(tmpDir, { recursive: true, force: true });
@@ -345,7 +345,7 @@ test('自然过期适配：条目超时自然失效，提醒自动消除无需�
   await store.close();
 });
 
-test('纯状态幂等性断言：保护 LLM KV Cache，杜绝快照追加雪崩 (ADR-0010 Invariant 1)', () => {
+test('纯状态幂等性：提醒文本不含动态时间戳且生成结果一致 (ADR-0010 Invariant 1)', () => {
   const posts = [
     { id: 'post-fix-1', topic: 'fix:auth', status: 'active' },
     { id: 'post-fix-2', topic: 'refactor:db', status: 'active' }
@@ -355,14 +355,14 @@ test('纯状态幂等性断言：保护 LLM KV Cache，杜绝快照追加雪崩 
   const text = formatAuthorReminderText(posts);
   assert.equal(/(\d{4}-\d{2}-\d{2}|remaining|\d+m\b|\d+s\b|ago|分钟前|秒前)/i.test(text), false);
 
-  // 2. 模拟连续 10 步 LLM reasoning step，在黑板状态不变时文本 100% 幂等全等
+  // 2. 模拟连续 10 步 LLM reasoning step，在黑板状态不变时文本一致
   const stepOutputs = [];
   for (let step = 0; step < 10; step++) {
     stepOutputs.push(formatAuthorReminderText(posts));
   }
 
   for (let i = 1; i < stepOutputs.length; i++) {
-    assert.equal(stepOutputs[i], stepOutputs[0], `第 ${i} 步生成的文本必须与第 0 步严格全等`);
+    assert.equal(stepOutputs[i], stepOutputs[0], `第 ${i} 步生成的文本与第 0 步一致`);
   }
 });
 
@@ -383,7 +383,7 @@ test('apply: 在 systemPrompt.context 中正确注册 board:remind 并实现端�
 
   // 1. 验证 context 注册元数据
   const remindContext = ctx.systemPrompt.getContext('board:remind');
-  assert.ok(remindContext, '必须成功注册 board:remind 上下文注入');
+  assert.ok(remindContext, '应注册 board:remind 上下文注入');
   assert.equal(remindContext.order, 130);
   assert.equal(typeof remindContext.text, 'function');
 
