@@ -13,4 +13,6 @@ try {
 }
 
 execFileSync('git', ['config', 'core.hooksPath', '.githooks'], { stdio: 'ignore' });
-console.log('hooks: core.hooksPath -> .githooks');
+
+// stderr keeps `npm pack` stdout parseable for callers reading the tarball path.
+console.error('hooks: core.hooksPath -> .githooks');
