@@ -32,9 +32,11 @@
     "test": "node tests/run-all.mjs",
     "test:coverage": "node --test --experimental-test-coverage",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "lint": "node --check index.mjs lib/*.mjs lib/client.js",
-    "format": "node --check index.mjs lib/*.mjs lib/client.js",
+    "lint": "node --check index.mjs lib/*.mjs lib/client.js scripts/*.mjs",
+    "format": "node --check index.mjs lib/*.mjs lib/client.js scripts/*.mjs",
+    "scan:secrets": "node scripts/scan-secrets.mjs --staged",
     "verify": "npm run lint && npm run test",
+    "prepare": "node scripts/install-hooks.mjs",
     "prepack": "npm run verify",
     "prepublishOnly": "npm run verify"
   },

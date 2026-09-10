@@ -1,0 +1,5 @@
+#!/bin/sh
+set -e
+
+node scripts/scan-secrets.mjs --staged
+npm run --silent verify

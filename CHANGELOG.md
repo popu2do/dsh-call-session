@@ -5,6 +5,24 @@ All notable changes to the `dsh-call-session` project are documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **Credential Scanning & Commit Hooks**:
+  - `.githooks/pre-commit` scans staged content for credentials, then runs `npm run verify`.
+  - `.githooks/commit-msg` enforces the Conventional Commits convention.
+  - `scripts/scan-secrets.mjs` matches issuer-specific key formats (AWS, GitHub, npm, Slack, Google, LLM providers, JWT, private key blocks) and credential-shaped assignments, with `secret-scan:allow` line waivers. No external dependency.
+  - `npm install` points `core.hooksPath` at `.githooks/` through `scripts/install-hooks.mjs`.
+  - CI `Secret Scan` job reuses the same scanner across all tracked files and validates pull request commit messages.
+- **Adversarial Test Suites (`tests/`)**: coverage for wildcard and self-call guards, session creation limits, telemetry ring buffer truncation and prototype pollution, and canvas read-only invariants.
+
+### Changed
+- **Session Call Guards (`lib/session-call.mjs`)**: wildcard detection now covers `*`, `?`, `@all`, and `@everyone`; self-call protection extends to ambiguous prefix matches that resolve only to the caller.
+- Line endings pinned to LF through `.gitattributes` so hook shebangs survive Windows checkouts.
+
+### Fixed
+- **Blackboard Store (`lib/board-store.mjs`)**: orphaned temp files left by abnormal exits are cleaned on startup, and the flush timer no longer races with an in-flight flush during close.
+
 ## [0.1.1] - 2026-09-09
 
 ### Summary
