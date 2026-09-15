@@ -7,12 +7,12 @@
 
 ---
 
-## 1. 概述与核心约束
+## 1. 概述
 
-### 1.1 定位与目标
+### 1.1 定位目标
 协作看板（Collaboration Canvas）是 `dsh-call-session` 插件内置的全局拓扑可视化镜像。系统将老板手绘原图确立的「顶部黑板通条 + 并排竖泳道工作区 + 泳道内单列 session 椭圆 + 跨泳道有向连线 + 全图线框化低饱和虚线」信息架构完整工程化落地，修复旧版全部 17 项数据语义、渲染与交互缺陷。
 
-### 1.2 三项铁律约束
+### 1.2 核心约束
 1. **只读性约束（Strict Read-Only）**：
    看板全界面无任何数据输入框、新增/删除/修改表单、触发调用的操作按钮或会话生命周期控制组件。详情抽屉内仅允许复制只读文本。
 2. **单一入口收敛（Tab Encapsulation）**：
@@ -22,7 +22,7 @@
 
 ---
 
-## 2. 信息架构与手绘原图映射
+## 2. 架构映射
 
 看板信息架构严格还原手绘原图层次：
 
@@ -51,7 +51,7 @@
 +--------------------------+  +--------------------------+  +--------------------------+
 ```
 
-### 2.1 结构层次映射
+### 2.1 层次映射
 - **顶部横条**：公共黑板通条容器（Blackboard Strip），承载所有全局拉取式状态条目（`board_post`）。
 - **纵向竖条**：工作区泳道（Workspace Swimlane），横向并排排列，每个泳道代表一个独立工作区目录（`cwd`）。
 - **泳道内部**：单列纵向居中排列会话节点（Session Node），形态严格采用**几何椭圆**，杜绝旧版双列错位混排。
@@ -62,11 +62,11 @@
 
 ---
 
-## 3. 五类视觉图元与几何度量规范
+## 3. 视觉图元
 
 所有图元默认态均为**空心线框**（描边、无填充或极低饱和微透明填充）。
 
-### 3.1 视觉参数规范矩阵
+### 3.1 参数矩阵
 
 | 图元分类 | 几何特征与尺寸 (px) | 布局与间距规则 (px) | 默认态样式（低饱和虚线） | 高亮态样式（1-Hop 聚焦） | 文本排版与色值 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -78,7 +78,7 @@
 | **6. 黑板发布归属边** | 平滑二次贝塞尔曲线（Session 椭圆顶部 -> Post 方块底部） | 数据来源：`post.authorSessionId == session.id` | `stroke: #64748b`<br>`stroke-width: 1.0px`<br>`stroke-dasharray: 2 4`<br>`stroke-opacity: 0.22` | `stroke: #38bdf8`<br>`stroke-width: 1.8px`<br>`stroke-dasharray: 4 2`<br>`stroke-opacity: 0.9` | 悬停在 Session 或 Post 时双向激活 |
 | **7. 调用引用黑板边** | 细虚线折线/曲线（Call 连线中点 -> Post 方块底部） | 数据来源：`call.contextPostIds.includes(post.id)` | `stroke: #475569`<br>`stroke-width: 0.8px`<br>`stroke-dasharray: 2 4`<br>`stroke-opacity: 0.12` | `stroke: #fbbf24`<br>`stroke-width: 1.6px`<br>`stroke-dasharray: 3 3`<br>`stroke-opacity: 0.85` | 悬停在 Call 或对应 Post 时高亮激活 |
 
-### 3.2 泳道高度与通条宽度计算公式
+### 3.2 尺寸计算
 - **泳道动态高度**：
   $$H_{\text{swimlane}} = \max\left(480, 76 + N_{\text{sessions}} \times 72 + 24\right)\quad (\text{单位: px})$$
 - **黑板通条宽度**：
@@ -86,9 +86,9 @@
 
 ---
 
-## 4. 关系边生成与裁剪算法规范
+## 4. 关系连线
 
-### 4.1 三类关系边生成规范
+### 4.1 连线生成
 前端从遥测快照消费三类实体关系并建立拓扑图模型：
 
 1. **调用连线（Session-to-Session Call Edge）**：
@@ -104,7 +104,7 @@
    - 起点：调用连线中点控制坐标 $(P_{cx}, P_{cy})$；终点：被引用的 `post.id` 对应方块底部中点。
    - 默认显示策略：默认态保持极弱可见性（透明度 0.12），悬停对应 Call 连线或 Post 时完全高亮（透明度 0.85）。
 
-### 4.2 椭圆边界精确裁剪算法（Boundary Clipping）
+### 4.2 边界裁剪
 严禁连线端点直接取节点几何中心导致连线或箭头 Marker 埋入椭圆内部。
 
 设椭圆中心为 $(C_x, C_y)$，半长轴 $a = 96$，半短轴 $b = 26$。连线另一端点（或贝塞尔控制点）为 $(T_x, T_y)$。
@@ -119,9 +119,9 @@ $$t = \frac{1}{\sqrt{\left(\frac{\Delta x}{a}\right)^2 + \left(\frac{\Delta y}{b
 
 ---
 
-## 5. 排版、文本截断与字体规范
+## 5. 排版字体
 
-### 5.1 文本截断规则（基于渲染像素宽度）
+### 5.1 文本截断
 废除按字符数 `slice(0, 14)` 硬截断的错误逻辑。中文字符物理宽度约为英文字符的 1.8~2.0 倍，必须基于**像素渲染宽度**截断并添加省略号 `...`。
 
 1. **节点标题（Session Title）**：
@@ -133,7 +133,7 @@ $$t = \frac{1}{\sqrt{\left(\frac{\Delta x}{a}\right)^2 + \left(\frac{\Delta y}{b
 3. **短码（Short ID）**：
    - 严格定长 `8` 字符，无需截断，容器预留固定宽度 `64px`。
 
-### 5.2 跨平台等宽字体栈规范
+### 5.2 字体规范
 针对 Windows 系统下 `ui-monospace` 意外回退至粗衬线字体（如 Courier/Times）的渲染缺陷，全局统一字体栈：
 
 ```css
@@ -148,11 +148,11 @@ $$t = \frac{1}{\sqrt{\left(\frac{\Delta x}{a}\right)^2 + \left(\frac{\Delta y}{b
 
 ---
 
-## 6. 数据语义与宿主遥测契约规范
+## 6. 数据语义
 
 对应缺陷清单第 1、2、3、4、5 条，由宿主侧 `lib/call-telemetry.mjs` 统一处理，前端直接消费规范字段。
 
-### 6.1 会话唯一短码（Short ID）
+### 6.1 会话短码
 - **根因**：DSH 会话 ID 形如 `session-550e8400-e29b-41d4-a716-446655440000`，而 AgentTeams 成员 ID 为裸 `uuid`。若直接 `slice(0, 8)`，前者全部变成无意义的 `session-`。
 - **算法规则**：
   ```javascript
@@ -164,14 +164,13 @@ $$t = \frac{1}{\sqrt{\left(\frac{\Delta x}{a}\right)^2 + \left(\frac{\Delta y}{b
   ```
 - **输出契约**：遥测快照中每个 `CanvasSessionEntity` 增加只读字段 `shortId: string`（8位小写字母/数字）。
 
-### 6.2 会话展示标题与系统文案回退
-- **根因**：AgentTeams 会话初始标题直接暴露系统入场文案 `You have joined the team "..." as a member...`。
+### 6.2 标题回退
+- **标题策略**：遵循简洁与最小假定原则，直接提取有效展示标题。
 - **回退规则**：
-  1. 命中系统文案特征时（正则 `/joined the team|wait for an automatic assignment|system-reminder/i`）或标题为空时，触发清洗；
-  2. 若 `agentType` / `role` 存在且非 `'agent'`，回退显示为角色名称（如 `界面设计规格师` 或 `architect`）；
-  3. 若角色不存在或为默认值，回退显示为 `Agent <shortId>`。
+  1. 优先使用会话显式有效标题（去除首尾空白）；
+  2. 若会话无标题或为空，回退显示为规范短码 `Agent <shortId>`。
 
-### 6.3 黑板条目三态模型与 TTL 语义
+### 6.3 条目三态
 废除单一 `isDismissed: boolean` 压平方式，状态严格细分为三态：
 1. `status: 'active'`：正常活跃条目，处于有效 TTL 周期内。
 2. `status: 'archived'`：主动被 `board_clear` 软删除/归档的条目。
@@ -181,13 +180,13 @@ $$t = \frac{1}{\sqrt{\left(\frac{\Delta x}{a}\right)^2 + \left(\frac{\Delta y}{b
 - 对于 `archived` 与 `expired` 条目，`ttlRemainingMs` 归零（或为 `0`）。
 - 界面在非 active 条目上严禁显示「有效剩余 Xh Ym」，转而展示状态标签「已撤销」或「已过期」。
 
-### 6.4 统一黑板统计计数口径
+### 6.4 统计口径
 - **计数统一**：顶部黑板通条标题 `blackboard.hub` 旁计数值，与右上角全局指标 `metrics.totalPosts`，必须统一为**活跃黑板条目数**（`status === 'active'`）。
 - 任何界面位置严禁出现包含已撤销条目的全量长度与过滤后计数的同屏矛盾。
 
 ---
 
-## 7. 分级交互体系规范（L1 / L2 / L3）
+## 7. 分级交互
 
 交互划分为互不干扰的三级深度：
 
@@ -198,13 +197,13 @@ $$t = \frac{1}{\sqrt{\left(\frac{\Delta x}{a}\right)^2 + \left(\frac{\Delta y}{b
   - 维持 60fps                         - 轻量浮层 Tooltip 呈现             - ESC / 空白关闭
 ```
 
-### 7.1 L1 默认态（Canvas View）
+### 7.1 默认视图
 - 初始所有泳道、节点、连线以浅灰虚线（`dasharray`）呈现。
 - 支持画布拖拽平移与滚轮平滑缩放。
 - **单击控制**：单击实体仅为选中态聚焦（或取消聚焦）；**严格禁止单击触发抽屉弹出**。
 - **拖拽防误触**：指针按下到抬起欧式距离大于 `3px` 时判定为画布平移，不触发任何点击交互。
 
-### 7.2 L2 聚焦层（1-Hop Focus & Tooltip）
+### 7.2 聚焦图层
 - **触发时机**：光标停留在任意实体（Session、Post、Call 连线）上方停留时间 $\ge 150\text{ms}$ 时激活；光标移出实体后保持 $100\text{ms}$ 缓冲，随后在 $180\text{ms}$ 内平滑恢复。
 - **1-Hop 关联高亮范围**：
   - 若悬停在 Session 节点 $S$：
@@ -220,7 +219,7 @@ $$t = \frac{1}{\sqrt{\left(\frac{\Delta x}{a}\right)^2 + \left(\frac{\Delta y}{b
     - Call 连线：调用意图标签（`dispatch`/`report`/`notice`）、交付模式（`steer`/`followup`）、耗时 `durationMs`、引用 Post 数量；
     - Post：Topic 全称、完整 Tags、发布者短码、有效剩余时间（仅 active）。
 
-### 7.3 L3 抽屉层（Read-Only Inspector Drawer）
+### 7.3 详情抽屉
 - **唤出方式**：**必须双击（dblclick）** 节点、连线或黑板条目触发唤出。
 - **几何尺寸**：右侧固定抽屉，宽度 `420px`，高度 100%，遮罩层为半透明黑色 `rgba(0, 0, 0, 0.4)`，不阻断画布整体观察。
 - **关闭途径**：
@@ -233,9 +232,9 @@ $$t = \frac{1}{\sqrt{\left(\frac{\Delta x}{a}\right)^2 + \left(\frac{\Delta y}{b
 
 ---
 
-## 8. 画布视口、变焦与自适应包围盒
+## 8. 画布视口
 
-### 8.1 以光标为锚点的滚轮缩放算法
+### 8.1 滚轮缩放
 严禁以固定 $(0, 0)$ 点进行缩放导致画布内容脱离视口。
 
 设当前平移量为 $(P_x, P_y)$，当前缩放系数为 $Z$。
@@ -249,7 +248,7 @@ $$P_{x,\text{new}} = M_x - (M_x - P_x) \times \frac{Z_{\text{new}}}{Z}$$
 
 $$P_{y,\text{new}} = M_y - (M_y - P_y) \times \frac{Z_{\text{new}}}{Z}$$
 
-### 8.2 自适应居中（Fit View）算法
+### 8.2 居中适配
 点击工具栏「自适应居中」按钮或双击空白背景触发：
 
 1. **计算全量包围盒**：
@@ -266,9 +265,9 @@ $$P_{y,\text{new}} = M_y - (M_y - P_y) \times \frac{Z_{\text{new}}}{Z}$$
 
 ---
 
-## 9. 渲染性能与动效生命周期防御
+## 9. 渲染性能
 
-### 9.1 SVG 状态指示灯动画修复
+### 9.1 状态指示
 - **根因**：`.dsh-pulse-dot` 关键帧使用 `transform: scale(...)` 作用于 SVG `<circle>`，因缺少 `transform-box: fill-box`，在 Chrome/Webkit 中变换原点相对于整个全屏 SVG 视口，导致呼吸灯被甩出节点与泳道。
 - **CSS 必须修复项**：
   ```css
@@ -279,7 +278,7 @@ $$P_{y,\text{new}} = M_y - (M_y - P_y) \times \frac{Z_{\text{new}}}{Z}$$
   }
   ```
 
-### 9.2 宿主悬浮控件避让安全区
+### 9.2 悬浮避让
 - **根因**：DSH Web 宿主界面在右上角常驻圆形悬浮操作按钮，导致看板右上角统计徽章被遮挡截断。
 - **布局防线**：看板顶栏与工具栏容器必须在右侧增加安全避让区：
   ```css
@@ -288,13 +287,13 @@ $$P_{y,\text{new}} = M_y - (M_y - P_y) \times \frac{Z_{\text{new}}}{Z}$$
   }
   ```
 
-### 9.3 渲染循环防抖与 RAF 帧管理
+### 9.3 渲染防抖
 - **消除全量重绘**：遥测轮询（`fetchTelemetry`）获取数据后，前端比对 `snapshot.timestamp` 与实体校验和；若无拓扑变动，禁止触发整树 DOM 重算。
 - **RAF 动画帧防泄漏**：画布平移（`onMouseMove`）采用 `requestAnimationFrame` 驱动时，必须严格保留 `animFrameId`；在注册下一帧前必须调用 `cancelAnimationFrame(animFrameId)`，严禁未完成帧在事件循环中积压。
 
 ---
 
-## 10. 文案体系与国际化字典对齐
+## 10. 文案对齐
 
 文案遵循 ADR-0009 反 AI 腔与极简工程审美，中英文字典必须严格**一一对称**。
 
@@ -314,14 +313,14 @@ $$P_{y,\text{new}} = M_y - (M_y - P_y) \times \frac{Z_{\text{new}}}{Z}$$
 
 ---
 
-## 11. 缺陷对策闭环追踪表 (17/17)
+## 11. 缺陷追踪
 
 | 缺陷编号 | 问题分类 | 缺陷现象与根因 | 规格对策与量化指标 | 归属执行方 |
 | :---: | :--- | :--- | :--- | :---: |
 | **1** | 数据语义 | `sid.slice(0,8)` 导致前缀全为 `session-`，裸 uuid 导致形态分裂 | 统一由宿主生成 `shortId`，剥离 `session-` 后取 8 位小写十六进制（第 6.1 节） | backend / t2 |
 | **2** | 数据语义 | 顶部通条与右上角徽章黑板计数口径不一致 | 统一统计口径为 `status === 'active'` 活跃条目数，两处数字严格相等（第 6.4 节） | backend / t2 |
 | **3** | 数据语义 | 已撤销条目（archived）仍显示「有效剩余 1h 0m」 | 区分 active/archived/expired 三态；非 active 条目 TTL 归零并显示「已撤销」（第 6.3 节） | backend / t2 |
-| **4** | 数据语义 | 节点标题直接暴露 AgentTeams 入场系统文案 | 过滤入场文案，按角色名优先、`Agent <shortId>` 保底回退（第 6.2 节） | backend / t2 |
+| **4** | 数据语义 | 节点标题无显式名称或为空 | 优先使用显式标题，无标题时以 `Agent <shortId>` 规范短码保底回退（第 6.2 节） | backend / t2 |
 | **5** | 文案风格 | `session.offline` 未使用；`empty.title` 中英文语义不一致 | 中英文字典一一精确对齐，消费 `session.offline` 标签（第 10 节） | linguist / t7 |
 | **6** | 界面渲染 | `.dsh-pulse-dot` 缺少 `transform-box: fill-box` 导致动画甩出泳道 | CSS 补全 `transform-box: fill-box !important`，原点居中（第 9.1 节） | frontend / t3 |
 | **7** | 界面渲染 | 右上角徽章被 DSH Web 宿主圆形悬浮控件遮挡 | 工具栏右侧增加 `padding-right: 76px` 安全避让区（第 9.2 节） | frontend / t3 |
@@ -338,7 +337,7 @@ $$P_{y,\text{new}} = M_y - (M_y - P_y) \times \frac{Z_{\text{new}}}{Z}$$
 
 ---
 
-## 12. 质量验收基准（QA Checklist）
+## 12. 验收基准
 
 下游验证工程师（qa）与界面评审员（reviewer）需依据以下可量化指标进行逐项断言验收：
 

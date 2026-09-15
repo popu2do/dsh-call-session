@@ -15,8 +15,12 @@ export interface SessionInfo {
   title: string;
   /** 规范化状态：'running' | 'idle' */
   status: SessionStatus;
-  /** 会话所属工程工作目录路径 */
-  cwd: string;
+  /** 会话所属工程工作区路径 (ADR-0005) */
+  workspace: string;
+  /** 向后兼容的工作目录路径 */
+  cwd?: string;
+  /** 是否为发起查询的当前会话 (ADR-0005) */
+  isCurrent: boolean;
 }
 
 /**
@@ -45,10 +49,16 @@ export interface SessionQueryResult {
   success: boolean;
   /** 实际匹配到的会话数量 */
   count: number;
+  /** 总会话数量 (ADR-0005) */
+  totalCount: number;
+  /** 处于活跃运行中状态的会话数量 (ADR-0005) */
+  activeCount: number;
+  /** 处于空闲就绪状态的会话数量 (ADR-0005) */
+  idleCount: number;
   /** 本次查询生效的作用域 */
   scope: string;
   /** 是否跨工作区查询 */
-  crossWorkspace: boolean;
+  crossWorkspace?: boolean;
   /** 匹配的会话明细列表 */
   sessions: SessionInfo[];
   /** 失败错误信息 */

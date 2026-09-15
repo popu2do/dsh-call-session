@@ -48,7 +48,15 @@ export declare const PEER_SESSION_CONSTANTS: Readonly<{
 
 export declare function resetRateLimits(): void;
 
-export declare function checkRateLimit(callerSessionId: string, now?: number): void;
+export declare function checkRateLimit(callerSessionId: string, now?: number): number | null;
+
+export declare function assertRateLimit(callerSessionId: string, now?: number): void;
+
+export declare function recordRateLimit(callerSessionId: string, now?: number): number | null;
+
+export declare function rollbackRateLimit(callerSessionId: string, timestamp: number): void;
+
+export declare function resetInFlightCreations(): void;
 
 export declare function resolveRootAgentsService(ctx: any, exec?: any): any;
 

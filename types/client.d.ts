@@ -83,10 +83,13 @@ export declare function computeLayout(
   sessions: any[],
   posts: any[],
   currentWorkspace: string,
-  crossWorkspace: boolean
+  crossWorkspace: boolean,
+  calls?: any[]
 ): {
   workspaceBounds: Array<{ id: string; name: string; isCurrent: boolean; x: number; y: number; width: number; height: number }>;
   nodePositions: Record<string, { x: number; y: number; session: any }>;
+  blackboardBound?: { x: number; y: number; width: number; height: number };
+  postPositions?: Record<string, { x: number; y: number; width: number; height: number; post: any }>;
 };
 
 /**

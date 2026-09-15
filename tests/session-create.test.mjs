@@ -119,6 +119,11 @@ test('PEER_SESSION_CONSTANTS: 常量定义完整性', () => {
   assert.ok(PEER_SESSION_CONSTANTS.PRIVILEGED_PREFIX_REGEX.test('[SYSTEM] Test'));
   assert.ok(PEER_SESSION_CONSTANTS.PRIVILEGED_PREFIX_REGEX.test('[CAPTAIN] Worker'));
   assert.ok(PEER_SESSION_CONSTANTS.PRIVILEGED_PREFIX_REGEX.test('[ROOT] Daemon'));
+  assert.ok(PEER_SESSION_CONSTANTS.PRIVILEGED_PREFIX_REGEX.test('[ADMIN] Auditor'));
+  assert.ok(PEER_SESSION_CONSTANTS.PRIVILEGED_PREFIX_REGEX.test('admin: Auditor'));
+  assert.ok(PEER_SESSION_CONSTANTS.PRIVILEGED_PREFIX_REGEX.test('system: Core'));
+  assert.ok(PEER_SESSION_CONSTANTS.PRIVILEGED_PREFIX_REGEX.test('root: Daemon'));
+  assert.ok(PEER_SESSION_CONSTANTS.PRIVILEGED_PREFIX_REGEX.test('captain: Leader'));
 });
 
 test('executeSessionCreate: 参数基本校验（空对象/非法数据类型/超长字符串）', async () => {
@@ -188,7 +193,22 @@ test('executeSessionCreate: 标题推导与特权沙箱过滤', async () => {
   });
   assert.equal(resCap.title, 'Task Dispatcher');
 
+  const resAdminColon = await executeSessionCreate({
+    ctx,
+    args: { title: 'admin: Secret Auditor', initial_message: 'Audit' },
+    exec
+  });
+  assert.equal(resAdminColon.title, 'Secret Auditor');
+
+  const resAdminBracket = await executeSessionCreate({
+    ctx,
+    args: { title: '[ADMIN] Super Worker', initial_message: 'Work' },
+    exec
+  });
+  assert.equal(resAdminBracket.title, 'Super Worker');
+
   // 3. 仅传 [SYSTEM] 特权前缀，过滤后变为空，回退推导
+  resetRateLimits();
   const resOnlySys = await executeSessionCreate({
     ctx,
     args: { title: '[SYSTEM]', initial_message: 'Analyze memory leak' },
@@ -527,4 +547,185 @@ test('inspectWorkspaceActiveSessions: 准确识别真实宿主下 session.header
   // subagent 必须被过滤排除，只有 rootAgent 计入
   assert.equal(count, 1, '子代理被过滤排除，活跃会话计数为 1');
   assert.ok(activeTitles.has(rootAgent.title.toLowerCase()));
+});
+
+test('executeSessionCreate: 参数校验与配额失败不消耗限频配额', async () => {
+  resetRateLimits();
+  const caller = createMockAgent('caller-rate-check', { cwd: 'c:/workspace/app' });
+  const exec = { agent: caller };
+  const ctx = createMockCtx();
+
+  // 连续发起 10 次非法参数请求（例如 title 类型错误）
+  for (let i = 0; i < 10; i++) {
+    await assert.rejects(
+      async () => {
+        await executeSessionCreate({
+          ctx,
+          args: { title: 12345 },
+          exec
+        });
+      },
+      /session_create: title 必须为字符串/
+    );
+  }
+
+  // 发起一次合法创建请求，应当顺利通过，证明此前失败未消耗限频
+  const res = await executeSessionCreate({
+    ctx,
+    args: { title: 'Valid Worker' },
+    exec
+  });
+  assert.equal(res.success, true);
+  assert.equal(res.title, 'Valid Worker');
+});
+
+test('resolvePeerTitle: 特权前缀全量清洗与身份伪造防范 (ADR-0010)', () => {
+  assert.equal(resolvePeerTitle({ title: 'admin: database_migrator' }), 'database_migrator');
+  assert.equal(resolvePeerTitle({ title: 'system: worker_node' }), 'worker_node');
+  assert.equal(resolvePeerTitle({ title: '[ADMIN] supervisor' }), 'supervisor');
+  assert.equal(resolvePeerTitle({ title: '[SYSTEM] daemon' }), 'daemon');
+  assert.equal(resolvePeerTitle({ title: 'root: worker' }), 'worker');
+  assert.equal(resolvePeerTitle({ title: 'captain: leader' }), 'leader');
+  assert.equal(resolvePeerTitle({ title: '[CAPTAIN] chief' }), 'chief');
+  assert.equal(resolvePeerTitle({ title: '[ROOT] superuser' }), 'superuser');
+});
+
+test('executeSessionCreate: 并发创建预占位防范 TOCTOU 竞争突破上限 (ADR-0010)', async () => {
+  resetRateLimits();
+  const caller = createMockAgent('caller-toctou', { cwd: 'c:/workspace/app' });
+  const exec = { agent: caller };
+
+  // 现有 9 个活跃会话
+  const existingAgents = [caller];
+  for (let i = 1; i <= 8; i++) {
+    existingAgents.push(createMockAgent(`peer-${i}`, { cwd: 'c:/workspace/app', title: `Peer ${i}` }));
+  }
+
+  // 模拟慢速创建，延迟 30ms 返回
+  const slowAgentsSvc = {
+    list: () => existingAgents,
+    get: (id) => existingAgents.find(a => a.id === id),
+    create: async (payload) => {
+      await new Promise(r => setTimeout(r, 30));
+      const newAgent = createMockAgent(payload.sessionId, { cwd: payload.cwd, title: payload.title });
+      existingAgents.push(newAgent);
+      return { agent: newAgent };
+    }
+  };
+
+  const ctx = {
+    root: { agents: slowAgentsSvc },
+    agents: slowAgentsSvc,
+    logger: () => ({ debug() {}, info() {}, warn() {}, error() {} }),
+    get: (n) => (n === 'agents' ? slowAgentsSvc : undefined)
+  };
+
+  // 同时并发发起两个创建请求：总数 9 + 2 = 11 > 10，第二个并发请求必须被 QuotaExceeded 拒绝
+  const [res1, res2] = await Promise.allSettled([
+    executeSessionCreate({ ctx, args: { title: 'Concurrent Worker 1' }, exec }),
+    executeSessionCreate({ ctx, args: { title: 'Concurrent Worker 2' }, exec })
+  ]);
+
+  const fulfilled = [res1, res2].filter(r => r.status === 'fulfilled');
+  const rejected = [res1, res2].filter(r => r.status === 'rejected');
+
+  assert.equal(fulfilled.length, 1, '只能有一个创建成功');
+  assert.equal(rejected.length, 1, '第二个并发请求必须因配额超限失败');
+  assert.match(rejected[0].reason.message, /\[QuotaExceeded\]/);
+});
+
+test('executeSessionCreate: 底层 agentsService.create 抛错时不扣除限频配额', async () => {
+  resetRateLimits();
+  const caller = createMockAgent('caller-b3', { cwd: 'c:/workspace/app' });
+  const exec = { agent: caller };
+
+  let failCount = 0;
+  const failingAgentsSvc = {
+    list: () => [caller],
+    get: () => undefined,
+    create: async () => {
+      failCount++;
+      throw new Error('Host system internal error: disk full');
+    }
+  };
+
+  const ctx = {
+    root: { agents: failingAgentsSvc },
+    agents: failingAgentsSvc,
+    logger: () => ({ debug() {}, info() {}, warn() {}, error() {} }),
+    get: (n) => (n === 'agents' ? failingAgentsSvc : undefined)
+  };
+
+  // 连续让底层抛错 6 次（超过每分钟 5 次的限频阈值）
+  for (let i = 0; i < 6; i++) {
+    await assert.rejects(
+      async () => {
+        await executeSessionCreate({
+          ctx,
+          args: { title: `Retry Worker ${i}` },
+          exec
+        });
+      },
+      /Host system internal error/
+    );
+  }
+  assert.equal(failCount, 6);
+
+  // 恢复底层服务成功创建
+  failingAgentsSvc.create = async (payload) => {
+    const successAgent = createMockAgent(payload.sessionId, { cwd: payload.cwd, title: payload.title });
+    return { agent: successAgent };
+  };
+
+  // 第 7 次调用应当正常成功，证明前 6 次底层抛错完全没有消耗限频配额
+  const successRes = await executeSessionCreate({
+    ctx,
+    args: { title: 'Eventual Worker' },
+    exec
+  });
+  assert.equal(successRes.success, true);
+  assert.equal(successRes.title, 'Eventual Worker');
+});
+
+test('executeSessionCreate: 乐观预留与失败回滚保障并发 6 请求限频拦截 (ADR-0010 Invariant 3)', async () => {
+  resetRateLimits();
+  const caller = createMockAgent('caller-concurrent-rate', { cwd: 'c:/workspace/app' });
+  const exec = { agent: caller };
+
+  // 模拟慢速异步创建，使并发请求在等待底层返回期间重叠
+  const slowAgentsSvc = {
+    list: () => [caller],
+    get: () => undefined,
+    create: async (payload) => {
+      await new Promise(r => setTimeout(r, 25));
+      return { agent: createMockAgent(payload.sessionId, { cwd: payload.cwd, title: payload.title }) };
+    }
+  };
+
+  const ctx = {
+    root: { agents: slowAgentsSvc },
+    agents: slowAgentsSvc,
+    logger: () => ({ debug() {}, info() {}, warn() {}, error() {} }),
+    get: (n) => (n === 'agents' ? slowAgentsSvc : undefined)
+  };
+
+  // 同一 caller 瞬间并发发起 6 个创建请求
+  const promises = [];
+  for (let i = 1; i <= 6; i++) {
+    promises.push(
+      executeSessionCreate({
+        ctx,
+        args: { title: `Concurrent Rate Worker ${i}` },
+        exec
+      })
+    );
+  }
+
+  const results = await Promise.allSettled(promises);
+  const fulfilled = results.filter(r => r.status === 'fulfilled');
+  const rejected = results.filter(r => r.status === 'rejected');
+
+  assert.equal(fulfilled.length, 5, '每分钟最多只允许创建 5 次，必须恰好 5 个成功');
+  assert.equal(rejected.length, 1, '第 6 个并发请求必须被限频机制同步拦截');
+  assert.match(rejected[0].reason.message, /\[RateLimitExceeded\]/);
 });

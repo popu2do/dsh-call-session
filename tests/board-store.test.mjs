@@ -578,3 +578,43 @@ test('BoardStore: id 精确查阅的工作区隔离与跨工作区查询', async
 
   await store.close();
 });
+
+test('BoardStore: clear({ id }) 跨工作区删除防护 (ADR-0003)', async (t) => {
+  const tmpDir = await createTempDir();
+  t.after(async () => {
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  });
+
+  const store = new BoardStore({
+    storagePath: path.join(tmpDir, 'board.json'),
+    debounceMs: 50
+  });
+
+  store.post({
+    id: 'post-ws-a',
+    topic: 'task:a',
+    content: 'Post in Workspace A',
+    authorWorkspace: 'c:/workspaces/ws-a',
+    status: 'active'
+  });
+
+  // 1. Workspace B 尝试删除 Workspace A 的条目，应当被拒绝且 affectedCount 为 0
+  const denyRes = store.clear({
+    id: 'post-ws-a',
+    callerWorkspace: 'c:/workspaces/ws-b',
+    action: 'delete'
+  });
+  assert.equal(denyRes.affectedCount, 0, '跨工作区通过 id 删除必须被拦截');
+  assert.equal(store.get('post-ws-a')?.status, 'active', '跨工作区条目状态不得被更改');
+
+  // 2. 归属同一工作区时允许删除
+  const allowRes = store.clear({
+    id: 'post-ws-a',
+    callerWorkspace: 'c:/workspaces/ws-a',
+    action: 'delete'
+  });
+  assert.equal(allowRes.affectedCount, 1, '同工作区允许通过 id 删除');
+  assert.equal(store.get('post-ws-a'), undefined, '目标条目已成功删除');
+
+  await store.close();
+});

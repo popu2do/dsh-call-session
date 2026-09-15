@@ -155,7 +155,7 @@ Active Posts (Memory)   Anti-Snapshot-Storm                      Quota & Rate Ch
         "type": "string",
         "minLength": 1,
         "maxLength": 4000,
-        "description": "点火初始任务指令，会话创建后立即自动投递并启动第一轮。"
+        "description": "可选点火初始任务指令。若提供则会话创建后立即自动投递并启动第一轮；若未提供则保持 idle 待命状态。"
       },
       "context_post_ids": {
         "type": "array",
@@ -168,7 +168,7 @@ Active Posts (Memory)   Anti-Snapshot-Storm                      Quota & Rate Ch
         "description": "可选覆写目标会话所使用的模型 ID。默认继承当前会话模型。"
       }
     },
-    "required": ["initial_message"]
+    "required": []
   }
   ```
 - **返回值结构（Return Schema）**：

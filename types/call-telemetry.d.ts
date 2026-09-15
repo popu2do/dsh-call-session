@@ -47,6 +47,10 @@ export interface CallTelemetryRecord {
   messageSnippet: string;
   /** 完整消息内容 */
   messagePayload: string;
+  /** 发起方端点是否已离线/归档 */
+  callerOffline?: boolean;
+  /** 接收方端点是否已离线/归档 */
+  targetOffline?: boolean;
   /** 记录状态：活跃或已落定 */
   status: 'active' | 'settled';
 }
@@ -153,6 +157,8 @@ export interface CanvasBoardPostEntity {
   tags: string[];
   /** 发布者 Session ID */
   authorSessionId: string;
+  /** 发布者人类可读标题 */
+  authorTitle?: string;
   /** 归属工作区 */
   workspace: string;
   /** 发布时间戳 */
@@ -211,6 +217,7 @@ export interface GetCanvasTelemetryOptions {
   limit?: number;
   /** 关联定位会话 ID */
   sessionId?: string;
+
   /** 显式注入的 BoardStore 实例 */
   boardStore?: any;
   /** 显式注入的 CallTelemetryRingBuffer 实例 */
@@ -232,7 +239,16 @@ export declare function getCallTelemetry(
 export declare function computeSessionShortId(rawId?: string | null): string;
 
 /**
- * 解析会话展示标题，针对 AgentTeams 入场文案及空值进行角色优先/短码保底回退
+ * 判定会话标题是否为人类可读真实标题（非系统提示词入场文案、非裸机器短码）
+ */
+export declare function isHumanReadableTitle(title?: string | null): boolean;
+
+
+
+/**
+ * 解析会话展示标题：
+ * 1. 优先使用显式有效标题（去除首尾空白后直接使用）
+ * 2. 兜底使用 Agent <shortId>
  */
 export declare function resolveCanvasSessionDisplayTitle(
   rawTitle: string | null | undefined,
