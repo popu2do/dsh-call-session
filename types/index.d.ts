@@ -98,6 +98,9 @@ export declare const name = 'dsh-call-session';
 /** 声明式依赖注入服务清单 */
 export declare const inject: readonly ['agents', 'tools', 'commands', 'systemPrompt'];
 
+/** 声明式提供服务清单 */
+export declare const provide: readonly ['callTelemetry', 'boardStore'];
+
 /** 跨会话调度相关常量集合 */
 export declare const DISPATCHER_CONSTANTS: Readonly<{
   TARGET_WILDCARDS: ReadonlySet<string>;
@@ -154,6 +157,7 @@ export declare function apply(ctx: Context, config?: CallSessionConfig): void;
 declare const _default: {
   name: typeof name;
   inject: typeof inject;
+  provide: typeof provide;
   Config: typeof Config;
   apply: typeof apply;
   usageSectionText: typeof usageSectionText;

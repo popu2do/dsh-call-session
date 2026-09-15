@@ -7,43 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
-- **Credential Scanning & Commit Hooks**:
-  - `.githooks/pre-commit` scans staged content for credentials, then runs `npm run verify`.
-  - `.githooks/commit-msg` enforces the Conventional Commits convention.
-  - `scripts/scan-secrets.mjs` matches issuer-specific key formats (AWS, GitHub, npm, Slack, Google, LLM providers, JWT, private key blocks) and credential-shaped assignments, with `secret-scan:allow` line waivers. No external dependency.
-  - `npm install` points `core.hooksPath` at `.githooks/` through `scripts/install-hooks.mjs`.
-  - CI `Secret Scan` job reuses the same scanner across all tracked files and validates pull request commit messages.
-- **Adversarial Test Suites (`tests/`)**: coverage for wildcard and self-call guards, session creation limits, telemetry ring buffer truncation and prototype pollution, and canvas read-only invariants.
-
-### Changed
-- **Session Call Guards (`lib/session-call.mjs`)**: wildcard detection now covers `*`, `?`, `@all`, and `@everyone`; self-call protection extends to ambiguous prefix matches that resolve only to the caller.
-- Line endings pinned to LF through `.gitattributes` so hook shebangs survive Windows checkouts.
-
-### Fixed
-- **Blackboard Store (`lib/board-store.mjs`)**: orphaned temp files left by abnormal exits are cleaned on startup, and the flush timer no longer races with an in-flight flush during close.
-
-## [0.1.1] - 2026-09-09
+## [0.1.1] - 2026-09-15
 
 ### Summary
-Maintenance and feature release introducing Visual Collaboration Canvas, lightweight read-only Web telemetry routing, peer root session orchestration (`session_create`), board token governance, and pure-state idempotent author reminders.
+Feature and production release introducing the Visual Collaboration Canvas (PRD 2.0.0 & ADR-0012), lightweight read-only Web telemetry routing, peer root session orchestration (`session_create`), board token governance, pure-state idempotent author reminders, and ADR-0005 dual-layer query rendering.
 
 ### Added
 - **Visual Collaboration Canvas (`lib/client.js`)**:
-  - Web GUI conversation view extension tab「看板」(`conversation.view`, id: `canvas`, order: 15).
-  - Multi-workspace swimlane clustering, session state nodes (`running` and `idle`), and blackboard hubs.
-  - Three-state time-decayed call edge rendering (`task_dispatch`, `task_report`, `notice`) with smooth Bezier curves.
+  - Conversation view extension tab「看板」(`conversation.view`, id: `canvas`, order: 15).
+  - Multi-workspace swimlanes with full session visibility (including idle and newly created sessions).
+  - Three-state time-decayed call edge rendering (`task_dispatch`, `task_report`, `notice`) with smooth Bezier paths and elliptical outer-clipping tangent markers.
+  - L3 read-only inspection drawer with backdrop mask (`.dsh-canvas-drawer-mask`), field copy, ESC dismissal, and zero-mutation guarantee.
   - 60fps GPU acceleration via `translate3d`, `will-change`, and layout containment.
-  - L3 read-only inspector drawer with field copy, ESC dismissal, and zero-mutation guarantee.
+  - Safety exclusion padding (`padding-right: 76px !important;`) avoiding host GUI overlay controls.
+  - Non-blocking 1.5s background polling with blur/focus backoff and zero passive wake-ups.
 - **Read-Only Telemetry Web Surface (`lib/web-telemetry-route.mjs`)**:
   - Host route `GET /plugins/dsh-call-session/telemetry` protected by Connection authentication fence (503/401/403).
   - Strict read-only GET-only enforcement (non-GET intercepted with 405 Method Not Allowed).
   - In-memory bounded ring buffer (`CallTelemetryRingBuffer`, default capacity 200, range 10-2000, FIFO eviction).
   - Zero disk I/O, zero passive wake-ups, and graceful fallback in webless profiles.
 - **Native Peer Root Session Orchestration (`session_create`)**:
-  - Creation of independent root sessions directly in the current workspace with non-blocking fire-and-forget ignition.
-  - Reverse disambiguation semantic anchoring to clarify intent and prevent improper use of `subagent`.
-  - Resource safeguards: workspace quota (10 active root sessions), rate limiting (5 creates/min per session), and generation cutoff (`Generation <= 2`).
+  - In-process independent root session creation via `agentsService.create`.
+  - TOCTOU workspace reservation locks (`inFlightCreationsByWorkspace`) preventing concurrent quota race conditions.
+  - Resource safeguards: workspace quota (10 active root sessions), generation cutoff (`Generation <= 2`), and sliding-window rate limiting (5/min with optimistic reserve and rollback).
+  - Privileged prefix stripping (`[SYSTEM]`, `admin:`, etc.) and title deduplication.
   - Automatic `session:bootstrap` blackboard post publication and context reference mounting.
 - **Board Token Governance & Exact ID Retrieval (ADR-0011)**:
   - Default `titles_only: true` for catalog queries, eliminating bulky `content` to conserve LLM tokens and protect KV cache.
@@ -52,13 +39,31 @@ Maintenance and feature release introducing Visual Collaboration Canvas, lightwe
 - **Pure-State Idempotent Author Reminder (ADR-0010)**:
   - Dynamic author cleaning reminder mounted in `systemPrompt.context` (`board:remind`, order: 130).
   - Pure state-idempotent formatting without volatile timestamps, ensuring 100% byte-for-byte cache invariance.
+- **Session Query Dual-Layer Rendering (`lib/session-query.mjs`, ADR-0005)**:
+  - Structured metadata schema containing `totalCount`, `activeCount`, `idleCount`, `workspace`, and `isCurrent`.
+  - Markdown summary table rendering for dual-layer inspection.
 - **Architecture Decision Records**:
   - Added ADR-0010, ADR-0011, ADR-0012, and Collaboration Canvas PRD.
+- **Credential Scanning & Commit Hooks**:
+  - Pre-commit credential scanner (`scripts/scan-secrets.mjs`) and Conventional Commits enforcement (`scripts/check-commit-msg.mjs`).
+  - Adversarial test suites covering wildcard guards, self-calls, and canvas read-only invariants.
+
+### Changed
+- **KISS Title Resolution Simplification (`lib/call-telemetry.mjs`, `lib/client.js`)**:
+  - Simplified title resolution: explicit valid title priority with `Agent <shortId>` fallback, eliminating brittle regexes and event-stream backtraces.
+  - Eliminated redundant frontend title sanitizer `isCleanDisplayTitle`.
+- **Session Call Guards (`lib/session-call.mjs`)**: wildcard detection now covers `*`, `?`, `@all`, and `@everyone`; self-call protection extends to ambiguous prefix matches that resolve only to the caller.
+
+### Fixed
+- Unified blackboard metric counts to active entries (`status === 'active'`) across canvas ribbon and telemetry headers.
+- Fixed canvas bounding box calculation for true auto-fit centering.
+- Fixed virtual call endpoint title rendering and `session.offline` lifecycle consumption.
+- Orphaned temporary files left by abnormal exits cleaned on startup, and flush timer race conditions eliminated during store close.
 
 ### Security & Governance
 - **Zero-Trace Workspace Discipline**:
-  - Strict isolation and ignore rules for runtime artifacts (`.dsh-vision-toolkit/`).
-  - Zero unmanaged disk artifacts, zero console pollution in production paths, and complete test suite cleanup.
+  - Strict isolation and ignore rules for runtime artifacts.
+  - Zero unmanaged disk artifacts, zero console pollution in production paths, zero emoji (ADR-0009), and complete test suite cleanup.
 - **KV Cache Defense (ADR-0012 Invariant 4)**:
   - Telemetry and canvas interfaces strictly excluded from LLM tools and system prompts.
 

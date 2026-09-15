@@ -7,7 +7,8 @@ import {
   CallTelemetryRingBuffer,
   getCanvasTelemetry,
   getCallTelemetry,
-  computeSessionShortId
+  computeSessionShortId,
+  isHumanReadableTitle
 } from '../lib/call-telemetry.mjs';
 import { executeSessionCall } from '../lib/session-call.mjs';
 import { AtomicBoardStore } from '../lib/board-store.mjs';
@@ -753,7 +754,7 @@ test('getCanvasTelemetry: 多 Agent 拓扑聚合与并发查询不唤醒 Agent',
   }
   const snapshots = await Promise.all(promises);
 
-  // 验证快照一致性
+  // 验证快照一致性与工作区全量会话上屏契约（所有未归档存活会话均如实上屏）
   assert.equal(snapshots.length, 200);
   const snap = snapshots[0];
   assert.equal(snap.sessions.length, 12);
@@ -824,6 +825,27 @@ test('computeSessionShortId: 规范化 8 位会话短码单元测试 (session- �
   assert.equal(computeSessionShortId(123456), 'unknown');
   assert.equal(computeSessionShortId('session-'), 'unknown');
   assert.equal(computeSessionShortId('---___---'), 'unknown');
+});
+
+test('isHumanReadableTitle: 判定非空有效标题与空值拦截', () => {
+  // 1. 合法工作名与自定义标题放行
+  assert.equal(isHumanReadableTitle('Peer-a1b2c3d4'), true, '默认同级会话标题必须放行');
+  assert.equal(isHumanReadableTitle('database_worker'), true, '蛇形命名工作名放行');
+  assert.equal(isHumanReadableTitle('backend-service'), true, '短横线命名工作名放行');
+  assert.equal(isHumanReadableTitle('audit_runner'), true, '下划线命名工作名放行');
+  assert.equal(isHumanReadableTitle('worker-1'), true, '带数字工作名放行');
+  assert.equal(isHumanReadableTitle('28f4cbc5'), true, '用户显式工作名放行');
+  assert.equal(isHumanReadableTitle('Agent 28f4cbc5'), true, '自定义 Agent 标题放行');
+
+  // 2. 中文自然标题放行
+  assert.equal(isHumanReadableTitle('并发审查'), true, '中文标题放行');
+  assert.equal(isHumanReadableTitle('排查 SSH 故障'), true, '中文自然标题放行');
+
+  // 3. 空值、空白字符与非法类型拦截
+  assert.equal(isHumanReadableTitle(''), false, '空字符串拦截');
+  assert.equal(isHumanReadableTitle('   '), false, '全空白字符串拦截');
+  assert.equal(isHumanReadableTitle(null), false, 'null 拦截');
+  assert.equal(isHumanReadableTitle(undefined), false, 'undefined 拦截');
 });
 
 test('getCanvasTelemetry: 黑板条目状态三态区分与 metrics 计数口径一致性 (无矛盾断言)', async () => {
@@ -955,3 +977,58 @@ test('getCanvasTelemetry: 黑板条目状态三态区分与 metrics 计数口径
     assert.equal(post.isDismissed, true, `撤销条目 ${post.id} 的 isDismissed 必须为 true`);
   }
 });
+
+test('全景会话拓扑上屏与已归档会话过滤 (ADR-0003 & PRD 2.1)', async () => {
+  const liveIdle = createMockAgent('agent-live-idle', { status: 'idle', cwd: 'c:/workspace/app', title: 'Idle Agent' });
+  const liveRunning = createMockAgent('agent-live-running', { status: 'running', cwd: 'c:/workspace/app', title: 'Running Agent' });
+  const archived = createMockAgent('agent-archived', { status: 'idle', cwd: 'c:/workspace/app', title: 'Archived Agent' });
+
+  const ringBuffer = new CallTelemetryRingBuffer(50);
+  const ctx = createMockCtx({
+    agentsList: [liveIdle, liveRunning, archived],
+    archivedIds: ['agent-archived'],
+    callTelemetry: ringBuffer
+  });
+
+  const snapshot = await getCanvasTelemetry(ctx, { crossWorkspace: true });
+  assert.equal(snapshot.sessions.length, 2);
+  assert.equal(snapshot.metrics.totalSessions, 2);
+  assert.equal(snapshot.metrics.runningSessions, 1);
+  assert.ok(snapshot.sessions.some(s => s.id === 'agent-live-idle'));
+  assert.ok(snapshot.sessions.some(s => s.id === 'agent-live-running'));
+  assert.ok(!snapshot.sessions.some(s => s.id === 'agent-archived'), '已归档会话不上屏');
+});
+
+test('new session 与未产生调用的新会话在看板中全景上屏 (PRD 2.1 & ADR-0003 & ADR-0012)', async () => {
+  const newSession = createMockAgent('session-new-born-1234', {
+    status: 'idle',
+    cwd: 'c:/workspace/app',
+    title: 'Peer: New Feature Worker'
+  });
+  const normalSession = createMockAgent('session-existing-5678', {
+    status: 'running',
+    cwd: 'c:/workspace/app',
+    title: 'Captain Agent'
+  });
+
+  const ctx = createMockCtx({
+    agentsList: [newSession, normalSession]
+  });
+
+  const snapshot = await getCanvasTelemetry(ctx, { workspace: 'c:/workspace/app' });
+
+  // 验证两会话均在快照中正常呈现，杜绝被误作“死会话”剔除
+  assert.equal(snapshot.sessions.length, 2);
+  const ids = snapshot.sessions.map(s => s.id);
+  assert.ok(ids.includes('session-new-born-1234'), '新建会话必须在看板中立即可见');
+  assert.ok(ids.includes('session-existing-5678'), '活跃会话必须在看板中正常可见');
+  assert.equal(snapshot.metrics.totalSessions, 2);
+  assert.equal(snapshot.metrics.runningSessions, 1);
+
+  // 验证工作区泳道包含这两个会话
+  const ws = snapshot.workspaces.find(w => w.id === 'c:/workspace/app');
+  assert.ok(ws, '必须包含所属工作区泳道');
+  assert.ok(ws.sessionIds.includes('session-new-born-1234'));
+  assert.ok(ws.sessionIds.includes('session-existing-5678'));
+});
+

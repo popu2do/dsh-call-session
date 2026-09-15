@@ -4,14 +4,15 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
-import pluginDefault, {
+import pluginDefault, * as pluginExports from '../index.mjs';
+const {
   name,
   inject,
   Config,
   usageSectionText,
   DISPATCHER_CONSTANTS,
   apply
-} from '../index.mjs';
+} = pluginExports;
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -116,12 +117,16 @@ function createMockCordisContext() {
   };
 }
 
-test('Plugin 基础元数据与配置导出规范', () => {
+test('Plugin 基础元数据与配置导出规范', async () => {
   assert.equal(name, 'dsh-call-session');
   assert.deepEqual(inject, ['agents', 'tools', 'commands', 'systemPrompt']);
 
   // Config schema 检验
   assert.ok(Config);
+
+  // provide 服务声明导出检验
+  assert.deepEqual(pluginExports.provide, ['callTelemetry', 'boardStore']);
+  assert.deepEqual(pluginDefault.provide, ['callTelemetry', 'boardStore']);
 
   // default 导出对标
   assert.equal(pluginDefault.name, name);
@@ -133,6 +138,16 @@ test('Plugin 基础元数据与配置导出规范', () => {
   assert.ok(DISPATCHER_CONSTANTS.TARGET_WILDCARDS.has('*'));
   assert.equal(DISPATCHER_CONSTANTS.LIMITS.MIN_PREFIX_LENGTH, 8);
   assert.equal(DISPATCHER_CONSTANTS.LIMITS.MESSAGE_MAX_LENGTH, 4000);
+
+  // 验证 types/index.d.ts 声明的全部导出与 index.mjs 运行时完全对齐，防止类型漂移
+  const dtsPath = path.resolve(__dirname, '..', 'types', 'index.d.ts');
+  const dtsContent = await fs.readFile(dtsPath, 'utf8');
+  const exportBlock = dtsContent.match(/export\s*\{([\s\S]*?)\};/);
+  assert.ok(exportBlock, 'types/index.d.ts 必须包含 export { ... } 声明块');
+  const declaredExports = exportBlock[1].split(',').map(s => s.trim()).filter(Boolean);
+  for (const exp of declaredExports) {
+    assert.ok(exp in pluginExports, `index.mjs 必须导出 types/index.d.ts 中声明的 "${exp}"`);
+  }
 });
 
 test('usageSectionText: 规范 System Prompt 段落结构与说明', () => {

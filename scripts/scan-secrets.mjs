@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
+import path from 'node:path';
 
 // High-confidence rules match a credential's issuer-specific shape and are never
 // waived by placeholder heuristics. Heuristic rules match an assignment of an
@@ -27,25 +28,69 @@ const ALLOW_MARKER = 'secret-scan:allow';
 const MAX_BYTES = 1024 * 1024;
 
 function git(args) {
-  return execFileSync('git', args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+  try {
+    return execFileSync('git', args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+  } catch (err) {
+    if (err && (err.code === 'EPERM' || err.code === 'ENOENT' || (typeof err.message === 'string' && err.message.includes('spawnSync git')))) {
+      return null;
+    }
+    throw err;
+  }
+}
+
+function walkFiles(dir = '.', baseDir = dir) {
+  const IGNORED = new Set(['.git', 'node_modules', '.agent-teams', 'dist', '.temp']);
+  let result = [];
+  try {
+    const entries = fs.readdirSync(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (entry.isDirectory()) {
+        if (!IGNORED.has(entry.name)) {
+          result = result.concat(walkFiles(path.join(dir, entry.name), baseDir));
+        }
+      } else if (entry.isFile()) {
+        const full = path.join(dir, entry.name);
+        const rel = path.relative(baseDir, full).replace(/\\/g, '/');
+        result.push(rel);
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return result;
 }
 
 function stagedPaths() {
-  return git(['diff', '--cached', '--name-only', '--diff-filter=ACM', '-z'])
-    .split('\0')
-    .filter(Boolean);
+  const out = git(['diff', '--cached', '--name-only', '--diff-filter=ACM', '-z']);
+  if (out === null) {
+    return walkFiles('.');
+  }
+  return out.split('\0').filter(Boolean);
 }
 
 function trackedPaths() {
-  return git(['ls-files', '-z']).split('\0').filter(Boolean);
+  const out = git(['ls-files', '-z']);
+  if (out === null) {
+    return walkFiles('.');
+  }
+  return out.split('\0').filter(Boolean);
 }
 
-function readStaged(path) {
+function readStaged(filePath) {
   try {
-    return execFileSync('git', ['show', `:${path}`], { maxBuffer: MAX_BYTES * 4 });
+    const out = git(['show', `:${filePath}`]);
+    if (out !== null) return Buffer.isBuffer(out) ? out : Buffer.from(out);
   } catch {
-    return null;
+    // fallback to filesystem
   }
+  if (fs.existsSync(filePath)) {
+    try {
+      return fs.readFileSync(filePath);
+    } catch {
+      return null;
+    }
+  }
+  return null;
 }
 
 function mask(value) {

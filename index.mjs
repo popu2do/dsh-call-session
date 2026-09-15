@@ -39,7 +39,9 @@ import {
 import {
   CallTelemetryRingBuffer,
   getCanvasTelemetry,
-  getCallTelemetry
+  getCallTelemetry,
+  computeSessionShortId,
+  resolveCanvasSessionDisplayTitle
 } from './lib/call-telemetry.mjs';
 import {
   installTelemetryWebSurface,
@@ -135,6 +137,8 @@ export {
   CallTelemetryRingBuffer,
   getCanvasTelemetry,
   getCallTelemetry,
+  computeSessionShortId,
+  resolveCanvasSessionDisplayTitle,
   installTelemetryWebSurface,
   authenticatedWebRoutes,
   createTelemetryHandler,
@@ -196,28 +200,28 @@ export function apply(ctx, config = {}) {
     });
   }
 
-  ctx.on('dispose', async () => {
-    logger.debug?.('[dsh-call-session] Disposing plugin, flushing pending writes...');
-    try {
-      callTelemetry.clear();
-      await boardStore.close();
-    } catch (err) {
-      logger.warn?.(`[dsh-call-session] Error during dispose flush: ${err?.message || err}`);
-    }
-  });
+  if (typeof ctx.on === 'function') {
+    ctx.on('dispose', async () => {
+      logger.debug?.('[dsh-call-session] Disposing plugin, flushing pending writes...');
+      try {
+        callTelemetry.clear();
+        await boardStore.close();
+      } catch (err) {
+        logger.warn?.(`[dsh-call-session] Error during dispose flush: ${err?.message || err}`);
+      }
+    });
+  }
 
   // Read-only telemetry Web surface for the Canvas view. A webless profile
   // keeps the plugin tool-only instead of blocking boot.
   installTelemetryWebSurface(ctx, { logger });
 
-  // 0. Register System Prompt usage instructions
   if (config.enabled !== false && ctx.systemPrompt && typeof ctx.systemPrompt.add === 'function') {
     ctx.systemPrompt.add('dsh-call-session:usage', usageSectionText, {
       order: config.promptSectionOrder ?? 118
     });
   }
 
-  // 0.1 Register Blackboard Author Reminder in systemPrompt.context
   if (config.enabled !== false && ctx.systemPrompt && typeof ctx.systemPrompt.context === 'function') {
     ctx.systemPrompt.context({
       name: 'board:remind',
@@ -234,7 +238,6 @@ export function apply(ctx, config = {}) {
     });
   }
 
-  // 1. Register Native Tools
   if (ctx.tools && typeof ctx.tools.register === 'function') {
     const registerSafe = (toolDef) => {
       try {
@@ -655,7 +658,10 @@ export function apply(ctx, config = {}) {
           type: 'object',
           properties: {
             success: { type: 'boolean' },
-            count: { type: 'number' },
+            count: { type: 'integer' },
+            totalCount: { type: 'integer' },
+            activeCount: { type: 'integer' },
+            idleCount: { type: 'integer' },
             scope: { type: 'string' },
             sessions: {
               type: 'array',
@@ -664,19 +670,45 @@ export function apply(ctx, config = {}) {
                 properties: {
                   sessionId: { type: 'string' },
                   title: { type: 'string' },
-                  status: { type: 'string' },
-                  cwd: { type: 'string' }
+                  status: { type: 'string', enum: ['running', 'idle'] },
+                  workspace: { type: 'string' },
+                  cwd: { type: 'string' },
+                  isCurrent: { type: 'boolean' }
                 },
-                additionalProperties: false
+                required: ['sessionId', 'title', 'status', 'workspace', 'isCurrent']
               }
             }
           },
-          additionalProperties: false
+          required: ['totalCount', 'activeCount', 'idleCount', 'sessions']
         },
         render(_args, value) {
+          const sessions = Array.isArray(value?.sessions) ? value.sessions : [];
+          const total = typeof value?.totalCount === 'number' ? value.totalCount : sessions.length;
+          const active = typeof value?.activeCount === 'number' ? value.activeCount : sessions.filter(s => s.status === 'running').length;
+          const idle = typeof value?.idleCount === 'number' ? value.idleCount : sessions.filter(s => s.status === 'idle').length;
+
+          if (sessions.length === 0) {
+            return [{
+              type: 'text',
+              text: `### Session Query Overview\n\nNo active sessions found.\n\n**Total:** ${total} | **Active:** ${active} | **Idle:** ${idle}`
+            }];
+          }
+
+          const header = '| Session ID | Title | Status | Workspace | Current |\n|:--- |:--- |:--- |:--- |:--- |';
+          const rows = sessions.map(s => {
+            const sid = `\`${s.sessionId}\``;
+            const title = (s.title || 'Untitled').replace(/\|/g, '\\|');
+            const status = s.status === 'running' ? '`running`' : '`idle`';
+            const ws = (s.workspace || s.cwd || '').replace(/\|/g, '\\|');
+            const curr = s.isCurrent ? 'Yes' : 'No';
+            return `| ${sid} | ${title} | ${status} | ${ws} | ${curr} |`;
+          }).join('\n');
+
+          const summary = `\n\n**Total:** ${total} | **Active:** ${active} | **Idle:** ${idle}`;
+
           return [{
             type: 'text',
-            text: JSON.stringify(value, null, 2)
+            text: `### Session Query Overview\n\n${header}\n${rows}${summary}`
           }];
         }
       },
@@ -744,7 +776,6 @@ export function apply(ctx, config = {}) {
     });
   }
 
-  // 2. Register Web Slash Command (/dsh-call-session)
   const registerSlashCommand = (cmdCtx) => {
     if (!cmdCtx?.commands || typeof cmdCtx.commands.register !== 'function') return;
 
@@ -758,7 +789,6 @@ export function apply(ctx, config = {}) {
         const callerAgent = invocation.agent;
         const callerWorkspace = normalizeWorkspace(resolveSessionCwd(callerAgent));
 
-        // 1. 无参数：查阅看板标题摘要
         if (!raw) {
           const titles = boardStore.listTitles({ callerWorkspace });
           const digest = boardStore.formatTitleDigest(titles);
@@ -784,7 +814,6 @@ export function apply(ctx, config = {}) {
           };
         }
 
-        // 2. 带参数：解析 target 与 message
         const firstSpace = raw.search(/[\t\n\r ]/u);
         if (firstSpace === -1) {
           return {
