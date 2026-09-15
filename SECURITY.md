@@ -2,12 +2,10 @@
 
 ## Reporting Security Issues
 
-If you discover a security vulnerability in `dsh-call-session`, please report it responsibly:
+Report security vulnerabilities through [GitHub Security Advisories](https://github.com/popu2do/dsh-call-session/security/advisories) as a private report.
 
-- **GitHub**: Or use [GitHub Security Advisories](https://github.com/popu2do/dsh-call-session/security/advisories) to submit a private report.
+Reports should include:
+- Description of the vulnerability and security impact.
+- Reproduction steps or minimal proof of concept.
 
-Please include:
-- A clear description of the issue and potential impact.
-- Steps to reproduce or a minimal proof of concept.
-
-We appreciate your help in keeping `dsh-call-session` secure and will address verified issues promptly.
+Verified reports are triaged and addressed promptly.

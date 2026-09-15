@@ -1,14 +1,10 @@
 # Contributing to dsh-call-session
 
-Thank you for your interest in contributing to `dsh-call-session`! This project provides the native, zero-dependency cross-session collaboration, in-process agent unicast calling, and public blackboard plugin for DeepSeek Harness (DSH).
-
-We welcome contributions of all kinds: bug fixes, architectural improvements, documentation enhancements, feature proposals, and community guidance.
-
----
+Guidelines for contributing to `dsh-call-session`, the native cross-session collaboration, in-process agent unicast calling, and public blackboard plugin for DeepSeek Harness (DSH).
 
 ## 1. Engineering Principles & Guidelines
 
-To maintain high software engineering standards, we adhere to strict engineering principles:
+Engineering principles and standards:
 
 - **Zero-Trace Principle**: Code changes must look deliberately designed from day one. Avoid dead code, commented-out experiments, or extraneous temporary markers. Diff and commit history should reflect only the clean, final state.
 - **Fail Fast & Root-Cause Fixes**: Never silently swallow errors; always detect boundary violations early and fix the root cause rather than patching symptoms with fragile workarounds.
@@ -16,8 +12,6 @@ To maintain high software engineering standards, we adhere to strict engineering
 - **Zero External Subprocesses**: Keep the plugin 100% native within the DSH Node.js runtime. Avoid heavy binary dependencies, external child process spawns, or background daemon sidecars.
 - **Bilingual Documentation Sync**: Any user-facing feature, configuration change, or tool parameter modification **must** be documented in both **`README.md` (English)** and **`README_ZH.md` (Simplified Chinese)**.
 - **Architecture Decision Records (ADRs)**: Non-trivial architectural, concurrency, storage, or protocol changes **must** include an ADR in `docs/adrs/`.
-
----
 
 ## 2. Architecture Decision Records (ADRs)
 
@@ -31,8 +25,6 @@ Before making or proposing architectural changes:
 3. Copy [`docs/adrs/template.md`](./docs/adrs/template.md) to `docs/adrs/NNNN-<short-imperative-title>.md`.
 4. Fill out the context, alternatives considered, tradeoffs, and compliance checks.
 5. Update the ADR status matrix in `docs/adrs/README.md` and link your Pull Request to the ADR.
-
----
 
 ## 3. Development Environment & Setup
 
@@ -82,11 +74,9 @@ dsh-call-session/
 ├── CONTRIBUTING.md           # This contribution guide
 ├── SECURITY.md               # Security policy & vulnerability reporting
 ├── LICENSE                   # MIT License
-├── README.md                 # English documentation & architecture diagrams
-└── README_ZH.md              # Chinese documentation & architecture diagrams
+├── README.md                 # English documentation
+└── README_ZH.md              # Chinese documentation
 ```
-
----
 
 ## 4. Development & Verification Workflow
 
@@ -113,8 +103,6 @@ npm pack --dry-run
 ```
 
 All CI checks must pass before a pull request can be merged.
-
----
 
 ## 5. Git & Commit Guidelines
 
@@ -148,6 +136,7 @@ We enforce the [Conventional Commits](https://www.conventionalcommits.org/) stan
 - `build`: Changes that affect the build system or external dependencies
 - `ci`: Changes to our CI configuration files and scripts
 - `chore`: Other changes that do not modify `src` or test files
+- `revert`: Reverts a previous commit
 
 **Example:**
 ```
@@ -159,7 +148,22 @@ and refuse ambiguous matches across concurrent sessions.
 Fixes #24
 ```
 
----
+### Local Git Hooks
+
+`npm install` points `core.hooksPath` at `.githooks/`, which installs two hooks:
+
+- `pre-commit` scans the staged content for credentials, then runs `npm run verify`.
+- `commit-msg` enforces the commit message convention above.
+
+The credential scanner (`scripts/scan-secrets.mjs`) matches issuer-specific key
+formats and credential-shaped assignments. It also accepts explicit file paths
+and `--all`, which is how CI scans the whole tree. A genuine false positive is
+waived with a trailing `secret-scan:allow` comment on the offending line.
+
+Both hooks are advisory: `--no-verify` bypasses them, and a contributor can
+unset `core.hooksPath` at will. They exist to fail in seconds rather than after
+a CI round trip. The enforced boundary is the CI secret scan plus branch
+protection on `master`, neither of which can be bypassed from a clone.
 
 ## 6. Submitting a Pull Request (PR)
 
@@ -169,13 +173,9 @@ Fixes #24
 4. **Clean Git History**: Rebase against the target branch (`master` or `main`) and squash intermediate "WIP" commits before review.
 5. **Quality Gates**: Ensure `npm run verify` passes with zero warnings or errors.
 
----
-
 ## 7. Security Disclosures
 
 If you find a security vulnerability, please do **NOT** open a public issue. Follow the reporting guidelines outlined in **[SECURITY.md](./SECURITY.md)**.
-
----
 
 ## 8. Licensing
 

@@ -4,14 +4,15 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
-import pluginDefault, {
+import pluginDefault, * as pluginExports from '../index.mjs';
+const {
   name,
   inject,
   Config,
   usageSectionText,
   DISPATCHER_CONSTANTS,
   apply
-} from '../index.mjs';
+} = pluginExports;
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -56,11 +57,30 @@ function createMockCordisContext() {
       },
       get(id) {
         return promptSections.get(id);
+      },
+      context(def) {
+        promptSections.set(`context:${def.name}`, def);
+      },
+      getContext(name) {
+        return promptSections.get(`context:${name}`);
       }
     },
     agents: {
       list: () => agentsList,
-      get: (id) => agentsList.find(a => a.id === id)
+      get: (id) => agentsList.find(a => a.id === id),
+      create: async (opts) => {
+        const id = opts?.sessionId || `peer-session-${Date.now()}`;
+        const peer = {
+          id,
+          title: opts?.title || opts?.meta?.title || '',
+          status: 'idle',
+          received: [],
+          followup(m) { this.status = 'running'; this.received.push(m); },
+          session: { id, title: opts?.title || opts?.meta?.title || '', cwd: opts?.cwd || opts?.meta?.cwd || '' }
+        };
+        agentsList.push(peer);
+        return { agent: peer };
+      }
     },
     _agentsList: agentsList,
     on(event, handler) {
@@ -97,12 +117,16 @@ function createMockCordisContext() {
   };
 }
 
-test('Plugin 基础元数据与配置导出规范', () => {
+test('Plugin 基础元数据与配置导出规范', async () => {
   assert.equal(name, 'dsh-call-session');
   assert.deepEqual(inject, ['agents', 'tools', 'commands', 'systemPrompt']);
 
   // Config schema 检验
   assert.ok(Config);
+
+  // provide 服务声明导出检验
+  assert.deepEqual(pluginExports.provide, ['callTelemetry', 'boardStore']);
+  assert.deepEqual(pluginDefault.provide, ['callTelemetry', 'boardStore']);
 
   // default 导出对标
   assert.equal(pluginDefault.name, name);
@@ -114,6 +138,16 @@ test('Plugin 基础元数据与配置导出规范', () => {
   assert.ok(DISPATCHER_CONSTANTS.TARGET_WILDCARDS.has('*'));
   assert.equal(DISPATCHER_CONSTANTS.LIMITS.MIN_PREFIX_LENGTH, 8);
   assert.equal(DISPATCHER_CONSTANTS.LIMITS.MESSAGE_MAX_LENGTH, 4000);
+
+  // 验证 types/index.d.ts 声明的全部导出与 index.mjs 运行时完全对齐，防止类型漂移
+  const dtsPath = path.resolve(__dirname, '..', 'types', 'index.d.ts');
+  const dtsContent = await fs.readFile(dtsPath, 'utf8');
+  const exportBlock = dtsContent.match(/export\s*\{([\s\S]*?)\};/);
+  assert.ok(exportBlock, 'types/index.d.ts 必须包含 export { ... } 声明块');
+  const declaredExports = exportBlock[1].split(',').map(s => s.trim()).filter(Boolean);
+  for (const exp of declaredExports) {
+    assert.ok(exp in pluginExports, `index.mjs 必须导出 types/index.d.ts 中声明的 "${exp}"`);
+  }
 });
 
 test('usageSectionText: 规范 System Prompt 段落结构与说明', () => {
@@ -121,10 +155,17 @@ test('usageSectionText: 规范 System Prompt 段落结构与说明', () => {
   assert.ok(text.includes('## Cross-Session Communication & Collaboration (dsh-call-session)'));
   assert.ok(text.includes('session_query'));
   assert.ok(text.includes('session_call'));
+  assert.ok(text.includes('session_create'));
   assert.ok(text.includes('board_post'));
   assert.ok(text.includes('board_list'));
   assert.ok(text.includes('board_clear'));
   assert.ok(text.includes('/dsh-call-session'));
+  assert.ok(text.includes('Intent routing (session_create vs subagent):'));
+  assert.ok(text.includes('创建同级会话'));
+  assert.ok(text.includes('新建会话'));
+  assert.ok(text.includes('新开 session'));
+  assert.ok(text.includes('平级会话'));
+  assert.ok(text.includes('subagent'));
 });
 
 test('apply: 插件初始化、工具注册与 System Prompt 挂载', async (t) => {
@@ -143,8 +184,8 @@ test('apply: 插件初始化、工具注册与 System Prompt 挂载', async (t) 
     promptSectionOrder: 120
   });
 
-  // 1. 验证 5 大核心工具是否全部成功注册
-  const expectedTools = ['board_post', 'board_list', 'board_clear', 'session_call', 'session_query'];
+  // 1. 验证 6 大核心工具是否全部成功注册
+  const expectedTools = ['board_post', 'board_list', 'board_clear', 'session_call', 'session_query', 'session_create'];
   for (const toolName of expectedTools) {
     const tool = ctx.tools.get(toolName);
     assert.ok(tool, `工具 ${toolName} 必须已注册`);
@@ -155,11 +196,32 @@ test('apply: 插件初始化、工具注册与 System Prompt 挂载', async (t) 
     assert.equal(typeof tool.output?.render, 'function');
   }
 
+  // 1b. 验证 board_list 工具 Schema 规约对齐 ADR-0011 (默认 titles_only: true 与 id 点查参数)
+  const boardListTool = ctx.tools.get('board_list');
+  assert.equal(boardListTool.parameters.properties.titles_only.default, true, 'titles_only 必须默认为 true');
+  assert.ok(boardListTool.parameters.properties.id, '必须声明 id 可选参数');
+  assert.equal(boardListTool.parameters.properties.id.type, 'string');
+  assert.ok(boardListTool.parameters.properties.id.description.includes('精确检索'));
+  assert.ok(boardListTool.description.includes('titles_only: true'));
+
+  // 1c. 验证 session_create 工具反向消歧语义锚点（防止 LLM 强偏置误用 subagent）
+  const sessionCreateTool = ctx.tools.get('session_create');
+  assert.ok(sessionCreateTool.description.includes('创建同级会话'), '必须包含 创建同级会话 触发词');
+  assert.ok(sessionCreateTool.description.includes('新建会话'), '必须包含 新建会话 触发词');
+  assert.ok(sessionCreateTool.description.includes('新开 session'), '必须包含 新开 session 触发词');
+  assert.ok(sessionCreateTool.description.includes('平级会话'), '必须包含 平级会话 触发词');
+  assert.ok(sessionCreateTool.description.includes('不同于临时子任务 subagent'), '必须包含客观澄清表达');
+
   // 2. 验证 System Prompt 挂载与排序权重
   const promptItem = ctx.systemPrompt.get('dsh-call-session:usage');
   assert.ok(promptItem, '应当挂载 dsh-call-session:usage 提示词段落');
   assert.equal(promptItem.options.order, 120);
   assert.ok(promptItem.getter().includes('Cross-Session Communication'));
+
+  const remindContext = ctx.systemPrompt.getContext('board:remind');
+  assert.ok(remindContext, '应当挂载 board:remind 上下文注入');
+  assert.equal(remindContext.order, 130);
+  assert.equal(typeof remindContext.text, 'function');
 
   // 3. 验证 Web 斜杠指令注册
   const slashCmd = ctx.commands.get('dsh-call-session');
@@ -255,7 +317,7 @@ test('Web Slash Command (/dsh-call-session) 行为验证', async (t) => {
   await ctx.emit('dispose');
 });
 
-test('五大工具集成执行链路 (execute 端到端测试)', async (t) => {
+test('六大原生工具集成执行链路 (execute 端到端测试)', async (t) => {
   const tmpDir = await createTempDir();
   t.after(async () => {
     await fs.rm(tmpDir, { recursive: true, force: true });
@@ -292,13 +354,47 @@ test('五大工具集成执行链路 (execute 端到端测试)', async (t) => {
   assert.equal(postRes.success, true);
   assert.ok(postRes.postId);
 
-  // 2. board_list
+  // 2. board_list (默认 titles_only: true 摘要模式)
   const listRes = await ctx.tools.get('board_list').execute({
     topic: 'milestone:m1'
   }, exec);
   assert.equal(listRes.success, true);
   assert.equal(listRes.count, 1);
+  assert.equal(listRes.titlesOnly, true, '未传 id 且未传 titles_only 时必须默认为 true');
   assert.equal(listRes.posts[0].id, postRes.postId);
+  assert.equal(listRes.posts[0].content, undefined, '默认摘要模式下 posts 不包含 content');
+  assert.equal(listRes.posts[0].remainingSeconds, undefined, '不输出 remainingSeconds');
+
+  // 2a. board_list (通过 id 精确点查，智能分流为 titlesOnly: false)
+  const pointRes = await ctx.tools.get('board_list').execute({
+    id: postRes.postId
+  }, exec);
+  assert.equal(pointRes.success, true);
+  assert.equal(pointRes.count, 1);
+  assert.equal(pointRes.titlesOnly, false, '传入 id 时未指定 titles_only 则 titlesOnly 为 false');
+  assert.equal(pointRes.posts[0].id, postRes.postId);
+  assert.equal(pointRes.posts[0].content, 'All tasks completed');
+  assert.equal(pointRes.posts[0].remainingSeconds, undefined);
+
+  // 2b. board_list (通过 id 点查且显式指定 titles_only: true，显式优先)
+  const pointTitlesRes = await ctx.tools.get('board_list').execute({
+    id: postRes.postId,
+    titles_only: true
+  }, exec);
+  assert.equal(pointTitlesRes.success, true);
+  assert.equal(pointTitlesRes.count, 1);
+  assert.equal(pointTitlesRes.titlesOnly, true);
+  assert.equal(pointTitlesRes.posts[0].content, undefined);
+
+  // 2c. board_list (列表查询显式指定 titles_only: false，显式优先)
+  const fullListRes = await ctx.tools.get('board_list').execute({
+    topic: 'milestone:m1',
+    titles_only: false
+  }, exec);
+  assert.equal(fullListRes.success, true);
+  assert.equal(fullListRes.count, 1);
+  assert.equal(fullListRes.titlesOnly, false);
+  assert.equal(fullListRes.posts[0].content, 'All tasks completed');
 
   // 3. session_query
   const queryRes = await ctx.tools.get('session_query').execute({
@@ -327,10 +423,19 @@ test('五大工具集成执行链路 (execute 端到端测试)', async (t) => {
   assert.equal(clearRes.success, true);
   assert.equal(clearRes.clearedCount, 1);
 
+  // 6. session_create
+  const createRes = await ctx.tools.get('session_create').execute({
+    title: 'Lifecycle Created Peer',
+    initial_message: 'Lifecycle test task'
+  }, exec);
+  assert.equal(createRes.success, true);
+  assert.equal(createRes.title, 'Lifecycle Created Peer');
+  assert.equal(createRes.status, 'running');
+
   await ctx.emit('dispose');
 });
 
-test('官方 ctx.logger 规范接入与生命周期降噪 (全部日志收敛至 debug 级别)', async (t) => {
+test('ctx.logger 接入与日志级别收敛至 debug', async (t) => {
   const tmpDir = await createTempDir();
   t.after(async () => {
     await fs.rm(tmpDir, { recursive: true, force: true });
@@ -363,7 +468,7 @@ test('官方 ctx.logger 规范接入与生命周期降噪 (全部日志收敛至
 
   // 3. 验证所有生命周期日志均为 debug 级别，绝不使用 info 产生控制台噪音
   const nonDebugLogs = capturedLogs.filter(l => l.level !== 'debug');
-  assert.equal(nonDebugLogs.length, 0, '生命周期正常流程下不得输出 info/warn/error 级别日志，避免控制台污染');
+  assert.equal(nonDebugLogs.length, 0, '生命周期正常流程下不输出 info/warn/error 级别日志，避免控制台污染');
 
   const activationLog = capturedLogs.find(l => l.args[0]?.includes('Activating pure DSH Native Collaboration Plugin'));
   assert.ok(activationLog, '必须包含插件激活 debug 日志');
@@ -421,7 +526,7 @@ test('支持 ctx.get("logger") 备选注入与无 logger 时的 noopLogger 安�
   await bareCtx.emit('dispose');
 });
 
-test('端到端全局无裸 console 污染断言 (Full Lifecycle & Tools Execution)', async (t) => {
+test('全局无直接 console 输出 (Full Lifecycle & Tools Execution)', async (t) => {
   const tmpDir = await createTempDir();
   t.after(async () => {
     await fs.rm(tmpDir, { recursive: true, force: true });
@@ -515,12 +620,13 @@ test('端到端全局无裸 console 污染断言 (Full Lifecycle & Tools Executi
   );
 });
 
-test('静态合规审查：index.mjs 与 lib/*.mjs 生产代码 0 处裸 console 调用', async () => {
+test('静态合规审查：生产代码无 console 调用', async () => {
   const projectDir = path.resolve(__dirname, '..');
   const filesToScan = [
     path.join(projectDir, 'index.mjs'),
     path.join(projectDir, 'lib', 'board-store.mjs'),
     path.join(projectDir, 'lib', 'session-call.mjs'),
+    path.join(projectDir, 'lib', 'session-create.mjs'),
     path.join(projectDir, 'lib', 'session-query.mjs')
   ];
 
@@ -538,4 +644,118 @@ test('静态合规审查：index.mjs 与 lib/*.mjs 生产代码 0 处裸 console
       `文件 ${path.basename(filePath)} 包含裸 console 调用: ${consoleMatches?.join(', ')}`
     );
   }
+});
+
+test('board_list 原生工具：Schema 契约、默认摘要、id 点查分流与工作区隔离', async (t) => {
+  const tmpDir = await createTempDir();
+  t.after(async () => {
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  });
+
+  const ctx = createMockCordisContext();
+  const storagePath = path.join(tmpDir, 'board.json');
+  apply(ctx, { storagePath, debounceMs: 50 });
+
+  const agentAlpha = {
+    id: 'agent-alpha-001',
+    title: 'Agent Alpha',
+    session: { cwd: 'c:/workspaces/alpha-proj' }
+  };
+  const agentBeta = {
+    id: 'agent-beta-002',
+    title: 'Agent Beta',
+    session: { cwd: 'c:/workspaces/beta-proj' }
+  };
+  ctx._agentsList.push(agentAlpha, agentBeta);
+
+  const boardPost = ctx.tools.get('board_post');
+  const boardList = ctx.tools.get('board_list');
+
+  // 1. Agent Alpha 发布条目
+  const postAlphaRes = await boardPost.execute({
+    topic: 'task:alpha-build',
+    content: '# Alpha Pipeline Spec\nDetailed build commands and artifacts...',
+    tags: ['build', 'alpha']
+  }, { agent: agentAlpha });
+  assert.equal(postAlphaRes.success, true);
+  const alphaId = postAlphaRes.postId;
+
+  // 2. Agent Beta 发布条目
+  const postBetaRes = await boardPost.execute({
+    topic: 'task:beta-deploy',
+    content: '# Beta Deploy Guide\nZero-downtime deployment steps...',
+    tags: ['deploy', 'beta']
+  }, { agent: agentBeta });
+  assert.equal(postBetaRes.success, true);
+  const betaId = postBetaRes.postId;
+
+  // 3. Agent Alpha 默认无参查询 board_list:
+  // - 隔离性：仅返回本工程条目 (alphaId)
+  // - 默认轻量化：titlesOnly: true，content 与 remainingSeconds 均不存在
+  const listAlphaDefault = await boardList.execute({}, { agent: agentAlpha });
+  assert.equal(listAlphaDefault.success, true);
+  assert.equal(listAlphaDefault.count, 1);
+  assert.equal(listAlphaDefault.titlesOnly, true);
+  assert.equal(listAlphaDefault.posts[0].id, alphaId);
+  assert.equal(listAlphaDefault.posts[0].title, 'Alpha Pipeline Spec');
+  assert.equal(listAlphaDefault.posts[0].content, undefined);
+  assert.equal(listAlphaDefault.posts[0].remainingSeconds, undefined);
+
+  // 4. Agent Alpha 通过 id 精确点查自己的条目:
+  // - 智能分流：未指定 titles_only 自动分流为 titlesOnly: false
+  // - 包含完整 content，绝不包含 remainingSeconds
+  const pointAlphaSelf = await boardList.execute({ id: alphaId }, { agent: agentAlpha });
+  assert.equal(pointAlphaSelf.success, true);
+  assert.equal(pointAlphaSelf.count, 1);
+  assert.equal(pointAlphaSelf.titlesOnly, false);
+  assert.equal(pointAlphaSelf.posts[0].id, alphaId);
+  assert.equal(pointAlphaSelf.posts[0].content, '# Alpha Pipeline Spec\nDetailed build commands and artifacts...');
+  assert.equal(pointAlphaSelf.posts[0].remainingSeconds, undefined);
+
+  // 5. Agent Alpha 通过 id 精确点查自己的条目，但显式指定 titles_only: true:
+  // - 显式意图优先：titlesOnly 保持 true，不返回 content
+  const pointAlphaDigest = await boardList.execute({ id: alphaId, titles_only: true }, { agent: agentAlpha });
+  assert.equal(pointAlphaDigest.success, true);
+  assert.equal(pointAlphaDigest.count, 1);
+  assert.equal(pointAlphaDigest.titlesOnly, true);
+  assert.equal(pointAlphaDigest.posts[0].content, undefined);
+
+  // 6. Agent Alpha 列表查询显式指定 titles_only: false:
+  // - 显式意图优先：titlesOnly 为 false，返回完整 content
+  const fullListAlpha = await boardList.execute({ titles_only: false }, { agent: agentAlpha });
+  assert.equal(fullListAlpha.success, true);
+  assert.equal(fullListAlpha.count, 1);
+  assert.equal(fullListAlpha.titlesOnly, false);
+  assert.equal(fullListAlpha.posts[0].content, '# Alpha Pipeline Spec\nDetailed build commands and artifacts...');
+
+  // 7. 工作区隔离性：Agent Alpha 尝试通过 id 点查 Agent Beta 的条目 (默认 cross_workspace: false)
+  // - 隔离生效：查不到，返回 count: 0
+  const crossIsolated = await boardList.execute({ id: betaId }, { agent: agentAlpha });
+  assert.equal(crossIsolated.success, true);
+  assert.equal(crossIsolated.count, 0);
+  assert.deepEqual(crossIsolated.posts, []);
+
+  // 8. 跨工作区穿透：Agent Alpha 开启 cross_workspace: true 点查 Agent Beta 的条目
+  // - 穿透成功：返回 count: 1，智能分流包含 content
+  const crossAllowed = await boardList.execute({ id: betaId, cross_workspace: true }, { agent: agentAlpha });
+  assert.equal(crossAllowed.success, true);
+  assert.equal(crossAllowed.count, 1);
+  assert.equal(crossAllowed.titlesOnly, false);
+  assert.equal(crossAllowed.posts[0].id, betaId);
+  assert.equal(crossAllowed.posts[0].content, '# Beta Deploy Guide\nZero-downtime deployment steps...');
+
+  // 9. 不存在的 id 返回空结果
+  const notFound = await boardList.execute({ id: 'post-never-existed' }, { agent: agentAlpha });
+  assert.equal(notFound.success, true);
+  assert.equal(notFound.count, 0);
+  assert.deepEqual(notFound.posts, []);
+
+  // 10. output.render 渲染校验
+  const rendered = boardList.output.render(null, pointAlphaSelf);
+  assert.ok(Array.isArray(rendered));
+  assert.equal(rendered[0].type, 'text');
+  const parsedRender = JSON.parse(rendered[0].text);
+  assert.equal(parsedRender.posts[0].id, alphaId);
+
+  await ctx.emit('dispose');
 });

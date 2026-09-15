@@ -5,7 +5,67 @@ All notable changes to the `dsh-call-session` project are documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
----
+## [Unreleased]
+
+## [0.1.1] - 2026-09-15
+
+### Summary
+Feature and production release introducing the Visual Collaboration Canvas (PRD 2.0.0 & ADR-0012), lightweight read-only Web telemetry routing, peer root session orchestration (`session_create`), board token governance, pure-state idempotent author reminders, and ADR-0005 dual-layer query rendering.
+
+### Added
+- **Visual Collaboration Canvas (`lib/client.js`)**:
+  - Conversation view extension tab「看板」(`conversation.view`, id: `canvas`, order: 15).
+  - Multi-workspace swimlanes with full session visibility (including idle and newly created sessions).
+  - Three-state time-decayed call edge rendering (`task_dispatch`, `task_report`, `notice`) with smooth Bezier paths and elliptical outer-clipping tangent markers.
+  - L3 read-only inspection drawer with backdrop mask (`.dsh-canvas-drawer-mask`), field copy, ESC dismissal, and zero-mutation guarantee.
+  - 60fps GPU acceleration via `translate3d`, `will-change`, and layout containment.
+  - Safety exclusion padding (`padding-right: 76px !important;`) avoiding host GUI overlay controls.
+  - Non-blocking 1.5s background polling with blur/focus backoff and zero passive wake-ups.
+- **Read-Only Telemetry Web Surface (`lib/web-telemetry-route.mjs`)**:
+  - Host route `GET /plugins/dsh-call-session/telemetry` protected by Connection authentication fence (503/401/403).
+  - Strict read-only GET-only enforcement (non-GET intercepted with 405 Method Not Allowed).
+  - In-memory bounded ring buffer (`CallTelemetryRingBuffer`, default capacity 200, range 10-2000, FIFO eviction).
+  - Zero disk I/O, zero passive wake-ups, and graceful fallback in webless profiles.
+- **Native Peer Root Session Orchestration (`session_create`)**:
+  - In-process independent root session creation via `agentsService.create`.
+  - TOCTOU workspace reservation locks (`inFlightCreationsByWorkspace`) preventing concurrent quota race conditions.
+  - Resource safeguards: workspace quota (10 active root sessions), generation cutoff (`Generation <= 2`), and sliding-window rate limiting (5/min with optimistic reserve and rollback).
+  - Privileged prefix stripping (`[SYSTEM]`, `admin:`, etc.) and title deduplication.
+  - Automatic `session:bootstrap` blackboard post publication and context reference mounting.
+- **Board Token Governance & Exact ID Retrieval (ADR-0011)**:
+  - Default `titles_only: true` for catalog queries, eliminating bulky `content` to conserve LLM tokens and protect KV cache.
+  - Exact ID point retrieval (`id`) with automatic smart diversion to `titles_only: false` while respecting explicit caller intent.
+  - Complete elimination of volatile `remainingSeconds` to maintain prompt prefix stability.
+- **Pure-State Idempotent Author Reminder (ADR-0010)**:
+  - Dynamic author cleaning reminder mounted in `systemPrompt.context` (`board:remind`, order: 130).
+  - Pure state-idempotent formatting without volatile timestamps, ensuring 100% byte-for-byte cache invariance.
+- **Session Query Dual-Layer Rendering (`lib/session-query.mjs`, ADR-0005)**:
+  - Structured metadata schema containing `totalCount`, `activeCount`, `idleCount`, `workspace`, and `isCurrent`.
+  - Markdown summary table rendering for dual-layer inspection.
+- **Architecture Decision Records**:
+  - Added ADR-0010, ADR-0011, ADR-0012, and Collaboration Canvas PRD.
+- **Credential Scanning & Commit Hooks**:
+  - Pre-commit credential scanner (`scripts/scan-secrets.mjs`) and Conventional Commits enforcement (`scripts/check-commit-msg.mjs`).
+  - Adversarial test suites covering wildcard guards, self-calls, and canvas read-only invariants.
+
+### Changed
+- **KISS Title Resolution Simplification (`lib/call-telemetry.mjs`, `lib/client.js`)**:
+  - Simplified title resolution: explicit valid title priority with `Agent <shortId>` fallback, eliminating brittle regexes and event-stream backtraces.
+  - Eliminated redundant frontend title sanitizer `isCleanDisplayTitle`.
+- **Session Call Guards (`lib/session-call.mjs`)**: wildcard detection now covers `*`, `?`, `@all`, and `@everyone`; self-call protection extends to ambiguous prefix matches that resolve only to the caller.
+
+### Fixed
+- Unified blackboard metric counts to active entries (`status === 'active'`) across canvas ribbon and telemetry headers.
+- Fixed canvas bounding box calculation for true auto-fit centering.
+- Fixed virtual call endpoint title rendering and `session.offline` lifecycle consumption.
+- Orphaned temporary files left by abnormal exits cleaned on startup, and flush timer race conditions eliminated during store close.
+
+### Security & Governance
+- **Zero-Trace Workspace Discipline**:
+  - Strict isolation and ignore rules for runtime artifacts.
+  - Zero unmanaged disk artifacts, zero console pollution in production paths, zero emoji (ADR-0009), and complete test suite cleanup.
+- **KV Cache Defense (ADR-0012 Invariant 4)**:
+  - Telemetry and canvas interfaces strictly excluded from LLM tools and system prompts.
 
 ## [0.1.0] - 2026-09-02
 
@@ -38,9 +98,9 @@ Initial production release of `dsh-call-session`, providing native in-process cr
 - **Automated Test Suite (`tests/`)**:
   - Lightweight automated test suites using `node:test` and `node:assert/strict` covering Blackboard CRUD, concurrency, debounce, `.bak` crash recovery, unicast dispatch, security fuses, session discovery, and lifecycle disposal.
 - **Bilingual Documentation**:
-  - Production-grade English `README.md` and Simplified Chinese `README_ZH.md` with Mermaid sequence diagrams, configuration references, and realistic JSON Tool Call examples.
+  - Production-grade English `README.md` and Simplified Chinese `README_ZH.md` with configuration references and realistic JSON Tool Call examples.
 - **Architecture Decision Record (ADR) Suite**:
-  - Comprehensive ADR matrix (ADR-0001 through ADR-0008) tracking invariants and architectural decisions.
+  - Comprehensive ADR matrix (ADR-0001 through ADR-0009) tracking invariants and architectural decisions.
 - **CI/CD & Open Source Governance**:
   - GitHub Actions CI workflow (`.github/workflows/ci.yml`) testing Node.js 20, 22, and 24 across Ubuntu and Windows runners.
   - Community documentation: `CONTRIBUTING.md`, `SECURITY.md`, and issue/PR templates.

@@ -73,7 +73,7 @@ test('CALL_TYPE_INTENTS 常量定义完整性', () => {
   assert.equal(CALL_TYPE_INTENTS.notice, 'NOTICE');
 });
 
-test('dispatchNativeMessage: 原生两态分发 (steer / followup / send)', () => {
+test('dispatchNativeMessage: 状态分发 (steer / followup / send)', () => {
   // 1. target 为 running 态且具有 steer 方法 -> steer
   const runningAgent = createMockAgent('agent-running', { status: 'running' });
   const mode1 = dispatchNativeMessage(runningAgent, { role: 'user', content: [] });
@@ -86,7 +86,7 @@ test('dispatchNativeMessage: 原生两态分发 (steer / followup / send)', () =
   assert.equal(mode2, 'followup');
   assert.equal(idleAgent.received[0].type, 'followup');
 
-  // 3. target 仅具备 send 方法时优雅降级为 followup
+  // 3. target 仅具备 send 方法时降级为 followup
   const sendOnlyAgent = {
     id: 'agent-send',
     status: 'idle',
@@ -105,7 +105,7 @@ test('dispatchNativeMessage: 原生两态分发 (steer / followup / send)', () =
   assert.throws(() => dispatchNativeMessage({}, {}), /未提供有效的原生接收方法/);
 });
 
-test('executeSessionCall: 安全防线拦截测试 (通配符/自呼叫/超长消息/空参数)', async () => {
+test('executeSessionCall: 参数校验测试 (通配符/自呼叫/超长消息/空参数)', async () => {
   const caller = createMockAgent('caller-session-12345678');
   const target = createMockAgent('target-session-87654321');
   const ctx = createMockCtx({ agentsList: [caller, target] });
@@ -125,22 +125,22 @@ test('executeSessionCall: 安全防线拦截测试 (通配符/自呼叫/超长�
     /必须提供非空的 message/
   );
 
-  // 2. 严禁通配符广播 (*, all, broadcast)
+  // 2. 通配符过滤 (*, all, broadcast)
   for (const wildcard of ['*', 'all', 'broadcast', 'ALL', 'Broadcast']) {
     await assert.rejects(
       () => executeSessionCall({ ctx, args: { target_session_id: wildcard, message: 'ping' }, exec }),
-      /session_call 拒绝广播：禁止使用通配符/
+      /session_call: 不支持通配符/
     );
   }
 
-  // 3. 严禁自身调用自身 (防止死循环)
+  // 3. 不能调用自身
   await assert.rejects(
     () => executeSessionCall({
       ctx,
       args: { target_session_id: 'caller-session-12345678', message: 'hello self' },
       exec
     }),
-    /session_call 拒绝自呼叫：严禁调用自身 Session ID/
+    /session_call: 不能调用自身 Session ID/
   );
 
   // 4. 超长消息拦截 (> 4000 字符)
@@ -157,7 +157,7 @@ test('executeSessionCall: 安全防线拦截测试 (通配符/自呼叫/超长�
   );
 });
 
-test('executeSessionCall: 会话前缀解析与歧义熔断机制', async () => {
+test('executeSessionCall: 会话前缀解析与多重匹配处理', async () => {
   const caller = createMockAgent('caller-00000000');
   const sessionAlpha1 = createMockAgent('cluster-worker-node-alpha-1');
   const sessionAlpha2 = createMockAgent('cluster-worker-node-alpha-2');
@@ -175,17 +175,17 @@ test('executeSessionCall: 会话前缀解析与歧义熔断机制', async () => 
       args: { target_session_id: 'cluster', message: 'ping' },
       exec
     }),
-    /session_call 拒绝短前缀：前缀 "cluster" 长度小于 8 位/
+    /session_call: 前缀 "cluster" 长度小于 8 位/
   );
 
-  // 2. 歧义熔断：前缀 "cluster-worker-node-alpha" 匹配到 alpha-1 和 alpha-2 两个会话
+  // 2. 多重匹配拒绝：前缀 "cluster-worker-node-alpha" 匹配到 alpha-1 和 alpha-2 两个会话
   await assert.rejects(
     () => executeSessionCall({
       ctx,
       args: { target_session_id: 'cluster-worker-node-alpha', message: 'ping' },
       exec
     }),
-    /session_call 熔断保护：目标前缀 "cluster-worker-node-alpha" 匹配到 2 个活跃会话/
+    /session_call: 目标前缀 "cluster-worker-node-alpha" 匹配到 2 个活跃会话/
   );
 
   // 3. 唯一前缀 (>= 8 字符) 成功解析
@@ -204,11 +204,11 @@ test('executeSessionCall: 会话前缀解析与歧义熔断机制', async () => 
       args: { target_session_id: 'non-existent-session-id', message: 'ping' },
       exec
     }),
-    /session_call 目标不存在：未找到匹配 "non-existent-session-id" 的活跃会话/
+    /session_call: 未找到匹配 "non-existent-session-id" 的活跃会话/
   );
 });
 
-test('executeSessionCall: 归档会话熔断屏蔽', async () => {
+test('executeSessionCall: 归档会话过滤', async () => {
   const caller = createMockAgent('caller-11112222');
   const archivedTarget = createMockAgent('archived-session-33334444');
 
@@ -224,7 +224,7 @@ test('executeSessionCall: 归档会话熔断屏蔽', async () => {
       args: { target_session_id: 'archived-session-33334444', message: 'ping' },
       exec
     }),
-    /session_call 目标不存在：未找到匹配 "archived-session-33334444" 的活跃会话（或已归档）/
+    /session_call: 未找到匹配 "archived-session-33334444" 的活跃会话/
   );
 });
 
@@ -301,7 +301,7 @@ test('executeSessionCall: 兼容多重调用传参签名 executeSessionCall(ctx,
   assert.equal(res.targetSessionId, 'target-sig-test-2222');
 });
 
-test('executeSessionCall: 规范接入 ctx.logger("dsh-call-session") 并降噪至 debug', async () => {
+test('executeSessionCall: 接入 ctx.logger("dsh-call-session") 并记录 debug 日志', async () => {
   const caller = createMockAgent('caller-logger-1111');
   const target = createMockAgent('target-logger-2222', { status: 'idle' });
 
@@ -337,5 +337,5 @@ test('executeSessionCall: 规范接入 ctx.logger("dsh-call-session") 并降噪�
   assert.equal(res.success, true);
   assert.equal(loggerScope, 'dsh-call-session');
   assert.ok(captured.some(l => l.level === 'debug' && l.args[0]?.includes('Successfully dispatched')));
-  assert.equal(captured.filter(l => l.level !== 'debug').length, 0, '禁止产生非 debug 级别的控制台噪音');
+  assert.equal(captured.filter(l => l.level !== 'debug').length, 0, '不产生非 debug 级别的控制台日志');
 });

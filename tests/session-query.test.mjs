@@ -129,7 +129,7 @@ test('resolveAgentsService: 多上下文多路径探针', () => {
   assert.equal(resolveAgentsService({}), null);
 });
 
-test('executeSessionQuery: 严格两态规约 (running / idle)', () => {
+test('executeSessionQuery: 状态规范化 (running / idle)', () => {
   const aRunning = createMockAgent('sess-running', { status: 'running' });
   const aIdle = createMockAgent('sess-idle', { status: 'idle' });
   const aPaused = createMockAgent('sess-paused', { status: 'paused' });
@@ -147,9 +147,9 @@ test('executeSessionQuery: 严格两态规约 (running / idle)', () => {
   const statusMap = Object.fromEntries(res.sessions.map(s => [s.sessionId, s.status]));
   assert.equal(statusMap['sess-running'], 'running');
   assert.equal(statusMap['sess-idle'], 'idle');
-  assert.equal(statusMap['sess-paused'], 'idle', '非 running 状态必须规范化为 idle');
-  assert.equal(statusMap['sess-ready'], 'idle', '非 running 状态必须规范化为 idle');
-  assert.equal(statusMap['sess-unknown'], 'idle', '非 running 状态必须规范化为 idle');
+  assert.equal(statusMap['sess-paused'], 'idle', '非 running 状态规范化为 idle');
+  assert.equal(statusMap['sess-ready'], 'idle', '非 running 状态规范化为 idle');
+  assert.equal(statusMap['sess-unknown'], 'idle', '非 running 状态规范化为 idle');
 });
 
 test('executeSessionQuery: 归档过滤与 running_only 过滤', () => {
@@ -198,7 +198,7 @@ test('executeSessionQuery: top_level_only 过滤子代理与空白会话', () =>
   assert.equal(resAll.count, 3);
 });
 
-test('executeSessionQuery: 工作区作用域隔离与跨工程穿透', () => {
+test('executeSessionQuery: 工作区作用域隔离与跨工程查询', () => {
   const caller = createMockAgent('caller-sess', { cwd: 'c:/repos/repo-alpha' });
   const peerInAlpha = createMockAgent('peer-alpha', { cwd: 'C:\\repos\\repo-alpha' });
   const peerInBeta = createMockAgent('peer-beta', { cwd: 'c:/repos/repo-beta' });
@@ -267,4 +267,125 @@ test('executeSessionQuery: 兼容位置参数签名 executeSessionQuery(ctx, arg
   assert.equal(res.success, true);
   assert.equal(res.count, 1);
   assert.equal(res.sessions[0].sessionId, 'pos-agent-1');
+});
+
+test('executeSessionQuery: 严格契约对齐 ADR-0005 (totalCount, activeCount, idleCount, workspace, isCurrent)', () => {
+  const caller = createMockAgent('caller-query-1', {
+    status: 'running',
+    title: 'Orchestrator Leader',
+    cwd: 'd:/projects/app-root'
+  });
+  const peerIdle = createMockAgent('peer-idle-1', {
+    status: 'idle',
+    title: 'Idle Worker',
+    cwd: 'd:/projects/app-root'
+  });
+  const peerRunning = createMockAgent('peer-run-2', {
+    status: 'running',
+    title: 'Active Task Runner',
+    cwd: 'd:/projects/app-root'
+  });
+
+  const ctx = createMockCtx({
+    agentsList: [caller, peerIdle, peerRunning]
+  });
+  const exec = { agent: caller };
+
+  const res = executeSessionQuery({
+    ctx,
+    args: { cross_workspace: true },
+    exec
+  });
+
+  // 1. 验证 ADR-0005 结构化统计字段
+  assert.equal(res.totalCount, 3, 'totalCount 必须为总匹配会话数');
+  assert.equal(res.activeCount, 2, 'activeCount 必须为 running 状态会话总数');
+  assert.equal(res.idleCount, 1, 'idleCount 必须为 idle 状态会话总数');
+
+  // 2. 验证会话字段：workspace、status、isCurrent
+  const callerItem = res.sessions.find(s => s.sessionId === 'caller-query-1');
+  assert.ok(callerItem);
+  assert.equal(callerItem.isCurrent, true, '调用方会话必须被标记为 isCurrent=true');
+  assert.equal(callerItem.status, 'running');
+  assert.equal(callerItem.workspace, 'd:/projects/app-root');
+
+  const peerItem = res.sessions.find(s => s.sessionId === 'peer-idle-1');
+  assert.ok(peerItem);
+  assert.equal(peerItem.isCurrent, false, '同级非当前会话必须被标记为 isCurrent=false');
+  assert.equal(peerItem.status, 'idle');
+  assert.equal(peerItem.workspace, 'd:/projects/app-root');
+});
+
+test('session_query Dual-Layer Render: 符合 ADR-0005 标准 Markdown 结构化汇总表格排版', async () => {
+  const { apply } = await import('../index.mjs');
+  const registeredTools = new Map();
+  const mockCtx = {
+    tools: {
+      register(def) {
+        registeredTools.set(def.name, def);
+      }
+    },
+    commands: { register() {} },
+    systemPrompt: { add() {}, context() {} },
+    on() {},
+    emit() {},
+    logger: () => ({ debug() {}, info() {}, warn() {}, error() {} }),
+    get: () => undefined
+  };
+
+  apply(mockCtx);
+  const sessionQueryTool = registeredTools.get('session_query');
+  assert.ok(sessionQueryTool, 'session_query 工具必须成功注册');
+  assert.ok(sessionQueryTool.output?.render, 'session_query 必须声明 output.render 呈现层');
+
+  // 1. 测试存在会话时的表格排版
+  const mockResult = {
+    success: true,
+    count: 2,
+    totalCount: 2,
+    activeCount: 1,
+    idleCount: 1,
+    scope: 'd:/repo',
+    sessions: [
+      {
+        sessionId: 'session-alpha',
+        title: 'Alpha Worker',
+        status: 'running',
+        workspace: 'd:/repo',
+        isCurrent: true
+      },
+      {
+        sessionId: 'session-beta',
+        title: 'Beta Helper',
+        status: 'idle',
+        workspace: 'd:/repo',
+        isCurrent: false
+      }
+    ]
+  };
+
+  const rendered = sessionQueryTool.output.render({}, mockResult);
+  assert.ok(Array.isArray(rendered) && rendered.length > 0);
+  const text = rendered[0].text;
+
+  // 严禁裸倾倒 JSON
+  assert.equal(text.startsWith('{'), false, 'render 严禁倾倒裸 JSON 串');
+  assert.ok(text.includes('### Session Query Overview'), '必须包含概览标题');
+  assert.ok(text.includes('| Session ID | Title | Status | Workspace | Current |'), '必须包含标准 Markdown 表头');
+  assert.ok(text.includes('session-alpha') && text.includes('Alpha Worker') && text.includes('Yes'), '必须渲染包含 Yes 当前标记的数据行');
+  assert.ok(text.includes('session-beta') && text.includes('Beta Helper') && text.includes('No'), '必须渲染包含 No 非当前标记的数据行');
+  assert.ok(text.includes('**Total:** 2 | **Active:** 1 | **Idle:** 1'), '必须包含统计概览行');
+
+  // 2. 测试空列表时的友好提示
+  const emptyRendered = sessionQueryTool.output.render({}, {
+    success: true,
+    count: 0,
+    totalCount: 0,
+    activeCount: 0,
+    idleCount: 0,
+    scope: 'd:/repo',
+    sessions: []
+  });
+  assert.ok(emptyRendered[0].text.includes('No active sessions found.'));
+  assert.ok(emptyRendered[0].text.includes('**Total:** 0 | **Active:** 0 | **Idle:** 0'));
 });

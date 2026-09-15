@@ -1,16 +1,16 @@
 /**
  * @module dsh-call-session
- * DSH 原生跨会话协作、进程内 Session 调度与公共黑板系统 (Cordis 标准插件)
+ * DSH 跨会话协同与公共黑板插件
  *
- * 提供原生能力：
- * 1. 原生工具：
- *    - board_post, board_list, board_clear：纯拉取模式共享状态黑板，零被动唤醒副作用
- *    - session_call：严格 1:1 进程内单播通信，自适应 steer/followup 两态分发
- *    - session_query：原生会话发现，默认工作区隔离，严格 running/idle 两态规约
- * 2. Web 界面交互：
- *    - /dsh-call-session：支持快速单播调度与黑板有效标题大屏看板
- * 3. 插件生命周期：
- *    - 完全可逆的 dispose 事件处理与防抖原子落盘保证
+ * 核心功能：
+ * 1. 工具：
+ *    - board_post, board_list, board_clear: 共享黑板发布、查询与管理
+ *    - session_call: 进程内会话单播通信
+ *    - session_query: 会话发现、工作区过滤与状态规范化
+ * 2. Web 命令：
+ *    - /dsh-call-session: 单播呼叫与黑板标题摘要
+ * 3. 生命周期：
+ *    - 支持 dispose 事件清理与持久化
  */
 
 import type { Context } from '@deepseek-ai/cordis';
@@ -21,6 +21,7 @@ import {
   AtomicBoardStore,
   normalizeWorkspace,
   extractTitle,
+  formatAuthorReminderText,
   type BoardPost,
   type BoardPostStatus,
   type BoardClearAction,
@@ -56,13 +57,51 @@ import {
   type SessionQueryResult
 } from './session-query.js';
 
+import {
+  executeSessionCreate,
+  PEER_SESSION_CONSTANTS,
+  type SessionCreateArgs,
+  type SessionCreateResult
+} from './session-create.js';
+
+import {
+  CallTelemetryRingBuffer,
+  getCanvasTelemetry,
+  getCallTelemetry,
+  computeSessionShortId,
+  resolveCanvasSessionDisplayTitle,
+  type CanvasCallType,
+  type CanvasDeliveryMode,
+  type CanvasSessionState,
+  type CanvasBoardPostStatus,
+  type CallTelemetryRecord,
+  type CallTelemetryFilter,
+  type CanvasWorkspaceEntity,
+  type CanvasSessionEntity,
+  type CanvasBoardPostEntity,
+  type CanvasTelemetrySnapshot,
+  type GetCanvasTelemetryOptions
+} from './call-telemetry.js';
+
+import {
+  installTelemetryWebSurface,
+  authenticatedWebRoutes,
+  createTelemetryHandler,
+  TELEMETRY_ROUTE_PATH,
+  WEB_SERVER_KEYS,
+  type AuthenticatedWebRoutes
+} from './web-telemetry-route.js';
+
 /** Cordis 插件唯一识别名 */
 export declare const name = 'dsh-call-session';
 
-/** 声明式依赖注入服务清单（必需与渐进增强可选服务） */
+/** 声明式依赖注入服务清单 */
 export declare const inject: readonly ['agents', 'tools', 'commands', 'systemPrompt'];
 
-/** 跨会话调度安全与治理常量集合 */
+/** 声明式提供服务清单 */
+export declare const provide: readonly ['callTelemetry', 'boardStore'];
+
+/** 跨会话调度相关常量集合 */
 export declare const DISPATCHER_CONSTANTS: Readonly<{
   TARGET_WILDCARDS: ReadonlySet<string>;
   LIMITS: Readonly<{
@@ -77,22 +116,23 @@ export declare const DISPATCHER_CONSTANTS: Readonly<{
  * 插件运行时配置项定义
  */
 export interface CallSessionConfig {
-  /** 是否启用跨会话通信与公共黑板插件（默认 true） */
+  /** 是否启用跨会话通信与公共黑板插件，默认 true */
   enabled?: boolean;
-  /** 自定义黑板持久化存储文件路径（默认指向插件根目录 board.json） */
+  /** 黑板持久化文件存储路径，默认指向插件根目录下 board.json */
   storagePath?: string;
-  /** 黑板数据原子写盘的防抖延迟（毫秒），默认 300ms */
+  /** 黑板数据持久化防抖延迟，单位毫秒，默认 300 */
   debounceMs?: number;
-  /** 公共黑板最大保留有效条目上限（先进先出淘汰），默认 200 */
+  /** 黑板保留条目上限，按 FIFO 淘汰，默认 200 */
   maxCapacity?: number;
-  /** 注入全局 System Prompt 指南的排序权重，默认 118 */
+  /** 跨会话调用遥测环形缓冲区保留上限，按 FIFO 淘汰，默认 200 */
+  telemetryCapacity?: number;
+  /** 注入全局 System Prompt 的排序权重，默认 118 */
   promptSectionOrder?: number;
-  /** 是否在 Web GUI 注册 /dsh-call-session 斜杠快捷指令，默认 true */
+  /** 记名提醒注入 System Prompt Context 的排序权重，默认 130 */
+  remindContextOrder?: number;
+  /** 是否注册 /dsh-call-session 斜杠命令，默认 true */
   slashCommand?: boolean;
 }
-
-/** 兼容历史命名的类型别名 */
-export type CallAgentConfig = CallSessionConfig;
 
 /**
  * Schemastery 强类型配置 Schema 定义
@@ -117,6 +157,7 @@ export declare function apply(ctx: Context, config?: CallSessionConfig): void;
 declare const _default: {
   name: typeof name;
   inject: typeof inject;
+  provide: typeof provide;
   Config: typeof Config;
   apply: typeof apply;
   usageSectionText: typeof usageSectionText;
@@ -128,6 +169,7 @@ export {
   AtomicBoardStore,
   normalizeWorkspace,
   extractTitle,
+  formatAuthorReminderText,
   getArchivedSessionIds,
   resolveSessionCwd,
   resolveSessionTitle,
@@ -135,7 +177,19 @@ export {
   executeSessionQuery,
   executeSessionCall,
   dispatchNativeMessage,
-  CALL_TYPE_INTENTS
+  CALL_TYPE_INTENTS,
+  executeSessionCreate,
+  PEER_SESSION_CONSTANTS,
+  CallTelemetryRingBuffer,
+  getCanvasTelemetry,
+  getCallTelemetry,
+  computeSessionShortId,
+  resolveCanvasSessionDisplayTitle,
+  installTelemetryWebSurface,
+  authenticatedWebRoutes,
+  createTelemetryHandler,
+  TELEMETRY_ROUTE_PATH,
+  WEB_SERVER_KEYS
 };
 
 export type {
@@ -157,5 +211,19 @@ export type {
   NativeUserMessage,
   SessionInfo,
   SessionQueryArgs,
-  SessionQueryResult
+  SessionQueryResult,
+  SessionCreateArgs,
+  SessionCreateResult,
+  CanvasCallType,
+  CanvasDeliveryMode,
+  CanvasSessionState,
+  CanvasBoardPostStatus,
+  CallTelemetryRecord,
+  CallTelemetryFilter,
+  CanvasWorkspaceEntity,
+  CanvasSessionEntity,
+  CanvasBoardPostEntity,
+  CanvasTelemetrySnapshot,
+  GetCanvasTelemetryOptions,
+  AuthenticatedWebRoutes
 };

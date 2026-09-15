@@ -173,9 +173,9 @@ Exposing these raw, transient internal states to LLM subagents caused significan
 ## 5. Consequences
 
 ### 5.1 Positive Consequences (Benefits)
-- **Zero Status Misinterpretation**: LLMs clearly understand whether an agent is busy (`running`) or ready for a task dispatch (`idle`).
-- **Resilient UI Presentation**: Sessions consistently show meaningful titles across all DSH core versions.
-- **Significant Token Savings**: English schema keys reduce payload size by ~40% compared to localized string representations.
+- **Deterministic Status Evaluation**: LLMs evaluate whether an agent is busy (`running`) or ready for dispatch (`idle`) without intermediate state ambiguity.
+- **Resilient UI Presentation**: Sessions consistently show valid titles across DSH versions.
+- **Token Savings**: English schema keys reduce payload size by ~40% compared to localized string representations.
 - **Dual-Layer Usability**: Machines parse JSON; humans inspect cleanly formatted Markdown tables.
 
 ### 5.2 Negative Consequences (Tradeoffs & Mitigations)

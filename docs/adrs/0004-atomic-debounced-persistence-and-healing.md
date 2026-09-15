@@ -139,9 +139,9 @@ Under naive filesystem persistence strategies (e.g. synchronous `fs.writeFileSyn
 ## 5. Consequences
 
 ### 5.1 Positive Consequences (Benefits)
-- **Extreme Speed**: Reads and writes take less than 0.1ms since they hit Node.js heap memory directly.
-- **Resilience Against Crashes**: No half-written or zero-length JSON files can ever replace `board.json`.
-- **Zero Windows Lock Failures**: Exponential backoff absorbs transient file locking from antivirus or IDE tools.
+- **Low Latency**: Reads and writes complete within sub-millisecond ranges since they access Node.js heap memory directly.
+- **Resilience Against Crashes**: Atomic rename prevents partially written or truncated files from replacing `board.json`.
+- **Windows Lock Contention Tolerance**: Exponential backoff absorbs transient file locks from background scanners or IDE indexing.
 - **Auto-Healing**: A corrupted file automatically repairs itself from `.bak` on restart without manual intervention.
 
 ### 5.2 Negative Consequences (Tradeoffs & Mitigations)

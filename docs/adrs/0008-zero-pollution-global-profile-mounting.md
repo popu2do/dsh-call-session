@@ -11,26 +11,26 @@
 ## 1. Context and Problem Statement
 
 ### 1.1 Background & Pain Points
-传统在 DSH 中扩展插件时，开发者经常面临两种极端困境：
-1. **侵入式项目级安装**：在每一个代码工程或工作区中重复安装依赖并配置，导致不同工程间插件版本脱节、配置冗余；
-2. **硬编码修改底座文件**：直接修改 DSH 宿主内部核心文件，升级 DSH 版本时改动被瞬间覆盖；
-3. **资源卸载泄漏**：插件在热重载或停用时，残留了未清理的工具注册、文件监听句柄或异步防抖定时器，导致“僵尸工具”与内存泄漏。
+在 DSH 中扩展插件时，存在以下工程约束与常见问题：
+1. **侵入式项目级安装**：在每个代码工程或工作区重复配置依赖，增加维护成本与版本分歧；
+2. **底层代码修改**：直接修改宿主核心文件，升级版本时容易被覆盖；
+3. **资源卸载泄漏**：插件热重载或停用时若未清理注册句柄或定时器，会导致常驻内存泄漏。
 
-跨会话中枢系统 `dsh-call-session` 必须实现**“全局开箱即用、任意会话无污染协作、生命周期完全可逆”**的宿主级标准。
+`dsh-call-session` 需要实现全局可用、会话环境隔离与生命周期可逆管理。
 
 ### 1.2 Architectural Forces & Constraints
-- **Universal Availability**：宿主启动后，当前 DSH 实例下的任意会话（无论处于何种工作区目录）均自动具备 `session_call`、`session_query`、`board_*` 及 `/dsh-call-session` 命令能力；
-- **Zero Configuration in Projects**：业务工程工作区无需放置任何额外配置或 node_modules；
-- **Reversible Lifecycle**：插件的加载与卸载必须是完全对偶可逆的，严禁在宿主环境中留下死句柄或僵尸事件。
+- **Universal Availability**：宿主启动后，当前 DSH 实例下的任意会话均可调用 `session_call`、`session_query`、`board_*` 及 `/dsh-call-session` 命令；
+- **Zero Configuration in Projects**：业务工程工作区无需额外配置文件或 node_modules；
+- **Reversible Lifecycle**：插件的加载与卸载保持对偶可逆，卸载时注销所有注册句柄与定时器。
 
 ---
 
 ## 2. Decision Drivers
 
-- **Driver 1 (Out-of-the-Box Experience)**：用户或 Agent 在任意会话中即可无感调用跨会话能力；
-- **Driver 2 (Declarative Cordis Composition)**：采用官方推荐的 `cordis.patch.yml` 声明式切面挂载机制；
-- **Driver 3 (Strict Injection Discipline)**：严格遵循 Cordis 服务注入规范，声明 `inject: ['agents', 'tools', 'commands']`；
-- **Driver 4 (Deterministic Teardown)**：借助 `ctx.on('dispose')` 实现异步存储刷新与全部副作用的安全注销。
+- **Driver 1 (Global Availability)**：用户或 Agent 在任意会话中可直接调用跨会话能力；
+- **Driver 2 (Declarative Cordis Composition)**：采用 `cordis.patch.yml` 声明式切面挂载机制；
+- **Driver 3 (Strict Injection Discipline)**：遵循 Cordis 服务注入规范，声明 `inject: ['agents', 'tools', 'commands']`；
+- **Driver 4 (Deterministic Teardown)**：借助 `ctx.on('dispose')` 实现异步存储刷新与副作用注销。
 
 ---
 
@@ -39,11 +39,11 @@
 ### Option 1: Manual Project-Level Plugin Registration (Rejected)
 - **Description**: 在每个业务工程的 `.reasonix` 或 `package.json` 中配置该插件。
 - **Pros**: 局部隔离。
-- **Cons**: 跨工作区会话无法协同，配置繁琐，极度影响多会话协作开箱体验。
+- **Cons**: 跨工作区会话无法协同，配置繁琐，增加多会话协作维护成本。
 
 ### Option 2 (Chosen): Declarative Global Profile Patch (`cordis.patch.yml`) + Fiber-Scoped Reversible Lifecycle
-- **Description**: 在宿主全局 Profile（如 `~/.dsh/profiles/web/cordis.patch.yml`）中声明插入插件。插件通过声明式 `inject` 注入核心服务，并通过 Cordis Fiber 自动纳管生命周期副作用。
-- **Pros**: 一次挂载，全宿主、全工程、全会话开箱即用；生命周期安全无泄漏。
+- **Description**: 在宿主全局 Profile（如 `~/.dsh/profiles/web/cordis.patch.yml`）中声明插入插件。插件通过声明式 `inject` 注入核心服务，并通过 Cordis Fiber 纳管生命周期副作用。
+- **Pros**: 一次挂载，各工程与会话可直接调用，生命周期可逆注销。
 - **Cons**: 需要宿主正确加载 Profile 层。
 
 ---
@@ -67,7 +67,7 @@
         maxCapacity: 200
 ```
 
-> **注意（反模式纠偏）**：用户无需手动将 `- insert:` 块复制到 Profile 根目录的 `cordis.patch.yml` 中（否则会导致重复双重注入）。若需自定义配置，仅需在 Profile 的 `cordis.patch.yml` 中声明属性覆盖层：
+> **配置规范**：无需将 `- insert:` 块手动复制到 Profile 根目录的 `cordis.patch.yml` 中，避免重复注入。若需自定义配置，在 Profile 的 `cordis.patch.yml` 中声明属性覆盖层：
 > ```yaml
 > # ~/.dsh/profiles/web/cordis.patch.yml (用户自定义配置覆盖)
 > - id: dsh-call-session
@@ -133,9 +133,9 @@ export function apply(ctx, config = {}) {
 ## 5. Consequences
 
 ### 5.1 Positive Consequences (Benefits)
-- **全系统零感知即用**：任何新启动的会话或已有会话，输入工具调用或 `/dsh-call-session` 即可立即响应；
-- **环境绝对整洁**：业务工程工作区无需任何多余的配置文件或 node_modules，杜绝代码污染；
-- **完美的可测试性与热重载**：在自动化测试或宿主重启时，插件可以随时卸载与重载，无残留副作用。
+- **全局可用**：新建或已有会话均可调用工具与 `/dsh-call-session` 命令；
+- **工程无污染**：业务工程工作区无需额外配置文件或 node_modules；
+- **可测试性与热重载**：在自动化测试或宿主重启时，插件可正常卸载与重载，无残留副作用。
 
 ### 5.2 Negative Consequences (Tradeoffs & Mitigations)
 - **多会话共享单一 BoardStore**：
@@ -148,7 +148,7 @@ export function apply(ctx, config = {}) {
 ### 6.1 Automated Verification Suite
 - **声明注入断言**：测试验证导出的 `inject` 数组精确包含 `['agents', 'tools', 'commands']`；
 - **Dispose 清理断言**：在单元测试中调用插件卸载 Disposer，验证：
-  1. `boardStore` 防抖定时器已彻底清空；
+  1. `boardStore` 防抖定时器已清空；
   2. `ctx.tools` 中 `session_call` / `board_*` 注册已被移除；
   3. `ctx.commands` 中 `dsh-call-session` 注册已被注销。
 
