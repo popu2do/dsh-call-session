@@ -58,6 +58,8 @@ jobs:
 
       - name: Publish to npm
         if: env.NPM_TOKEN != '' && (github.event_name != 'workflow_dispatch' || !inputs.dry_run)
-        run: npm publish --provenance --access public
+        run: |
+          npm config set //registry.npmjs.org/:_authToken "${NPM_TOKEN}"
+          npm publish "${TARBALL_NAME}" --access public
         env:
           NODE_AUTH_TOKEN: ${{ env.NPM_TOKEN }}
