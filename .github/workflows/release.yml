@@ -42,9 +42,10 @@ jobs:
 
       - name: Build npm package tarball
         run: |
-          TARBALL=$(npm pack --ignore-scripts)
-          echo "TARBALL_NAME=$TARBALL" >> $GITHUB_ENV
-          echo "Packed release tarball: $TARBALL"
+          npm pack --ignore-scripts --pack-destination .
+          TARBALL_NAME=$(ls dsh-call-session-*.tgz | head -n 1)
+          echo "TARBALL_NAME=$TARBALL_NAME" >> $GITHUB_ENV
+          echo "Packed release tarball: $TARBALL_NAME"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
