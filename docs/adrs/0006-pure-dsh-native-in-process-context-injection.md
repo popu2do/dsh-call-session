@@ -125,7 +125,7 @@
 - **2026-09-04**: Proposed & Accepted by Engineering Team
 - **Related ADRs**:
   - Supersedes: 废除 ADR-0001 中关于 HTTP 触发与文本报文生成的残留实现描述
-  - Related to: ADR-0007 (Web Slash Command), ADR-0008 (Global Profile Mounting)
+  - Related to: ADR-0007 (Web Slash Command - Superseded), ADR-0008 (Global Profile Mounting)
 - **Implementation Artifacts**:
   - `lib/session-call.mjs`
   - `index.mjs`

@@ -32,10 +32,31 @@ export declare function apply(ctx: Context): void;
  */
 export interface CanvasViewProps {
   sessionId?: string;
+  crossWorkspace?: boolean;
+  locale?: string;
   t?: (key: string, params?: Record<string, any>) => string;
   fetchTelemetry?: (options?: { workspace?: string; crossWorkspace?: boolean; limit?: number }) => Promise<any>;
   [key: string]: any;
 }
+
+/**
+ * 匹配会话 ID 与目标短码或前缀
+ */
+export declare function isMatchingSession(
+  sid: string,
+  targetId?: string,
+  sessionShortId?: string
+): boolean;
+
+/**
+ * 基于渲染像素宽度与英文单词边界感知进行文本截断
+ */
+export declare function truncateTextByWidth(
+  text: string | null | undefined,
+  maxWidth: number,
+  charWidthAscii?: number,
+  charWidthWide?: number
+): string;
 
 /**
  * 实体详情只读抽屉组件属性定义
@@ -121,6 +142,8 @@ declare const _default: {
   en: typeof en;
   CanvasView: typeof CanvasView;
   CanvasDrawer: typeof CanvasDrawer;
+  isMatchingSession: typeof isMatchingSession;
+  truncateTextByWidth: typeof truncateTextByWidth;
   calculateBezierPath: typeof calculateBezierPath;
   getCallEdgeDecay: typeof getCallEdgeDecay;
   computeLayout: typeof computeLayout;

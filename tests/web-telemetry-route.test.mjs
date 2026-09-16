@@ -383,7 +383,6 @@ test('Web Telemetry Route: apply 挂载遥测路由且不唤醒 Agent', async ()
 
   apply(ctx, {
     enabled: true,
-    slashCommand: false,
     storagePath: path.join(rootDir, 'tests', '.tmp-web-route-board.json')
   });
 

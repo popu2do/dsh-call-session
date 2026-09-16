@@ -1025,9 +1025,9 @@ test('new session 与未产生调用的新会话在看板中全景上屏 (PRD 2.
   assert.equal(snapshot.metrics.totalSessions, 2);
   assert.equal(snapshot.metrics.runningSessions, 1);
 
-  // 验证工作区泳道包含这两个会话
+  // 验证工作区分组容器包含这两个会话
   const ws = snapshot.workspaces.find(w => w.id === 'c:/workspace/app');
-  assert.ok(ws, '必须包含所属工作区泳道');
+  assert.ok(ws, '必须包含所属工作区分组容器');
   assert.ok(ws.sessionIds.includes('session-new-born-1234'));
   assert.ok(ws.sessionIds.includes('session-existing-5678'));
 });
