@@ -2,7 +2,7 @@
 
 - 文档版本：2.0.0
 - 状态：正式设计规格（Baseline）
-- 依据：老板手绘原图架构、缺陷清单（17项）及 ADR-0001 / ADR-0003 / ADR-0005 / ADR-0009 / ADR-0010 / ADR-0012
+- 依据：系统架构设计原图、缺陷清单（17项）及 ADR-0001 / ADR-0003 / ADR-0005 / ADR-0009 / ADR-0010 / ADR-0012
 - 面向角色：前端看板工程师、宿主遥测工程师、QA 验证工程师、界面评审员、语言风格审查员
 
 ---
@@ -10,7 +10,7 @@
 ## 1. 概述
 
 ### 1.1 定位目标
-协作看板（Collaboration Canvas）是 `dsh-call-session` 插件内置的全局拓扑可视化镜像。系统将老板手绘原图确立的「顶部黑板通条 + 并排竖泳道工作区 + 泳道内单列 session 椭圆 + 跨泳道有向连线 + 全图线框化低饱和虚线」信息架构完整工程化落地，修复旧版全部 17 项数据语义、渲染与交互缺陷。
+协作看板（Collaboration Canvas）是 `dsh-call-session` 插件内置的全局拓扑可视化镜像。系统依据架构设计实现「顶部黑板栏 + 并排工作区分组列 + 工作区列内单列 session 椭圆 + 跨工作区有向连线 + 全图浅灰虚线」的拓扑架构，修复旧版全部 17 项数据语义、渲染与交互缺陷。
 
 ### 1.2 核心约束
 1. **只读性约束（Strict Read-Only）**：
@@ -24,11 +24,11 @@
 
 ## 2. 架构映射
 
-看板信息架构严格还原手绘原图层次：
+看板信息架构严格还原设计原图层次：
 
 ```
 +---------------------------------------------------------------------------------------------------+
-|  [顶部公共黑板通条] (横贯全宽，浅灰线框，高度 96px)                                                  |
+|  [顶部公共黑板栏] (横贯全宽，浅灰线框，高度 96px)                                                    |
 |  +-------------------+  +-------------------+  +-------------------+                              |
 |  | 黑板条目方块 (Active) |  | 黑板条目方块 (Arch.) |  | 黑板条目方块 (Exp.) |   ...                      |
 |  +-------------------+  +-------------------+  +-------------------+                              |
@@ -37,14 +37,14 @@
           | [发布归属边]                | [上下文引用边]            |
           | (session -> post)        | (call -> post)          |
 +--------------------------+  +--------------------------+  +--------------------------+
-| 工作区竖泳道 1 (当前工程)   |  | 工作区竖泳道 2 (协同工作区)  |  | 工作区竖泳道 3 (协同工作区)  |
-| 宽度 260px，窄竖长条       |  | 宽度 260px，窄竖长条       |  | 宽度 260px，窄竖长条       |
+| 工作区列 1 (当前工程)       |  | 工作区列 2 (协同工作区)      |  | 工作区列 3 (协同工作区)      |
+| 宽度 260px，纵向分组       |  | 宽度 260px，纵向分组       |  | 宽度 260px，纵向分组       |
 |                          |  |                          |  |                          |
 |  (  Session 椭圆节点 1  ) |  |  (  Session 椭圆节点 3  ) |  |  (  Session 椭圆节点 5  ) |
 |         rx=96, ry=26     |  |         rx=96, ry=26     |  |         rx=96, ry=26     |
 |              |           |  |                          |  |                          |
 |              |           |  |                          |  |                          |
-|  (  Session 椭圆节点 2  ) |--+---- [跨泳道调用连线] ------->|  (  Session 椭圆节点 6  ) |
+|  (  Session 椭圆节点 2  ) |--+---- [跨工作区调用连线] ----->|  (  Session 椭圆节点 6  ) |
 |         rx=96, ry=26     |  | (三次贝塞尔有向曲线，端点裁剪) |         rx=96, ry=26     |
 |                          |  |                          |  |                          |
 |  [ 单列纵向居中排列 ]      |  |  (  Session 椭圆节点 4  ) |  |  [ 单列纵向居中排列 ]      |
@@ -52,11 +52,11 @@
 ```
 
 ### 2.1 层次映射
-- **顶部横条**：公共黑板通条容器（Blackboard Strip），承载所有全局拉取式状态条目（`board_post`）。
-- **纵向竖条**：工作区泳道（Workspace Swimlane），横向并排排列，每个泳道代表一个独立工作区目录（`cwd`）。
-- **泳道内部**：单列纵向居中排列会话节点（Session Node），形态严格采用**几何椭圆**，杜绝旧版双列错位混排。
-- **关系织网**：
-  1. 跨泳道/同泳道会话间：绘制 `session_call` 跨节点调用连线；
+- **顶部横条**：公共黑板栏容器（Blackboard Area / Strip），承载所有全局拉取式状态条目（`board_post`）。
+- **纵向竖条**：工作区分组列（Workspace Column / Container），横向并排排列，每列代表一个独立工作区目录（`cwd`）。
+- **工作区列内部**：单列纵向居中排列会话节点（Session Node），形态严格采用**几何椭圆**，杜绝旧版双列错位混排。
+- **关系拓扑**：
+  1. 跨工作区/同工作区会话间：绘制 `session_call` 跨节点调用连线；
   2. 会话与黑板条目间：绘制 `authorSessionId` 发布归属连线；
   3. 调用连线与黑板条目间：绘制 `contextPostIds` 上下文引用连线。
 
@@ -66,22 +66,22 @@
 
 所有图元默认态均为**空心线框**（描边、无填充或极低饱和微透明填充）。
 
-### 3.1 参数矩阵
+### 3.1 规格参数表
 
 | 图元分类 | 几何特征与尺寸 (px) | 布局与间距规则 (px) | 默认态样式（低饱和虚线） | 高亮态样式（1-Hop 聚焦） | 文本排版与色值 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **1. 顶部黑板通条** | 宽度：跟随工作区总宽（`min-width: 1080px`）；高度：`96px`；圆角：`rx=8, ry=8` | 起始坐标：`x=40, y=24`；与下方泳道纵向间距：`30px` | `fill: rgba(15, 23, 42, 0.35)`<br>`stroke: #475569`<br>`stroke-width: 1.2px`<br>`stroke-dasharray: 6 4` | `stroke: #38bdf8`<br>`stroke-width: 2.0px`<br>`stroke-dasharray: none`<br>`filter: drop-shadow(0 0 6px rgba(56, 189, 248, 0.25))` | 通条标题：`11px`，`#94a3b8`，字重 600；计数徽章：`11px`，`#38bdf8` |
-| **2. 黑板条目方块** | 宽度：`180px`；高度：`48px`；圆角：`rx=6, ry=6` | 位于通条内，横向单行排列；起始：`x=56, y=52`；水平间距：`16px` | **Active**: `stroke: #64748b, 1.2px, 4 3`<br>**Archived**: `stroke: #334155, 1px, 2 3`<br>**Expired**: `stroke: #1e293b, 1px, 1 3`<br>`fill: rgba(30, 41, 59, 0.45)` | `stroke: #38bdf8`<br>`stroke-width: 1.8px`<br>`stroke-dasharray: none`<br>`fill: rgba(15, 23, 42, 0.85)` | Topic: `11px`, `#e2e8f0`, 最大宽 `110px`; 状态标签: `10px`, Active `#38bdf8` / Arch `#64748b` |
-| **3. 工作区竖泳道** | 宽度：`260px`；最小高度：`480px`；圆角：`rx=10, ry=10` | 纵向起始：`y=150`；泳道间横向水平净距：`36px`；动态高度公式见 3.2 节 | **当前工作区**: `stroke: #64748b, 1.4px, 6 3, opacity: 0.75`<br>**外部工作区**: `stroke: #334155, 1.2px, 6 4, opacity: 0.45`<br>`fill: rgba(15, 23, 42, 0.2)` | `stroke: #60a5fa`<br>`stroke-width: 2.0px`<br>`stroke-dasharray: none`<br>`stroke-opacity: 0.95` | 泳道头部：高度 `38px`；文字：`12px`，字重 600，`#94a3b8`；当前工作区加注 `[Current]` |
-| **4. 会话椭圆节点** | **几何椭圆**：半长轴 `rx=96px`，半短轴 `ry=26px`（外接 `192px × 52px`） | 泳道内单列纵向居中：`cx = wsX + 130`；首节点 `cy = 214`；垂直中心距：`72px`（外边缘净距 `20px`） | **Running**: `stroke: #22c55e, 1.5px, 5 3`<br>**Idle**: `stroke: #64748b, 1.2px, 4 4`<br>`fill: #090d16`（遮挡底线） | `stroke-width: 2.2px`<br>`stroke-dasharray: none`<br>**Running**: `stroke: #4ade80`<br>**Idle**: `stroke: #93c5fd`<br>扩散光晕：`drop-shadow(0 0 8px ...)` | 短码：`11px` 等宽，`#38bdf8`；标题：`12px`，`#f1f5f9`，最大渲染宽 `105px` |
+| **1. 顶部黑板栏** | 宽度：跟随工作区总宽（`min-width: 1080px`）；高度：有条目时 `96px`，无条目时自适应收缩为 `38px` 轻量状态条；圆角：`rx=8, ry=8` | 起始坐标：`x=40, y=24`；与下方工作区列纵向间距：`30px` | `fill: rgba(15, 23, 42, 0.35)`<br>`stroke: #475569`<br>`stroke-width: 1.2px`<br>`stroke-dasharray: 6 4` | `stroke: #38bdf8`<br>`stroke-width: 2.0px`<br>`stroke-dasharray: none`<br>`filter: drop-shadow(0 0 6px rgba(56, 189, 248, 0.25))` | 黑板栏标题：`11px`，`#94a3b8`，字重 600；计数徽章：`11px`，`#38bdf8`，存在历史条目时显式标注 `(活跃 / 总计)`；空态提示：居中显示「暂无黑板条目」 |
+| **2. 黑板条目方块** | 宽度：`180px`；高度：`48px`；圆角：`rx=6, ry=6` | 位于黑板栏内，横向单行排列；起始：`x=56, y=52`；水平间距：`16px` | **Active**: `stroke: #64748b, 1.2px, 4 3`<br>**Archived**: `stroke: #334155, 1px, 2 3`<br>**Expired**: `stroke: #1e293b, 1px, 1 3`<br>`fill: rgba(30, 41, 59, 0.45)`（非活跃为低饱和度 `rgba(15, 23, 42, 0.35)`） | `stroke: #38bdf8`<br>`stroke-width: 1.8px`<br>`stroke-dasharray: none`<br>`fill: rgba(15, 23, 42, 0.85)` | Topic: `11px`, `#e2e8f0` (非活跃 `#94a3b8`); 状态标签: `10px`, Active `#38bdf8` / Arch `#64748b`; 非活跃卡片顶部带有灰底状态标签 `[已撤销]` / `[已过期]` |
+| **3. 工作区分组容器** | 宽度：`260px`；最小高度：`480px`；圆角：`rx=10, ry=10` | 纵向起始：`y=150`；工作区列间横向水平净距：`36px`；动态高度公式见 3.2 节 | **当前工作区**: `stroke: #64748b, 1.4px, 6 3, opacity: 0.75`<br>**外部工作区**: `stroke: #334155, 1.2px, 6 4, opacity: 0.45`<br>`fill: rgba(15, 23, 42, 0.2)` | `stroke: #60a5fa`<br>`stroke-width: 2.0px`<br>`stroke-dasharray: none`<br>`stroke-opacity: 0.95` | 容器头部：高度 `38px`；文字：`12px`，字重 600，`#94a3b8`；当前工作区加注 `[Current]` |
+| **4. 会话椭圆节点** | **几何椭圆**：半长轴 `rx=96px`，半短轴 `ry=26px`（外接 `192px × 52px`） | 工作区列内单列纵向居中：`cx = wsX + 130`；首节点 `cy = 214`；垂直中心距：`72px`（外边缘净距 `20px`） | **Running**: `stroke: #22c55e, 1.5px, 5 3`<br>**Idle**: `stroke: #64748b, 1.2px, 4 4`<br>`fill: #090d16`（遮挡底线） | `stroke-width: 2.2px`<br>`stroke-dasharray: none`<br>**Running**: `stroke: #4ade80`<br>**Idle**: `stroke: #93c5fd`<br>扩散光晕：`drop-shadow(0 0 8px ...)`<br>**当前会话 (Current Session)**: `stroke: #38bdf8, 2.4px, none`；发光光晕：`drop-shadow(0 0 8px #38bdf8)`；标题旁加注 `[当前]` 状态标签 | 短码：`11px` 等宽，`#38bdf8`；标题：`12px`，`#f1f5f9`，最大渲染宽 `105px`（当前会话自适应 64px 并加注状态标签） |
 | **5. 跨会话调用连线** | 有向平滑三次贝塞尔曲线；箭头 Marker：底宽 `6px`，高 `8px` | 起终点自几何中心计算，精确裁剪至椭圆轮廓（见 4.2 节） | `stroke-width: 1.2px`<br>`stroke-dasharray: 4 4`<br>**dispatch**: `#818cf8, op: 0.45`<br>**report**: `#34d399, op: 0.45`<br>**notice**: `#94a3b8, op: 0.35` | `stroke-width: 2.2px`<br>`stroke-dasharray: none`<br>`stroke-opacity: 1.0`<br>**dispatch**: `#a5b4fc`<br>**report**: `#6ee7b7`<br>**notice**: `#cbd5e1` | 悬停卡片展示详情；活跃调用流动粒子周期：`1.5s` |
-| **6. 黑板发布归属边** | 平滑二次贝塞尔曲线（Session 椭圆顶部 -> Post 方块底部） | 数据来源：`post.authorSessionId == session.id` | `stroke: #64748b`<br>`stroke-width: 1.0px`<br>`stroke-dasharray: 2 4`<br>`stroke-opacity: 0.22` | `stroke: #38bdf8`<br>`stroke-width: 1.8px`<br>`stroke-dasharray: 4 2`<br>`stroke-opacity: 0.9` | 悬停在 Session 或 Post 时双向激活 |
-| **7. 调用引用黑板边** | 细虚线折线/曲线（Call 连线中点 -> Post 方块底部） | 数据来源：`call.contextPostIds.includes(post.id)` | `stroke: #475569`<br>`stroke-width: 0.8px`<br>`stroke-dasharray: 2 4`<br>`stroke-opacity: 0.12` | `stroke: #fbbf24`<br>`stroke-width: 1.6px`<br>`stroke-dasharray: 3 3`<br>`stroke-opacity: 0.85` | 悬停在 Call 或对应 Post 时高亮激活 |
+| **6. 黑板发布归属边** | 平滑二次贝塞尔曲线（Session 椭圆顶部 -> Post 方块底部） | 数据来源：`post.authorSessionId == session.id` | `stroke: #64748b`<br>`stroke-width: 1.2px`<br>`stroke-dasharray: 4 3`<br>`stroke-opacity: 0.50` | `stroke: #38bdf8`<br>`stroke-width: 1.8px`<br>`stroke-dasharray: 4 2`<br>`stroke-opacity: 0.90` | 悬停在 Session 或 Post 时双向激活；默认态达到 WCAG 2.1 对比度标准（>= 3:1） |
+| **7. 调用引用黑板边** | 细虚线折线/曲线（Call 连线中点 -> Post 方块底部） | 数据来源：`call.contextPostIds.includes(post.id)` | `stroke: #fbbf24`<br>`stroke-width: 1.0px`<br>`stroke-dasharray: 3 3`<br>`stroke-opacity: 0.45` | `stroke: #fbbf24`<br>`stroke-width: 1.6px`<br>`stroke-dasharray: 3 3`<br>`stroke-opacity: 0.85` | 悬停在 Call 或对应 Post 时高亮激活；默认态采用琥珀色达到 WCAG 2.1 对比度标准（>= 3:1） |
 
 ### 3.2 尺寸计算
-- **泳道动态高度**：
-  $$H_{\text{swimlane}} = \max\left(480, 76 + N_{\text{sessions}} \times 72 + 24\right)\quad (\text{单位: px})$$
-- **黑板通条宽度**：
+- **工作区分组容器动态高度**：
+  $$H_{\text{workspace}} = \max\left(480, 76 + N_{\text{sessions}} \times 72 + 24\right)\quad (\text{单位: px})$$
+- **顶部黑板栏宽度**：
   $$W_{\text{blackboard}} = \max\left(1080, N_{\text{workspaces}} \times (260 + 36) - 36 + 80\right)\quad (\text{单位: px})$$
 
 ---
@@ -99,10 +99,11 @@
    - 数据源：`snapshot.posts` 中每条条目的 `post.authorSessionId`。
    - 起点：发布者 Session 节点坐标；终点：目标 Post 方块底部坐标。
    - 过滤规则：仅当 `authorSessionId` 匹配当前可视区域内的某个 Session 实体时生成边。
+   - 默认显示策略：默认态保持清晰可见且符合 WCAG 2.1 对比度标准（透明度 0.50，线宽 1.2px，灰色 #64748b，虚线 4 3），悬停对应 Session 或 Post 时高亮激活（透明度 0.90，线宽 1.8px，天蓝色 #38bdf8，虚线 4 2）。
 3. **调用引用黑板边（Call-to-Post Context Edge）**：
    - 数据源：`snapshot.calls` 中每条记录的 `call.contextPostIds` 数组。
    - 起点：调用连线中点控制坐标 $(P_{cx}, P_{cy})$；终点：被引用的 `post.id` 对应方块底部中点。
-   - 默认显示策略：默认态保持极弱可见性（透明度 0.12），悬停对应 Call 连线或 Post 时完全高亮（透明度 0.85）。
+   - 默认显示策略：默认态保持清晰可见且符合 WCAG 2.1 对比度标准（透明度 0.45，线宽 1.0px，高辨识度琥珀色 #fbbf24，虚线 3 3），悬停对应 Call 连线或 Post 时高亮聚焦（透明度 0.85，线宽 1.6px，高辨识度琥珀色 #fbbf24，虚线 3 3）。
 
 ### 4.2 边界裁剪
 严禁连线端点直接取节点几何中心导致连线或箭头 Marker 埋入椭圆内部。
@@ -122,14 +123,19 @@ $$t = \frac{1}{\sqrt{\left(\frac{\Delta x}{a}\right)^2 + \left(\frac{\Delta y}{b
 ## 5. 排版字体
 
 ### 5.1 文本截断
-废除按字符数 `slice(0, 14)` 硬截断的错误逻辑。中文字符物理宽度约为英文字符的 1.8~2.0 倍，必须基于**像素渲染宽度**截断并添加省略号 `...`。
+废除按字符数 `slice(0, 14)` 硬截断的错误逻辑。中文字符物理宽度约为英文字符的 1.8~2.0 倍，必须基于**像素渲染宽度**与**英文单词边界感知**进行截断并添加省略号 `...`。
 
-1. **节点标题（Session Title）**：
-   - 容器分配最大宽度：`105px`。
-   - 样式声明：`overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 105px;`（在 SVG 中使用等价的基于宽度估算算法：英文字符 `7.2px`，中文字符 `12.5px`，预留 `16px` 省略号空间）。
+1. **会话节点标题（Session Title）**：
+   - 动态可用宽度计算：
+     - 当前会话（渲染 `[当前]` 状态标签）：分配可用宽度 `64px`；
+     - 存在右侧调用计数徽章（`session.stats.outboundCalls || session.stats.inboundCalls`）：分配可用宽度 `105px`；
+     - 无右侧徽章的普通会话：充分利用节点右侧留白空间，放宽可用宽度至 `140px`（可多容纳 3~4 个中文字符或完整英文单词）。
+   - 算法规则与单词边界感知：
+     - 在 SVG 中使用等价的基于渲染宽度估算算法：英文字符（ASCII）`7.2px`，中文字符（Wide）`12.5px`，预留 `16px` 省略号空间；
+     - 英文单词边界感知（Word-Boundary Awareness）：截断英文字符串时避免在单词内部截断；当截断位置切入英文/数字单词且前面包含空格时，优先回退至单词边界空格处截断并追加 `...`；若为无空格单长词则优雅降级为字符级截断；追加省略号前自动修剪末尾空白字符。
 2. **黑板条目主题（Post Topic）**：
-   - 容器分配最大宽度：`110px`。
-   - 规则同上，超出自动截断并展示 `...`，完整内容通过悬停 Tooltip 呈现。
+   - 容器分配最大宽度：活跃卡片 `110px`，非活跃卡片（带状态标签）`96px`。
+   - 规则同上，超出自动截断并展示 `...`，完整内容通过悬停悬浮卡片呈现。
 3. **短码（Short ID）**：
    - 严格定长 `8` 字符，无需截断，容器预留固定宽度 `64px`。
 
@@ -181,7 +187,11 @@ $$t = \frac{1}{\sqrt{\left(\frac{\Delta x}{a}\right)^2 + \left(\frac{\Delta y}{b
 - 界面在非 active 条目上严禁显示「有效剩余 Xh Ym」，转而展示状态标签「已撤销」或「已过期」。
 
 ### 6.4 统计口径
-- **计数统一**：顶部黑板通条标题 `blackboard.hub` 旁计数值，与右上角全局指标 `metrics.totalPosts`，必须统一为**活跃黑板条目数**（`status === 'active'`）。
+- **计数统一**：右上角全局指标 `metrics.totalPosts` 统一为**活跃黑板条目数**（`status === 'active'`）。
+- **标题口径显式化**：为杜绝已撤销/已过期条目全量长度与活跃计数的同屏矛盾，顶部黑板栏标题 `blackboard.hub` 旁计数值显式区分口径：
+  - 当存在非 active 条目（`activePostsCount !== posts.length`）时，标题标注：`公共黑板 (${activePostsCount} 活跃 / ${posts.length} 总计)`（英文为 `Blackboard (${activePostsCount} active / ${posts.length} total)`）；
+  - 全为活跃或全为空时（`activePostsCount === posts.length`），标题标注：`公共黑板 (${activePostsCount})`（英文为 `Blackboard (${activePostsCount})`）。
+- **卡片状态区分**：非 active（`archived` 与 `expired`）条目采用低饱和度、虚线边框样式，并在卡片顶部显示灰底状态标签 `[已撤销]` 或 `[已过期]`（英文为 `[Archived]` / `[Expired]`），严格与活跃卡片隔离区分。
 - 任何界面位置严禁出现包含已撤销条目的全量长度与过滤后计数的同屏矛盾。
 
 ---
@@ -193,12 +203,12 @@ $$t = \frac{1}{\sqrt{\left(\frac{\Delta x}{a}\right)^2 + \left(\frac{\Delta y}{b
 ```
 [ L1 默认静态层 ] ── (悬停 150ms) ──> [ L2 1-Hop 聚焦层 ] ── (双击 dblclick) ──> [ L3 420px 只读抽屉 ]
   - 全图线框虚线                        - 关联节点/边实线高亮                - 字段结构化展示
-  - 低饱和度底噪                        - 非关联元素 0.18s 衰减至 20%        - 复制只读值
+  - 浅灰虚线背景                        - 非关联元素 0.18s 衰减至 20%        - 复制只读值
   - 维持 60fps                         - 轻量浮层 Tooltip 呈现             - ESC / 空白关闭
 ```
 
 ### 7.1 默认视图
-- 初始所有泳道、节点、连线以浅灰虚线（`dasharray`）呈现。
+- 初始所有工作区分组容器、节点、连线以浅灰虚线（`dasharray`）呈现。
 - 支持画布拖拽平移与滚轮平滑缩放。
 - **单击控制**：单击实体仅为选中态聚焦（或取消聚焦）；**严格禁止单击触发抽屉弹出**。
 - **拖拽防误触**：指针按下到抬起欧式距离大于 `3px` 时判定为画布平移，不触发任何点击交互。
@@ -252,7 +262,7 @@ $$P_{y,\text{new}} = M_y - (M_y - P_y) \times \frac{Z_{\text{new}}}{Z}$$
 点击工具栏「自适应居中」按钮或双击空白背景触发：
 
 1. **计算全量包围盒**：
-   遍历当前可视的所有工作区泳道、黑板通条以及会话节点，求出外接矩形：$[X_{\min}, Y_{\min}, X_{\max}, Y_{\max}]$。
+   遍历当前可视的所有工作区分组容器、顶部黑板栏以及会话节点，求出外接矩形：$[X_{\min}, Y_{\min}, X_{\max}, Y_{\max}]$。
    包围盒内容宽 $W_c = X_{\max} - X_{\min}$，内容高 $H_c = Y_{\max} - Y_{\min}$。
 2. **计算视口安全区域**：
    设视口总宽高为 $W_v, H_v$，四周预留安全边距 `padding = 48px`。
@@ -262,13 +272,15 @@ $$P_{y,\text{new}} = M_y - (M_y - P_y) \times \frac{Z_{\text{new}}}{Z}$$
    $$P_{x,\text{fit}} = \frac{W_v - W_c \times Z_{\text{fit}}}{2} - X_{\min} \times Z_{\text{fit}}$$
    $$P_{y,\text{fit}} = \frac{H_v - H_c \times Z_{\text{fit}}}{2} - Y_{\min} \times Z_{\text{fit}}$$
 4. **缓动生效**：采用 `cubic-bezier(0.25, 1, 0.5, 1)` 缓动曲线在 `300ms` 内平滑过渡生效。
+5. **当前会话聚焦适配**：首次加载就绪或点击工具栏「定位当前会话」按钮时，若传入并匹配到 `sessionId` 对应节点 $(N_x, N_y)$，平移变换优先平滑居中至该会话节点，维持 $Z=1.0$ 基准缩放倍率：
+   $$P_{x,\text{focus}} = \frac{W_v}{2} - N_x,\quad P_{y,\text{focus}} = \frac{H_v}{2} - N_y$$
 
 ---
 
 ## 9. 渲染性能
 
 ### 9.1 状态指示
-- **根因**：`.dsh-pulse-dot` 关键帧使用 `transform: scale(...)` 作用于 SVG `<circle>`，因缺少 `transform-box: fill-box`，在 Chrome/Webkit 中变换原点相对于整个全屏 SVG 视口，导致呼吸灯被甩出节点与泳道。
+- **根因**：`.dsh-pulse-dot` 关键帧使用 `transform: scale(...)` 作用于 SVG `<circle>`，因缺少 `transform-box: fill-box`，在 Chrome/Webkit 中变换原点相对于整个全屏 SVG 视口，导致呼吸灯被甩出节点与工作区分组容器。
 - **CSS 必须修复项**：
   ```css
   .dsh-pulse-dot {
@@ -303,8 +315,8 @@ $$P_{y,\text{new}} = M_y - (M_y - P_y) \times \frac{Z_{\text{new}}}{Z}$$
 | `empty.title` | 协作看板就绪 | Collaboration Canvas Ready | 空态画布居中大标题（彻底修复中英不对齐） |
 | `empty.desc` | 暂无活跃会话或黑板条目，发起调用或发布条目后在此呈现。 | No active sessions or blackboard posts. Content will appear here once calls are made or posts are published. | 空态说明辅助文案 |
 | `session.offline` | 会话已离线 | Session Offline | 调用指向已销毁会话时的警告标签 |
-| `blackboard.hub` | 公共黑板 | Blackboard | 顶部通条区域标识 |
-| `blackboard.empty`| 暂无活跃条目 | No active posts | 顶部通条无条目时的占位文案 |
+| `blackboard.hub` | 公共黑板 | Blackboard | 顶部黑板栏区域标识 |
+| `blackboard.empty`| 暂无黑板条目 | No blackboard posts | 顶部黑板栏无条目时的占位文案 |
 | `status.active` | 活跃 | Active | 黑板条目活跃状态标签 |
 | `status.archived` | 已撤销 | Archived | 黑板条目被撤销状态标签 |
 | `status.expired` | 已过期 | Expired | 黑板条目自然过期状态标签 |
@@ -318,13 +330,13 @@ $$P_{y,\text{new}} = M_y - (M_y - P_y) \times \frac{Z_{\text{new}}}{Z}$$
 | 缺陷编号 | 问题分类 | 缺陷现象与根因 | 规格对策与量化指标 | 归属执行方 |
 | :---: | :--- | :--- | :--- | :---: |
 | **1** | 数据语义 | `sid.slice(0,8)` 导致前缀全为 `session-`，裸 uuid 导致形态分裂 | 统一由宿主生成 `shortId`，剥离 `session-` 后取 8 位小写十六进制（第 6.1 节） | backend / t2 |
-| **2** | 数据语义 | 顶部通条与右上角徽章黑板计数口径不一致 | 统一统计口径为 `status === 'active'` 活跃条目数，两处数字严格相等（第 6.4 节） | backend / t2 |
+| **2** | 数据语义 | 顶部黑板栏标题计数 (0) 与卡片渲染 (3) 同屏矛盾 | 统一统计口径；存在非 active 条目时标题显式标注 `(X 活跃 / Y 总计)`，非 active 卡片赋予灰底状态标签，消除同屏矛盾（第 6.4 节） | frontend / t8 |
 | **3** | 数据语义 | 已撤销条目（archived）仍显示「有效剩余 1h 0m」 | 区分 active/archived/expired 三态；非 active 条目 TTL 归零并显示「已撤销」（第 6.3 节） | backend / t2 |
 | **4** | 数据语义 | 节点标题无显式名称或为空 | 优先使用显式标题，无标题时以 `Agent <shortId>` 规范短码保底回退（第 6.2 节） | backend / t2 |
 | **5** | 文案风格 | `session.offline` 未使用；`empty.title` 中英文语义不一致 | 中英文字典一一精确对齐，消费 `session.offline` 标签（第 10 节） | linguist / t7 |
-| **6** | 界面渲染 | `.dsh-pulse-dot` 缺少 `transform-box: fill-box` 导致动画甩出泳道 | CSS 补全 `transform-box: fill-box !important`，原点居中（第 9.1 节） | frontend / t3 |
+| **6** | 界面渲染 | `.dsh-pulse-dot` 缺少 `transform-box: fill-box` 导致动画甩出工作区分组容器 | CSS 补全 `transform-box: fill-box !important`，原点居中（第 9.1 节） | frontend / t3 |
 | **7** | 界面渲染 | 右上角徽章被 DSH Web 宿主圆形悬浮控件遮挡 | 工具栏右侧增加 `padding-right: 76px` 安全避让区（第 9.2 节） | frontend / t3 |
-| **8** | 界面渲染 | 文本硬截断 `slice(0,14)` 导致中文溢出、英文腰斩 | 基于渲染像素宽度自适应截断，预留 `105px` 并增加省略号 `...`（第 5.1 节） | frontend / t3 |
+| **8** | 界面渲染 | 文本硬截断导致中文溢出、英文腰斩与空间浪费 | 基于渲染像素宽度动态自适应截断（无徽章放宽至 140px，有徽章 105px，当前会话 64px）并引入英文单词边界感知与省略号 `...`（第 5.1 节） | frontend / t3, t11 |
 | **9** | 界面渲染 | `ui-monospace` 在 Windows 上回退至粗衬线字体 | 规范字体栈为 JetBrains Mono / Cascadia Code / Consolas 序列（第 5.2 节） | frontend / t3 |
 | **10** | 界面渲染 | 连线起终点取几何中心，Marker 箭头埋入椭圆内部 | 引入椭圆边界精确裁剪算法，连线端点与箭头外切于椭圆边缘（第 4.2 节） | frontend / t3 |
 | **11** | 交互行为 | 单击与双击混用，拖拽平移松手误触弹出 420px 抽屉 | 严格区分单击（选中）与双击（抽屉）；设置 `3px` 平移位移抑制阈值（第 7.1/7.3 节） | frontend / t3 |
@@ -333,7 +345,8 @@ $$P_{y,\text{new}} = M_y - (M_y - P_y) \times \frac{Z_{\text{new}}}{Z}$$
 | **14** | 交互行为 | 「重置视口」仅重置为固定坐标，非 Fit View | 计算全量可视元素包围盒，自适应居中并预留 48px 边距（第 8.2 节） | frontend / t3 |
 | **15** | 交互行为 | 点击黑板 hub 把 posts 数组 JSON 裸串倒进抽屉正文 | 抽屉针对实体类型定制结构化卡片排版，禁止裸数据倾倒（第 7.3 节） | frontend / t3 |
 | **16** | 性能调度 | 3 秒全量重绘整棵 SVG；拖拽平移 RAF 帧积压堆叠 | 引入数据校验和跳过无效重绘；平移管理 `animFrameId` 及时 `cancel`（第 9.3 节） | frontend / t3 |
-| **17** | 信息架构 | 缺失发布归属边与上下文引用边，仅剩孤立点线 | 完整生成并渲染 session→post 归属边与 call→post 引用边（第 4.1 节） | frontend / t3 |
+| **17** | 信息架构 | 缺失发布归属边与上下文引用边，仅剩孤立点线；默认透明度 0.22/0.12 在深色背景下隐形 | 完整生成并渲染 session→post 归属边与 call→post 引用边，默认透明度提升至 0.50/0.45 达到 WCAG 2.1 对比度标准（第 4.1 节） | frontend / t10 |
+| **18** | 架构隔离 | 默认跨工作区拉取破坏 ADR-0003 隔离边界，缺少当前会话视觉锚点 | 默认 `crossWorkspace: false` 仅展示当前工程工作区；工具栏提供「跨工作区拓扑」与「定位当前会话」开关；消费 `props.sessionId` 赋予青色发光描边、实线加粗与 `[当前]` 状态标签（第 3.1、8.2 节） | frontend / t9 |
 
 ---
 
@@ -343,8 +356,8 @@ $$P_{y,\text{new}} = M_y - (M_y - P_y) \times \frac{Z_{\text{new}}}{Z}$$
 
 1. **图元尺寸量化**：
    - 会话椭圆半长轴严格为 `96px`，半短轴严格为 `26px`；
-   - 泳道宽度严格为 `260px`，泳道间横向间距严格为 `36px`；
-   - 泳道内会话节点必须为单列纵向居中排布，水平偏离度为 0。
+   - 工作区列宽严格为 `260px`，列间横向间距严格为 `36px`；
+   - 工作区列内会话节点必须为单列纵向居中排布，水平偏离度为 0。
 2. **三类关系边完整性**：
    - 验证 `authorSessionId` 成功生成指向黑板方块的二次曲线；
    - 验证 `contextPostIds` 成功生成指向关联黑板方块的上下文虚线；

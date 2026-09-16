@@ -89,7 +89,6 @@ For verbose test logs, audit reports, or code changes, use the two-phase collabo
 | `board_post` | Tool | Pull | Publish announcements or artifacts to board without waking other sessions |
 | `board_list` | Tool | Pull | Query board entries with topic/tag/id filters and titles_only mode |
 | `board_clear` | Tool | Manage | Dismiss archive or purge delete board entries |
-| `/dsh-call-session` | Slash | Interactive | Web GUI shortcut for board summary or direct unicast dispatch |
 
 ### session_create
 
@@ -194,12 +193,6 @@ Example:
 }
 ```
 
-## Commands
-
-Slash command `/dsh-call-session` is directly available in DSH Web UI:
-- View summary: run `/dsh-call-session` to list blackboard entries in current workspace;
-- Send message: run `/dsh-call-session <sessionId> <message>` to dispatch a direct message to that session.
-
 ## Canvas
 
 The DSH Web session view exposes a `Canvas` tab that observes cross-session collaboration in current workspace.
@@ -226,11 +219,10 @@ To customize, add property overrides to `~/.dsh/profiles/web/cordis.patch.yml`:
 ```
 
 Options:
-- `enabled`: boolean, default `true`. Enable or disable plugin tools and commands.
+- `enabled`: boolean, default `true`. Enable or disable plugin tools.
 - `debounceMs`: number, default `300`. Atomic disk write debounce delay in milliseconds.
 - `maxCapacity`: number, default `200`. Maximum entries retained in memory FIFO cache.
 - `telemetryCapacity`: number, default `200`, range 10-2000. Maximum call traces retained in telemetry ring buffer, FIFO eviction.
-- `slashCommand`: boolean, default `true`. Register the `/dsh-call-session` command in Web UI.
 
 ## Comparison
 
@@ -258,7 +250,7 @@ Key technical decisions are recorded as Architecture Decision Records (ADRs) in 
 | [ADR-0004](./docs/adrs/0004-atomic-debounced-persistence-and-healing.md) | Atomic debounced persistence | Accepted | 300ms debounce, atomic file swap, and .bak self-healing |
 | [ADR-0005](./docs/adrs/0005-english-metadata-and-two-state-status.md) | Two-state session status | Accepted | Normalizes session states to running and idle |
 | [ADR-0006](./docs/adrs/0006-pure-dsh-native-in-process-context-injection.md) | In-process context injection | Accepted | Direct in-memory instance calls with native notice tags |
-| [ADR-0007](./docs/adrs/0007-web-slash-command-and-visual-ux.md) | Web slash command | Accepted | Native /dsh-call-session command and minimal UI notifications |
+| [ADR-0007](./docs/adrs/0007-web-slash-command-and-visual-ux.md) | Web slash command | Superseded | Native /dsh-call-session command (retired in favor of agent tools & UI actions) |
 | [ADR-0008](./docs/adrs/0008-zero-pollution-global-profile-mounting.md) | Profile patch mounting | Accepted | Declarative bundle patch with safe lifecycle disposal |
 | [ADR-0009](./docs/adrs/0009-restrained-minimalist-docs-and-anti-ai-slop.md) | Restrained docs & anti-slop | Accepted | Zero emoji, radical subtraction, <=4-char headings |
 | [ADR-0010](./docs/adrs/0010-dynamic-state-mirror-and-peer-session-lifecycle.md) | State mirror & peer sessions | Accepted | Pure-state idempotent injection guarding KV cache, peer quota and rate fuses |
