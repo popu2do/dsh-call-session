@@ -1,10 +1,15 @@
 # ADR-0007: Web Slash Command Integration and Visual UX Streamline
 
-- **Status**: Accepted
-- **Date**: 2026-09-04
+- **Status**: Superseded
+- **Date**: 2026-09-04 (Superseded on 2026-09-10)
 - **Deciders**: Architect, Engineering Team, DSH Ecosystem Team
 - **Consulted**: Web Frontend Team, Community Users
 - **Informed**: All Plugin Consumers, DSH Web Interface Users
+
+> **Superseded & Retirement Notice**:
+> The `/dsh-call-session` slash command and `commands` Cordis service dependency have been formally retired.
+> Slash command registration and `commands` injection have been removed from `index.mjs`, `types/index.d.ts`, and `cordis.patch.yml`.
+> Inter-session interactions are handled natively via agent tools (`session_call`, `board_*`, `session_query`, `session_create`) and Web GUI actions.
 
 ---
 
@@ -43,7 +48,7 @@
 
 ### Option 2 (Chosen): Eliminate Standalone CLI and Unify on Native Slash Command `/dsh-call-session`
 - **Description**: 废除 `bin` 脚本，使用 DSH 原生 `ctx.commands.register` 注册全局斜杠命令，打通 Web 输入框与进程内调度。
-- **Pros**: 进程内单链路闭环，消除外部进程开销与网络依赖。
+- **Pros**: 进程内单链路自包含执行，消除外部进程开销与网络依赖。
 - **Cons**: 外部脚本无法直接通过系统 PATH 调用 `dsh-call-session`，需通过 DSH 原生接口或工具调用。
 
 ---
@@ -134,7 +139,7 @@ ctx.commands.register({
 ### 6.1 Automated Verification Suite
 - **Package 清理检查**：测试断言 `package.json` 中 `bin` 字段为 `undefined`；
 - **命令注册与解析测试**：模拟调用 Slash Command 注册器，传入正常与缺损参数，验证参数解析与错误提示响应；
-- **执行闭环测试**：验证 `/dsh-call-session` 触发后直接调用进程内 `executeSessionCall`。
+- **端到端执行测试**：验证 `/dsh-call-session` 触发后直接调用进程内 `executeSessionCall`。
 
 ### 6.2 Review Checklist
 - [ ] 清理 `package.json` 中的 `bin` 声明；
@@ -147,6 +152,7 @@ ctx.commands.register({
 ## 7. Status History & Related Artifacts
 
 - **2026-09-04**: Proposed & Accepted by Engineering Team
+- **2026-09-10**: Superseded by native agent tools and direct Web actions; /dsh-call-session slash command and commands injection retired
 - **Related ADRs**:
   - Complements: ADR-0006 (Native Context Injection), ADR-0008 (Global Profile Mounting)
 - **Implementation Artifacts**:

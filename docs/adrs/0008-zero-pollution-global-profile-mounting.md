@@ -29,7 +29,7 @@
 
 - **Driver 1 (Global Availability)**：用户或 Agent 在任意会话中可直接调用跨会话能力；
 - **Driver 2 (Declarative Cordis Composition)**：采用 `cordis.patch.yml` 声明式切面挂载机制；
-- **Driver 3 (Strict Injection Discipline)**：遵循 Cordis 服务注入规范，声明 `inject: ['agents', 'tools', 'commands']`；
+- **Driver 3 (Strict Injection Discipline)**：遵循 Cordis 服务注入规范，声明 `inject: ['agents', 'tools', 'systemPrompt']`；
 - **Driver 4 (Deterministic Teardown)**：借助 `ctx.on('dispose')` 实现异步存储刷新与副作用注销。
 
 ---
@@ -81,7 +81,7 @@
 
 ```javascript
 export const name = 'dsh-call-session';
-export const inject = ['agents', 'tools', 'commands'];
+export const inject = ['agents', 'tools', 'systemPrompt'];
 
 export function apply(ctx, config = {}) {
   // 核心业务挂载...
@@ -96,7 +96,8 @@ export default {
 
 - **`agents`**：提供 `ctx.agents` 服务（进程内活跃 Agent 实例索引）；
 - **`tools`**：提供 `ctx.tools.register` 服务（面向模型的 Native Tool 挂载）；
-- **`commands`**：提供 `ctx.commands.register` 服务（面向 Web 用户的 Slash Command 挂载）。
+- **`systemPrompt`**：提供 `ctx.systemPrompt.add` 服务（面向模型注入跨会话协作指南）。
+*(注：原 `commands` 服务已随 /dsh-call-session 斜杠指令废止而解耦移除)*
 
 ### 4.3 Lifecycle Disposal & Resource Recycling Contract
 ```javascript
@@ -123,8 +124,8 @@ export function apply(ctx, config = {}) {
     }
   });
 
-  // 3. 工具与命令注册（自动纳管至当前 Fiber 上下文）
-  // 当插件卸载时，Cordis 自动注销 ctx.tools.register 与 ctx.commands.register 产生的句柄
+  // 3. 工具注册（自动纳管至当前 Fiber 上下文）
+  // 当插件卸载时，Cordis 自动注销 ctx.tools.register 产生的句柄
 }
 ```
 
@@ -133,7 +134,7 @@ export function apply(ctx, config = {}) {
 ## 5. Consequences
 
 ### 5.1 Positive Consequences (Benefits)
-- **全局可用**：新建或已有会话均可调用工具与 `/dsh-call-session` 命令；
+- **全局可用**：新建或已有会话均可调用跨会话工具；
 - **工程无污染**：业务工程工作区无需额外配置文件或 node_modules；
 - **可测试性与热重载**：在自动化测试或宿主重启时，插件可正常卸载与重载，无残留副作用。
 
@@ -146,11 +147,10 @@ export function apply(ctx, config = {}) {
 ## 6. Compliance, Validation & Verification
 
 ### 6.1 Automated Verification Suite
-- **声明注入断言**：测试验证导出的 `inject` 数组精确包含 `['agents', 'tools', 'commands']`；
+- **声明注入断言**：测试验证导出的 `inject` 数组精确包含 `['agents', 'tools', 'systemPrompt']`；
 - **Dispose 清理断言**：在单元测试中调用插件卸载 Disposer，验证：
   1. `boardStore` 防抖定时器已清空；
-  2. `ctx.tools` 中 `session_call` / `board_*` 注册已被移除；
-  3. `ctx.commands` 中 `dsh-call-session` 注册已被注销。
+  2. `ctx.tools` 中 `session_call` / `board_*` 注册已被移除。
 
 ### 6.2 Review Checklist
 - [ ] 检查 `cordis.patch.yml` 格式合规性；
@@ -162,8 +162,9 @@ export function apply(ctx, config = {}) {
 ## 7. Status History & Related Artifacts
 
 - **2026-09-04**: Proposed & Accepted by Engineering Team
+- **2026-09-10**: Decoupled commands dependency following ADR-0007 retirement; inject updated to ['agents', 'tools', 'systemPrompt']
 - **Related ADRs**:
-  - Complements: ADR-0006 (Native Context Injection), ADR-0007 (Web Slash Command), ADR-0003 (Workspace Isolation), ADR-0004 (Atomic Persistence)
+  - Complements: ADR-0006 (Native Context Injection), ADR-0007 (Web Slash Command - Superseded), ADR-0003 (Workspace Isolation), ADR-0004 (Atomic Persistence)
 - **Implementation Artifacts**:
   - `index.mjs`
   - `cordis.patch.yml`

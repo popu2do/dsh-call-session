@@ -6,9 +6,7 @@
  *    - board_post, board_list, board_clear: Shared state blackboard storage and queries
  *    - session_call: In-process unicast communication (steer/followup)
  *    - session_query: Active session discovery with workspace filtering
- * 2. Web Slash Command:
- *    - /dsh-call-session: Unicast command and board digest in Web GUI
- * 3. Lifecycle Disposal:
+ * 2. Lifecycle Disposal:
  *    - Reversible cleanup and state persistence on dispose
  */
 import path from 'node:path';
@@ -18,7 +16,10 @@ import {
   AtomicBoardStore,
   normalizeWorkspace,
   extractTitle,
-  formatAuthorReminderText
+  formatAuthorReminderText,
+  RESERVED_TOPIC_PREFIXES,
+  isReservedTopic,
+  getReservedTopicErrorMessage
 } from './lib/board-store.mjs';
 import {
   getArchivedSessionIds,
@@ -54,7 +55,7 @@ import {
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export const name = 'dsh-call-session';
-export const inject = ['agents', 'tools', 'commands', 'systemPrompt'];
+export const inject = ['agents', 'tools', 'systemPrompt'];
 
 let zInstance;
 try {
@@ -75,15 +76,13 @@ export const Config = zInstance ? zInstance.object({
   telemetryCapacity: zInstance.natural().min(10).max(2000).default(200).description('跨会话调用遥测环形缓冲区保留上限，按 FIFO 淘汰'),
   promptSectionOrder: zInstance.natural().default(118).description('注入全局 System Prompt 的排序权重'),
   remindContextOrder: zInstance.natural().default(130).description('记名提醒注入 System Prompt Context 的排序权重'),
-  slashCommand: zInstance.boolean().default(true).description('是否在 Web GUI 注册 /dsh-call-session 斜杠指令'),
 }) : Object.freeze({
   enabled: true,
   debounceMs: 300,
   maxCapacity: 200,
   telemetryCapacity: 200,
   promptSectionOrder: 118,
-  remindContextOrder: 130,
-  slashCommand: true
+  remindContextOrder: 130
 });
 
 /**
@@ -100,7 +99,6 @@ export function usageSectionText() {
     '2. Unicast call: Use `session_call` to send tasks, reports, or notices to a specific session (`target_session_id`). Wildcards (*, all) are not supported.',
     '3. Create peer session: Use `session_create` to create a peer session in the current workspace.',
     '4. Shared blackboard: Use `board_post` to publish milestones, tasks, or shared state. Use `board_list` to query blackboard posts, and `board_clear` to dismiss or purge them.',
-    '5. Web slash command: Users can invoke `/dsh-call-session <target_session_id> <message>` directly in the Web UI.',
     '',
     'Intent routing (session_create vs subagent):',
     '- Use `session_create`: 创建同级会话。用户要求新建会话、新开 session 或平级会话时使用。独立会话可长期并行运行，不同于临时子任务 subagent。',
@@ -124,6 +122,9 @@ export {
   normalizeWorkspace,
   extractTitle,
   formatAuthorReminderText,
+  RESERVED_TOPIC_PREFIXES,
+  isReservedTopic,
+  getReservedTopicErrorMessage,
   getArchivedSessionIds,
   resolveSessionCwd,
   resolveSessionTitle,
@@ -305,7 +306,8 @@ export function apply(ctx, config = {}) {
             createdAt: { type: 'string' },
             expiresAt: { type: 'string' },
             scope: { type: 'string' },
-            message: { type: 'string' }
+            message: { type: 'string' },
+            error: { type: 'string' }
           },
           additionalProperties: false
         },
@@ -318,6 +320,16 @@ export function apply(ctx, config = {}) {
       },
       execute: async (args, exec) => {
         try {
+          if (isReservedTopic(args?.topic)) {
+            const errMsg = getReservedTopicErrorMessage(args.topic);
+            return {
+              success: false,
+              topic: args.topic,
+              error: errMsg,
+              message: `[Board] 发布失败: ${errMsg}`
+            };
+          }
+
           const callerAgent = exec?.agent;
           const authorSessionId = callerAgent?.id || 'unknown-session';
           const authorTitle = resolveSessionTitle(ctx, callerAgent) || 'Session';
@@ -357,7 +369,11 @@ export function apply(ctx, config = {}) {
           };
         } catch (err) {
           logger.debug?.(`[dsh-call-session] board_post execution failed: ${err?.message || err}`);
-          return { success: false, error: err?.message || String(err) };
+          return {
+            success: false,
+            error: err?.message || String(err),
+            message: `[Board] 发布失败: ${err?.message || err}`
+          };
         }
       }
     });
@@ -773,97 +789,6 @@ export function apply(ctx, config = {}) {
       execute: async (args, exec) => {
         return executeSessionCreate({ ctx, args, exec, boardStore });
       }
-    });
-  }
-
-  const registerSlashCommand = (cmdCtx) => {
-    if (!cmdCtx?.commands || typeof cmdCtx.commands.register !== 'function') return;
-
-    cmdCtx.commands.register({
-      name: 'dsh-call-session',
-      description: '向指定会话发起单播呼叫，或不带参数查看当前黑板标题摘要',
-      input: { hint: '[<target_session_id> <message>]' },
-      recordInput: false,
-      handler: async (invocation) => {
-        const raw = (invocation.rawInput || '').trim();
-        const callerAgent = invocation.agent;
-        const callerWorkspace = normalizeWorkspace(resolveSessionCwd(callerAgent));
-
-        if (!raw) {
-          const titles = boardStore.listTitles({ callerWorkspace });
-          const digest = boardStore.formatTitleDigest(titles);
-          if (!digest) {
-            return {
-              kind: 'success',
-              text: [
-                '[工作区公告看板] 当前暂无有效公告。',
-                '',
-                '使用说明:',
-                '- 跨会话呼叫: /dsh-call-session <target_session_id> <message>',
-                '- 查询可用会话: 调用 session_query 工具'
-              ].join('\n')
-            };
-          }
-          return {
-            kind: 'success',
-            text: [
-              digest,
-              '',
-              '用法: /dsh-call-session <target_session_id> <message>'
-            ].join('\n')
-          };
-        }
-
-        const firstSpace = raw.search(/[\t\n\r ]/u);
-        if (firstSpace === -1) {
-          return {
-            kind: 'error',
-            text: '用法错误：缺少消息内容。示例：/dsh-call-session <target_session_id> <message>'
-          };
-        }
-
-        const targetSessionId = raw.slice(0, firstSpace).trim();
-        const message = raw.slice(firstSpace).trim();
-
-        if (!targetSessionId || !message) {
-          return {
-            kind: 'error',
-            text: '目标 Session ID 与消息内容均不能为空。示例：/dsh-call-session <target_session_id> <message>'
-          };
-        }
-
-        try {
-          const result = await executeSessionCall({
-            ctx,
-            args: {
-              target_session_id: targetSessionId,
-              message,
-              call_type: 'notice'
-            },
-            exec: { agent: callerAgent }
-          });
-
-          return {
-            kind: 'success',
-            text: `已通过单播 (${result.deliveryMode}) 成功呼叫会话 [${result.targetSessionId}]`
-          };
-        } catch (error) {
-          return {
-            kind: 'error',
-            text: `跨会话呼叫失败: ${error?.message || error}`
-          };
-        }
-      }
-    });
-
-    logger.debug?.('[dsh-call-session] Slash command /dsh-call-session registered successfully.');
-  };
-
-  if (ctx.commands && typeof ctx.commands.register === 'function') {
-    registerSlashCommand(ctx);
-  } else if (typeof ctx.inject === 'function') {
-    ctx.inject(['commands'], (subCtx) => {
-      registerSlashCommand(subCtx);
     });
   }
 
