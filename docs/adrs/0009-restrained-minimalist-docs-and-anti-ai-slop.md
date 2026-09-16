@@ -72,7 +72,7 @@ As `dsh-call-session` evolved into version 0.1.0, the accompanying user document
 User-facing documentation (`README.md` and `README_ZH.md`) must strictly adhere to a standardized five-section layout:
 1. **Overview / 简介**: Concise definition and scope of the plugin without marketing hyperbole.
 2. **Installation / 安装**: Zero-friction setup via the global profile bundle (`cordis.patch.yml`).
-3. **Usage / 用法**: Minimalist, copy-pasteable examples for tools and slash commands.
+3. **Usage / 用法**: Minimalist, copy-pasteable examples for tools.
 4. **Comparison / 对比**: Objective distinction between native process-internal `subagent` delegation and cross-session unicast/board coordination.
 5. **Invariants / 规范**: Explicit system boundaries and zero-trace engineering discipline.
 

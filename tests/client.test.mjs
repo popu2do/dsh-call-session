@@ -760,7 +760,7 @@ test('Topology Visual Layout Engine: Blackboard strip, side-by-side swimlanes, a
 
   const layout = computeLayout(workspaces, sessions, posts, '/ws/alpha', true);
 
-  // 1. 黑板通条 (Top blackboard strip) 边界坐标断言
+  // 1. 顶部黑板栏 (Top blackboard strip) 边界坐标断言
   assert.ok(layout.blackboardBound, 'blackboardBound must be returned');
   assert.equal(layout.blackboardBound.x, 40, 'Top blackboard strip x must be 40');
   assert.equal(layout.blackboardBound.y, 24, 'Top blackboard strip y must be 24');
@@ -780,7 +780,7 @@ test('Topology Visual Layout Engine: Blackboard strip, side-by-side swimlanes, a
   assert.equal(layout.postPositions['p2'].y, 52, 'Second post y must be 52');
   assert.equal(layout.postPositions['p3'].x, 56 + 2 * 196, 'Third post x must be 56 + 392 = 448');
 
-  // 2. 并排竖泳道 (Side-by-side vertical swimlanes) 坐标断言
+  // 2. 并排工作区列 (Side-by-side vertical workspace columns) 坐标断言
   assert.equal(layout.workspaceBounds.length, 2);
   const laneAlpha = layout.workspaceBounds[0];
   const laneBeta = layout.workspaceBounds[1];
@@ -795,7 +795,7 @@ test('Topology Visual Layout Engine: Blackboard strip, side-by-side swimlanes, a
   assert.equal(laneBeta.width, 260, 'Second swimlane width must be 260');
   assert.equal(laneBeta.height, 480, 'Second swimlane minHeight must be 480');
 
-  // 3. 泳道内单列 session 坐标断言 (Single-column vertical centered session nodes)
+  // 3. 工作区列内单列 session 坐标断言 (Single-column vertical centered session nodes)
   // Lane Alpha: cx = 40 + 130 = 170
   assert.equal(layout.nodePositions['s1'].x, 170, 's1 cx must be centered in swimlane at 170');
   assert.equal(layout.nodePositions['s1'].y, 214, 's1 cy must start at 214');
@@ -813,7 +813,7 @@ test('Topology Visual Layout Engine: Blackboard strip, side-by-side swimlanes, a
   assert.equal(layout.nodePositions['s5'].x, 466, 's5 cx must stay in single column at 466');
   assert.equal(layout.nodePositions['s5'].y, 286, 's5 cy must be 286');
 
-  // 单列纵向居中不变式：同泳道内的全部会话 x 坐标必须严格相同
+  // 单列纵向居中不变式：同工作区列内的全部会话 x 坐标必须严格相同
   const alphaXSet = new Set(['s1', 's2', 's3'].map(id => layout.nodePositions[id].x));
   assert.equal(alphaXSet.size, 1, 'All sessions in alpha swimlane must share identical x coordinate (single-column)');
   const betaXSet = new Set(['s4', 's5'].map(id => layout.nodePositions[id].x));
@@ -962,6 +962,10 @@ test('Three Relationship Edge Classes: Edge generation and boundary tolerance (m
   assert.equal(validAuthorPaths[0].props.key, 'author-s1->post-valid');
   assert.ok(validAuthorPaths[0].props.d.startsWith('M 170.0 188.0 Q '), '归属边必须从 session 上顶点 (170, 214-26=188) 发起');
   assert.ok(validAuthorPaths[0].props.d.includes(' 146.0 100.0'), '归属边终点连接至 post 下边界 (56+90=146, 52+48=100)');
+  assert.equal(validAuthorPaths[0].props.stroke, '#64748b', '归属边默认描边颜色为 #64748b');
+  assert.equal(validAuthorPaths[0].props.strokeWidth, '1.2', '归属边默认线宽必须提升至 1.2px');
+  assert.equal(validAuthorPaths[0].props.strokeDasharray, '4 3', '归属边默认虚线样式为 4 3');
+  assert.equal(validAuthorPaths[0].props.strokeOpacity, 0.5, '归属边默认透明度必须提升至 0.50 (WCAG 2.1 对比度标准)');
 
   // 边界 1 & 边界 3 验证：缺失 authorSessionId 与指向不存在会话的 4 条 post 均安全返回 null，不产生边且不抛错
   const nullAuthorItems = authorEdgesGroup.children.filter(c => c === null);
@@ -977,6 +981,10 @@ test('Three Relationship Edge Classes: Edge generation and boundary tolerance (m
   assert.equal(validContextPaths[0].props.key, 'ctx-call-valid-with-ctx->post-valid');
   assert.ok(validContextPaths[0].props.d.startsWith('M '), '引用边必须生成合法的二次贝塞尔曲线');
   assert.ok(validContextPaths[0].props.d.includes(' 146.0 100.0'), '引用边终点连接至 post 下边界');
+  assert.equal(validContextPaths[0].props.stroke, '#fbbf24', '引用边描边颜色必须采用高辨识度琥珀色 #fbbf24');
+  assert.equal(validContextPaths[0].props.strokeWidth, '1.0', '引用边默认线宽必须调整为 1.0px');
+  assert.equal(validContextPaths[0].props.strokeDasharray, '3 3', '引用边虚线样式为 3 3');
+  assert.equal(validContextPaths[0].props.strokeOpacity, 0.45, '引用边默认透明度必须提升至 0.45 (WCAG 2.1 对比度标准)');
 
   // 边界 2 & 边界 3 验证：空 contextPostIds 或指向不存在会话的调用均不生成 context 边
   const nullContextItems = contextEdgesGroup.children.filter(c => c === null);
@@ -1330,7 +1338,7 @@ test('协作看板实测缺陷回归：真实标题、黑板空态、抽屉遮�
   assert.equal(maskClicked, true, '点击抽屉遮罩层必须触发 setSelectedEntity(null) 关闭抽屉');
 });
 
-test('全量合规审查：三次贝塞尔外切、无重复节点渲染、泳道头部高度与交互契约', () => {
+test('全量合规审查：三次贝塞尔外切、无重复节点渲染、工作区分组容器头部高度与交互契约', () => {
   const plugin = loadClientBundle();
   const { calculateBezierPath, computeLayout, getCallEdgeDecay } = plugin;
 
@@ -1358,10 +1366,10 @@ test('全量合规审查：三次贝塞尔外切、无重复节点渲染、泳�
   assert.ok(keys.includes('SESSION-BETA'));
   assert.ok(keys.includes('session-gamma'));
 
-  // 3. 泳道头部尺寸规格验证
+  // 3. 工作区分组容器头部尺寸规格验证
   const clientSource = fs.readFileSync(path.join(rootDir, 'lib', 'client.js'), 'utf8');
-  assert.ok(clientSource.includes('height: 38,'), '泳道头部高度必须严格为 38px (PRD 3.1)');
-  assert.ok(clientSource.includes("fill: '#94a3b8'"), '泳道头部文字色值必须为 #94a3b8');
+  assert.ok(clientSource.includes('height: 38,'), '工作区列头部高度必须严格为 38px (PRD 3.1)');
+  assert.ok(clientSource.includes("fill: '#94a3b8'"), '工作区列头部文字色值必须为 #94a3b8');
   assert.ok(clientSource.includes("z-index: 100;"), 'L2 Tooltip z-index 必须为 100 置顶');
   assert.ok(clientSource.includes("transform-box: fill-box !important;"), '呼吸指示灯必须声明 transform-box: fill-box !important');
 
@@ -1492,7 +1500,7 @@ test('全量合规审查：三次贝塞尔外切、无重复节点渲染、泳�
   assert.ok(fallbackNode, '虚拟端点节点必须存在');
   assert.equal(fallbackNode.session.title.startsWith('Agent '), true, '无标题虚拟端点必须安全回退为 Agent 短码格式');
 
-  // 离线/虚拟端点状态消费验证（PRD 缺陷 5 彻底闭环：渲染 session.offline）
+  // 离线/虚拟端点状态消费验证（PRD 缺陷 5 完整实现：渲染 session.offline）
   const offlineSessionDrawer = plugin.CanvasDrawer({
     entity: {
       kind: 'session',
@@ -1725,7 +1733,7 @@ test('协作看板缺陷回归验证：session.offline 端到端消费、抽屉�
   assert.ok(postTagsValue.length > 0, 'Post Tooltip 必须渲染完整 Tags 内容');
 
   // 5. 单工作区 Fit View 包围盒算法与居中计算验证 (PRD 8.2)
-  // 单工作区 (宽 260)，顶部通条 min-width 1080 (右边界 40 + 1080 = 1120)
+  // 单工作区 (宽 260)，顶部黑板栏 min-width 1080 (右边界 40 + 1080 = 1120)
   const singleWsLayout = plugin.computeLayout(
     [{ id: '/ws/single', name: 'single-ws', isCurrent: true }],
     [{ id: 's1', workspace: '/ws/single', title: 'Agent 1', status: 'idle' }],
@@ -1734,13 +1742,1059 @@ test('协作看板缺陷回归验证：session.offline 端到端消费、抽屉�
     false
   );
   assert.ok(singleWsLayout.blackboardBound, '必须存在 blackboardBound');
-  assert.equal(singleWsLayout.blackboardBound.width, 1080, '通条最小宽度必须为 1080px');
-  assert.equal(singleWsLayout.blackboardBound.x, 40, '通条起始 X 必须为 40px');
+  assert.equal(singleWsLayout.blackboardBound.width, 1080, '顶部黑板栏最小宽度必须为 1080px');
+  assert.equal(singleWsLayout.blackboardBound.x, 40, '顶部黑板栏起始 X 必须为 40px');
   const blackboardRight = singleWsLayout.blackboardBound.x + singleWsLayout.blackboardBound.width;
-  assert.equal(blackboardRight, 1120, '顶部通条右边界必须达到 1120px');
+  assert.equal(blackboardRight, 1120, '顶部黑板栏右边界必须达到 1120px');
 
   // 验证无任何 340px 欺骗性截断逻辑残余
   assert.equal(code.includes('maxX = Math.max(maxX, 340)'), false, '严禁保留 340px 硬编码作弊截断分支');
   assert.equal(code.includes('maxX = Math.max(maxX, blackboardBound.x + blackboardBound.width)'), true, 'Fit View 必须基于真实的 blackboardBound.x + blackboardBound.width 计算 maxX');
-  assert.equal(code.includes('x: blackboardBound.x + blackboardBound.width / 2'), true, '黑板空态占位文字必须基于通条中心居中');
+  assert.equal(code.includes('x: blackboardBound.x + blackboardBound.width / 2'), true, '黑板空态占位文字必须基于黑板区域中心居中');
 });
+
+test('协作看板点击自适应居中、假零值防御、44px 工具栏校正与 ResizeObserver 响应式适配', () => {
+  const plugin = loadClientBundle();
+  const code = fs.readFileSync(path.join(rootDir, 'lib', 'client.js'), 'utf8');
+
+  // 1. 静态源码特征与防假零值断言
+  assert.equal(code.includes('var rawW = (viewport && viewport.clientWidth > 0)'), true, '必须通过真实测量保护避免假零值');
+  assert.equal(code.includes('container.clientHeight - 44'), true, '必须显式扣除 44px 工具栏垂直高度计算视口居中');
+  assert.equal(code.includes('ResizeObserver'), true, '必须接入 ResizeObserver 实现视口尺寸响应式感知');
+
+  // 2. 初始状态自适应居中验证（杜绝 translate3d(0px, 0px, 0px) scale(1) 贴左截断）
+  const t = (k) => k;
+  const initialVNode = plugin.CanvasView({ sessionId: 'session-test', t });
+  function findVNodes(node, predicate, acc = []) {
+    if (!node) return acc;
+    if (predicate(node)) acc.push(node);
+    if (Array.isArray(node.children)) {
+      node.children.forEach((c) => findVNodes(c, predicate, acc));
+    }
+    return acc;
+  }
+  const svgSurface = findVNodes(initialVNode, (n) => n && n.props && n.props.className === 'dsh-canvas-surface')[0];
+  assert.ok(svgSurface, '必须渲染 dsh-canvas-surface SVG 节点');
+  const transform = svgSurface.props.style.transform;
+  assert.equal(transform.includes('translate3d(0px, 0px, 0px) scale(1)'), false, '首屏严禁为硬编码未居中的 (0, 0) scale(1)');
+  assert.ok(transform.includes('translate3d(') && transform.includes('scale('), '必须包含 translate3d 与 scale 变换样式');
+
+  // 3. 运行时沙箱模拟：ResizeObserver 挂载、假零值恢复、Tab 激活与卸载断言
+  let roObservedEl = null;
+  let roDisconnectCalled = false;
+  let roCallback = null;
+
+  class MockResizeObserver {
+    constructor(callback) {
+      roCallback = callback;
+    }
+    observe(el) {
+      roObservedEl = el;
+    }
+    disconnect() {
+      roDisconnectCalled = true;
+    }
+  }
+
+  let capturedPan = null;
+  let capturedZoom = null;
+  let registeredListeners = {};
+  const mockCleanups = [];
+
+  const mockReact = {
+    useState: (initial) => {
+      let state = initial;
+      const setter = (next) => {
+        if (typeof next === 'function') next = next(state);
+        state = next;
+        if (state && typeof state === 'object' && 'x' in state && 'y' in state) {
+          capturedPan = state;
+        } else if (typeof state === 'number') {
+          capturedZoom = state;
+        }
+      };
+      return [initial, setter];
+    },
+    useRef: (initial) => ({ current: initial }),
+    useEffect: (fn) => {
+      const cleanup = fn();
+      if (typeof cleanup === 'function') mockCleanups.push(cleanup);
+    },
+    createElement: (type, props, ...children) => ({ type, props: props || {}, children })
+  };
+
+  const runtimeWindow = {
+    ResizeObserver: MockResizeObserver,
+    innerWidth: 1200,
+    innerHeight: 800,
+    addEventListener: (event, handler) => { registeredListeners[event] = handler; },
+    removeEventListener: (event, handler) => { if (registeredListeners[event] === handler) delete registeredListeners[event]; },
+    requestAnimationFrame: (cb) => setTimeout(cb, 16),
+    cancelAnimationFrame: () => {}
+  };
+
+  const runtimeDocument = {
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    hidden: false,
+    getElementById: () => null,
+    createElement: () => ({ id: '', textContent: '' }),
+    head: { appendChild: () => {} },
+    querySelector: (sel) => (sel === '.dsh-canvas-container' ? containerMock : null)
+  };
+
+  let loadedReg = null;
+  const runtimeLoader = {
+    load: (payload) => { loadedReg = payload; }
+  };
+
+  const testSandbox = {
+    window: runtimeWindow,
+    document: runtimeDocument,
+    ResizeObserver: MockResizeObserver,
+    console,
+    Date,
+    Set,
+    Map,
+    Array,
+    Object,
+    String,
+    Math,
+    JSON,
+    URLSearchParams,
+    setInterval: () => 1,
+    clearInterval: () => {},
+    setTimeout: (fn) => { fn(); return 1; },
+    clearTimeout: () => {}
+  };
+  runtimeWindow.__ModuleLoader__ = runtimeLoader;
+
+  vm.createContext(testSandbox);
+  vm.runInContext(code, testSandbox);
+  const runtimePlugin = loadedReg.factory((name) => name === 'react' ? mockReact : null);
+
+  const containerMock = {
+    clientWidth: 0,
+    clientHeight: 0,
+    querySelector: (sel) => (sel === '.dsh-canvas-viewport' ? viewportMock : null)
+  };
+  const viewportMock = {
+    clientWidth: 0,
+    clientHeight: 0
+  };
+
+  const activeView = runtimePlugin.CanvasView({
+    sessionId: 's-ro-test',
+    t,
+    fetchTelemetry: async () => ({
+      sessions: [{ id: 's1', workspace: '/ws/1', title: 'Agent 1', status: 'running' }],
+      calls: [],
+      posts: [],
+      workspaces: [{ id: '/ws/1', name: 'ws-1', isCurrent: true }]
+    })
+  });
+
+  assert.ok(roCallback, '必须通过 ResizeObserver 注册监听回调');
+
+  // 模拟 Tab 切换恢复：从宽度 0 变为 1200x700
+  containerMock.clientWidth = 1200;
+  containerMock.clientHeight = 744; // 含 44px 工具栏
+  viewportMock.clientWidth = 1200;
+  viewportMock.clientHeight = 700; // 视口净高 700px
+
+  roCallback([{
+    target: containerMock,
+    contentRect: { width: 1200, height: 744 }
+  }]);
+
+  // 断言卸载正常清理
+  mockCleanups.forEach((c) => c());
+  assert.equal(roDisconnectCalled, true, '组件卸载时必须断开 ResizeObserver 监听');
+});
+
+test('协作看板黑板标题口径与卡片视觉状态强化（PRD §6.4 与 §11 缺陷2）', () => {
+  const clientPath = path.join(rootDir, 'lib', 'client.js');
+  const code = fs.readFileSync(clientPath, 'utf8');
+
+  let registration = null;
+  const mockWindow = {
+    __ModuleLoader__: {
+      load: (payload) => { registration = payload; }
+    }
+  };
+
+  const sandbox = {
+    window: mockWindow,
+    console, Date, Set, Map, Array, Object, String, Math, JSON, URLSearchParams,
+    setInterval, clearInterval, setTimeout, clearTimeout
+  };
+
+  vm.createContext(sandbox);
+  vm.runInContext(code, sandbox);
+  assert.ok(registration);
+
+  function createMockReact(telemetryData) {
+    return {
+      useState: (initial) => {
+        if (initial && typeof initial === 'object' && 'sessions' in initial) {
+          return [telemetryData, () => {}];
+        }
+        return [initial, () => {}];
+      },
+      useRef: (initial) => ({ current: initial }),
+      useEffect: () => {},
+      createElement: (type, props, ...children) => ({ type, props: props || {}, children })
+    };
+  }
+
+  function findNodeById(node, id) {
+    if (!node || typeof node !== 'object') return null;
+    if (node.props && (node.props.id === id || node.props.key === id)) return node;
+    if (Array.isArray(node.children)) {
+      for (const child of node.children) {
+        const found = findNodeById(child, id);
+        if (found) return found;
+      }
+    }
+    return null;
+  }
+
+  // 1. 测试场景：存在非 active 条目（0 活跃 / 3 总计：2 撤销 + 1 过期，重现用户截图同屏矛盾）
+  const telemetryWithMixedPosts = {
+    timestamp: Date.now(),
+    currentWorkspace: '/ws/1',
+    workspaces: [{ id: '/ws/1', name: 'ws-1', isCurrent: true, sessionIds: ['session-s1'] }],
+    sessions: [{ id: 'session-s1', title: 'Agent 1', workspace: '/ws/1', state: 'idle' }],
+    posts: [
+      { id: 'post-1', topic: 'topic-archived-1', status: 'archived', authorSessionId: 'session-s1', ttlRemainingMs: 0 },
+      { id: 'post-2', topic: 'topic-archived-2', status: 'archived', authorSessionId: 'session-s1', ttlRemainingMs: 0 },
+      { id: 'post-3', topic: 'topic-expired-1', status: 'expired', authorSessionId: 'session-s1', ttlRemainingMs: 0 }
+    ],
+    calls: []
+  };
+
+  const react1 = createMockReact(telemetryWithMixedPosts);
+  const pluginZh = registration.factory((name) => name === 'react' ? react1 : null);
+  const tZh = (k) => pluginZh.zh[k] || k;
+  const viewZh = pluginZh.CanvasView({ sessionId: 'session-s1', t: tZh, locale: 'zh' });
+
+  // 1.1 标题口径显式化断言（中文环境）：必须清晰显示 '(0 活跃 / 3 总计)'，杜绝 (0) 与 3 张卡片的同屏矛盾
+  const titleGroup = findNodeById(viewZh, 'dsh-canvas-blackboard-title-group');
+  assert.ok(titleGroup, '顶部黑板栏标题分组必须存在');
+  const titleTexts = titleGroup.children.filter(c => c && c.type === 'text');
+  assert.equal(titleTexts.length, 2, '黑板栏标题必须包含标签与计数字符节点');
+  assert.equal(titleTexts[0].children[0], '公共黑板');
+  assert.equal(titleTexts[1].children[0], '(0 活跃 / 3 总计)', '当存在非 active 条目时，标题必须标注口径 (0 活跃 / 3 总计)');
+
+  // 1.2 标题口径显式化断言（英文环境）：'Blackboard (0 active / 3 total)'
+  const pluginEn = registration.factory((name) => name === 'react' ? react1 : null);
+  const tEn = (k) => pluginEn.en[k] || k;
+  const viewEn = pluginEn.CanvasView({ sessionId: 'session-s1', t: tEn, locale: 'en' });
+  const titleGroupEn = findNodeById(viewEn, 'dsh-canvas-blackboard-title-group');
+  const titleTextsEn = titleGroupEn.children.filter(c => c && c.type === 'text');
+  assert.equal(titleTextsEn[0].children[0], 'Blackboard');
+  assert.equal(titleTextsEn[1].children[0], '(0 active / 3 total)', '英文环境下标注口径必须为 (0 active / 3 total)');
+
+  // 1.3 非 active 卡片视觉状态强化断言：低饱和度、虚线边框、顶部明确灰底状态标签
+  const bbLayer = findNodeById(viewZh, 'dsh-canvas-blackboard-layer');
+  assert.ok(bbLayer, '黑板图层必须渲染');
+
+  // 查找 post-1 卡片（archived 已撤销）
+  const cardArchived = findNodeById(bbLayer, 'post-1');
+  assert.ok(cardArchived, 'post-1 卡片必须渲染');
+  const rectArchived = cardArchived.children.find(c => c && c.type === 'rect');
+  assert.equal(rectArchived.props.strokeDasharray, '2 3', '已撤销卡片边框必须为虚线 2 3');
+  assert.equal(rectArchived.props.fill, 'rgba(15, 23, 42, 0.35)', '已撤销卡片背景必须为低饱和暗色填充');
+
+  // 断言卡片顶部灰底状态标签 [已撤销]
+  const badgeArchived = cardArchived.children.find(c => c && c.props && c.props.className === 'dsh-canvas-post-badge');
+  assert.ok(badgeArchived, '已撤销卡片顶部必须包含灰底状态标签徽章');
+  const badgeRectArch = badgeArchived.children.find(c => c && c.type === 'rect');
+  assert.equal(badgeRectArch.props.fill, '#334155', '状态标签背景必须为深冷灰 (#334155)');
+  const badgeTextArch = badgeArchived.children.find(c => c && c.type === 'text');
+  assert.equal(badgeTextArch.children[0], '[已撤销]', '已撤销卡片顶部标签文本必须为 [已撤销]');
+
+  // 查找 post-3 卡片（expired 已过期）
+  const cardExpired = findNodeById(bbLayer, 'post-3');
+  assert.ok(cardExpired, 'post-3 卡片必须渲染');
+  const rectExpired = cardExpired.children.find(c => c && c.type === 'rect');
+  assert.equal(rectExpired.props.strokeDasharray, '1 3', '已过期卡片边框必须为点虚线 1 3');
+  const badgeExpired = cardExpired.children.find(c => c && c.props && c.props.className === 'dsh-canvas-post-badge');
+  assert.ok(badgeExpired, '已过期卡片顶部必须包含灰底状态标签徽章');
+  const badgeTextExp = badgeExpired.children.find(c => c && c.type === 'text');
+  assert.equal(badgeTextExp.children[0], '[已过期]', '已过期卡片顶部标签文本必须为 [已过期]');
+
+  // 2. 测试场景：全部为 active 条目（2 活跃 / 2 总计）
+  const telemetryAllActive = {
+    timestamp: Date.now(),
+    currentWorkspace: '/ws/1',
+    workspaces: [{ id: '/ws/1', name: 'ws-1', isCurrent: true, sessionIds: ['session-s1'] }],
+    sessions: [{ id: 'session-s1', title: 'Agent 1', workspace: '/ws/1', state: 'idle' }],
+    posts: [
+      { id: 'post-act-1', topic: 'topic-active-1', status: 'active', authorSessionId: 'session-s1', ttlRemainingMs: 3600000 },
+      { id: 'post-act-2', topic: 'topic-active-2', status: 'active', authorSessionId: 'session-s1', ttlRemainingMs: 7200000 }
+    ],
+    calls: []
+  };
+
+  const react2 = createMockReact(telemetryAllActive);
+  const pluginActive = registration.factory((name) => name === 'react' ? react2 : null);
+  const viewActive = pluginActive.CanvasView({ sessionId: 'session-s1', t: tZh, locale: 'zh' });
+
+  // 2.1 全为活跃时，标题仅展示 '(2)'，不显示冗余总计
+  const titleGroupActive = findNodeById(viewActive, 'dsh-canvas-blackboard-title-group');
+  const activeTitleTexts = titleGroupActive.children.filter(c => c && c.type === 'text');
+  assert.equal(activeTitleTexts[1].children[0], '(2)', '全为活跃条目时标题必须显示 (2)');
+
+  // 2.2 活跃卡片无顶部非活跃状态标签，展示高亮话题色与 TTL 剩余时间
+  const bbLayerActive = findNodeById(viewActive, 'dsh-canvas-blackboard-layer');
+  const cardActive = findNodeById(bbLayerActive, 'post-act-1');
+  const badgeActive = cardActive.children.find(c => c && c.props && c.props.className === 'dsh-canvas-post-badge');
+  assert.equal(badgeActive, undefined, '活跃卡片严禁渲染非活跃灰底状态标签');
+  const topicTextActive = cardActive.children.find(c => c && c.type === 'text' && c.children && c.children.includes('topic-active-1'));
+  assert.equal(topicTextActive.props.fill, '#e2e8f0', '活跃卡片话题文字采用高亮 #e2e8f0');
+
+  // 3. 测试场景：空黑板（0 条目）
+  const telemetryEmpty = {
+    timestamp: Date.now(),
+    currentWorkspace: '/ws/1',
+    workspaces: [{ id: '/ws/1', name: 'ws-1', isCurrent: true, sessionIds: ['session-s1'] }],
+    sessions: [{ id: 'session-s1', title: 'Agent 1', workspace: '/ws/1', state: 'idle' }],
+    posts: [],
+    calls: []
+  };
+  const react3 = createMockReact(telemetryEmpty);
+  const pluginEmpty = registration.factory((name) => name === 'react' ? react3 : null);
+  const viewEmpty = pluginEmpty.CanvasView({ sessionId: 'session-s1', t: tZh, locale: 'zh' });
+  const titleGroupEmpty = findNodeById(viewEmpty, 'dsh-canvas-blackboard-title-group');
+  const emptyTitleTexts = titleGroupEmpty.children.filter(c => c && c.type === 'text');
+  assert.equal(emptyTitleTexts[1].children[0], '(0)', '空黑板时标题必须显示 (0)');
+});
+
+test('ADR-0003 默认工作区隔离、跨工作区切换开关与当前会话发光视觉锚点', () => {
+  const plugin = loadClientBundle();
+  const { isMatchingSession } = plugin;
+
+  // 1. isMatchingSession 匹配逻辑单元断言
+  assert.equal(typeof isMatchingSession, 'function', 'isMatchingSession 必须作为函数导出');
+  assert.equal(isMatchingSession('s1', 's1'), true, '精确全等必须匹配');
+  assert.equal(isMatchingSession('Session-Abcd', 'session-ABCD'), true, '大小写差异必须归一化匹配');
+  assert.equal(isMatchingSession('session-12345678', '12345678'), true, '剥离 session- 前缀后必须匹配');
+  assert.equal(isMatchingSession('session-7b3391ba-df1b-4b9d', '7b3391ba'), true, '8 位 shortId 必须匹配');
+  assert.equal(isMatchingSession('s1', 's2'), false, '不同会话 ID 严禁误匹配');
+  assert.equal(isMatchingSession('s1', ''), false, '目标 ID 为空时必须返回 false');
+  assert.equal(isMatchingSession('', 's1'), false, '源 ID 为空时必须返回 false');
+  assert.equal(isMatchingSession(null, 's1'), false, '源 ID 为 null 时安全返回 false');
+
+  // 2. 模拟双工作区遥测数据（/ws/main 当前工作区，/ws/peer 外部隔离工作区）
+  const telemetryMultiWs = {
+    timestamp: Date.now(),
+    currentWorkspace: '/ws/main',
+    workspaces: [
+      { id: '/ws/main', name: 'main-repo', isCurrent: true, sessionIds: ['session-cur', 'session-other'] },
+      { id: '/ws/peer', name: 'peer-repo', isCurrent: false, sessionIds: ['session-peer'] }
+    ],
+    sessions: [
+      { id: 'session-cur', title: 'Cur Agent', workspace: '/ws/main', state: 'running' },
+      { id: 'session-other', title: 'Other Agent', workspace: '/ws/main', state: 'idle' },
+      { id: 'session-peer', title: 'Peer Agent', workspace: '/ws/peer', state: 'running' }
+    ],
+    posts: [],
+    calls: []
+  };
+
+  function createMockReact(telemetryData) {
+    return {
+      useState: (initial) => {
+        if (initial && typeof initial === 'object' && 'sessions' in initial) {
+          return [telemetryData, () => {}];
+        }
+        return [initial, () => {}];
+      },
+      useRef: (initial) => ({ current: initial }),
+      useEffect: () => {},
+      createElement: (type, props, ...children) => ({ type, props: props || {}, children })
+    };
+  }
+
+  function findNodeById(node, id) {
+    if (!node || typeof node !== 'object') return null;
+    if (node.props && (node.props.id === id || node.props.key === id)) return node;
+    if (Array.isArray(node.children)) {
+      for (const child of node.children) {
+        const found = findNodeById(child, id);
+        if (found) return found;
+      }
+    }
+    return null;
+  }
+
+  function findVNodes(node, predicate, acc = []) {
+    if (!node || typeof node !== 'object') return acc;
+    if (predicate(node)) acc.push(node);
+    if (Array.isArray(node.children)) {
+      for (const child of node.children) findVNodes(child, predicate, acc);
+    }
+    return acc;
+  }
+
+  const reactZh = createMockReact(telemetryMultiWs);
+  const pluginZh = loadClientBundle((name) => name === 'react' ? reactZh : null);
+  const tZh = (k) => pluginZh.zh[k] || k;
+
+  // 2.1 默认隔离断言（crossWorkspace 未传，必须缺省为 false）
+  const defaultIsolatedView = pluginZh.CanvasView({
+    sessionId: 'session-cur',
+    t: tZh,
+    locale: 'zh'
+  });
+
+  const swimlanesLayer = findNodeById(defaultIsolatedView, 'dsh-canvas-swimlanes');
+  assert.ok(swimlanesLayer, 'dsh-canvas-swimlanes 必须存在');
+  assert.equal(swimlanesLayer.children.length, 1, '默认隔离下仅渲染当前工程工作区列');
+  assert.equal(swimlanesLayer.children[0].props.key, '/ws/main', '渲染的工作区必须为当前工作区 /ws/main');
+
+  const nodesLayer = findNodeById(defaultIsolatedView, 'dsh-canvas-nodes');
+  assert.ok(nodesLayer, 'dsh-canvas-nodes 必须存在');
+  const renderedNodeIds = nodesLayer.children.map(n => n.props.key);
+  assert.ok(renderedNodeIds.includes('session-cur'), '当前工程会话 session-cur 必须渲染');
+  assert.ok(renderedNodeIds.includes('session-other'), '当前工程会话 session-other 必须渲染');
+  assert.equal(renderedNodeIds.includes('session-peer'), false, '外部工作区 session-peer 默认严禁进入画布');
+
+  // 工具栏切换开关断言
+  const toolbarButtons = findVNodes(defaultIsolatedView, (n) => n && n.type === 'button' && n.props && n.props.className && n.props.className.includes('dsh-canvas-btn'));
+  const crossWsBtn = toolbarButtons.find(b => b.children && b.children.includes('跨工作区拓扑'));
+  assert.ok(crossWsBtn, '顶部工具栏必须提供「跨工作区拓扑」切换开关');
+  assert.equal(crossWsBtn.props.className.includes('active'), false, '默认状态下跨工作区开关不处于 active 状态');
+
+  const locateBtn = toolbarButtons.find(b => b.children && b.children.includes('定位当前会话'));
+  assert.ok(locateBtn, '当传入 sessionId 时顶部工具栏必须提供「定位当前会话」按钮');
+
+  // 2.2 显式开启跨工作区断言 (crossWorkspace: true)
+  const permissiveView = pluginZh.CanvasView({
+    sessionId: 'session-cur',
+    crossWorkspace: true,
+    t: tZh,
+    locale: 'zh'
+  });
+  const permissiveSwimlanes = findNodeById(permissiveView, 'dsh-canvas-swimlanes');
+  assert.equal(permissiveSwimlanes.children.length, 2, '开启 crossWorkspace: true 时渲染全部 2 个工作区列');
+  const permissiveNodes = findNodeById(permissiveView, 'dsh-canvas-nodes');
+  const permissiveNodeIds = permissiveNodes.children.map(n => n.props.key);
+  assert.ok(permissiveNodeIds.includes('session-peer'), '开启跨工作区后外部工作区会话必须正常呈现');
+
+  const permissiveButtons = findVNodes(permissiveView, (n) => n && n.type === 'button' && n.props && n.props.className && n.props.className.includes('dsh-canvas-btn'));
+  const crossWsBtnActive = permissiveButtons.find(b => b.children && b.children.includes('跨工作区拓扑'));
+  assert.ok(crossWsBtnActive.props.className.includes('active'), '跨工作区激活时按钮必须包含 active 类名');
+
+  // 3. 当前会话高亮发光锚点与 [当前] 状态标签断言
+  const curNodeGroup = findNodeById(nodesLayer, 'dsh-canvas-node-session-cur');
+  assert.ok(curNodeGroup, '当前会话节点必须带有专属元素 ID');
+  assert.ok(curNodeGroup.props.className.includes('dsh-canvas-node-current'), '当前会话节点外层必须带有 dsh-canvas-node-current 类名');
+
+  const curEllipse = curNodeGroup.children.find(c => c && c.type === 'ellipse');
+  assert.ok(curEllipse, '当前会话椭圆节点必须存在');
+  assert.equal(curEllipse.props.stroke, '#38bdf8', '当前会话椭圆边框采用专属高亮青色 (#38bdf8)');
+  assert.equal(curEllipse.props.strokeWidth, '2.4', '当前会话椭圆边框加粗至 2.4px');
+  assert.equal(curEllipse.props.strokeDasharray, 'none', '当前会话椭圆边框为实线');
+  assert.equal(curEllipse.props.style.filter, 'drop-shadow(0 0 8px #38bdf8)', '当前会话椭圆外围必须渲染 drop-shadow(0 0 8px #38bdf8) 发光光晕');
+
+  // 状态标签断言（中文环境）
+  const curBadge = curNodeGroup.children.find(c => c && c.props && c.props.className === 'dsh-canvas-session-current-badge');
+  assert.ok(curBadge, '当前会话标题旁必须渲染状态标签分组');
+  const curBadgeText = curBadge.children.find(c => c && c.type === 'text');
+  assert.equal(curBadgeText.children[0], '[当前]', '中文环境下状态标签必须渲染 [当前]');
+
+  // 对比非当前会话 session-other
+  const otherNodeGroup = findNodeById(nodesLayer, 'dsh-canvas-node-session-other');
+  assert.ok(otherNodeGroup, '非当前会话节点存在');
+  assert.equal(otherNodeGroup.props.className.includes('dsh-canvas-node-current'), false, '非当前会话严禁携带 dsh-canvas-node-current');
+  const otherEllipse = otherNodeGroup.children.find(c => c && c.type === 'ellipse');
+  assert.notEqual(otherEllipse.props.style.filter, 'drop-shadow(0 0 8px #38bdf8)', '非当前会话严禁具备当前会话专属光晕');
+  const otherBadge = otherNodeGroup.children.find(c => c && c.props && c.props.className === 'dsh-canvas-session-current-badge');
+  assert.equal(otherBadge, undefined, '非当前会话严禁渲染 [当前] 状态标签');
+
+  // 4. 英文环境下状态标签断言
+  const reactEn = createMockReact(telemetryMultiWs);
+  const pluginEn = loadClientBundle((name) => name === 'react' ? reactEn : null);
+  const tEn = (k) => pluginEn.en[k] || k;
+  const viewEn = pluginEn.CanvasView({
+    sessionId: 'session-cur',
+    t: tEn,
+    locale: 'en'
+  });
+  const nodesLayerEn = findNodeById(viewEn, 'dsh-canvas-nodes');
+  const curNodeGroupEn = findNodeById(nodesLayerEn, 'dsh-canvas-node-session-cur');
+  const curBadgeEn = curNodeGroupEn.children.find(c => c && c.props && c.props.className === 'dsh-canvas-session-current-badge');
+  assert.ok(curBadgeEn, '英文环境下当前会话状态标签分组必须存在');
+  const curBadgeTextEn = curBadgeEn.children.find(c => c && c.type === 'text');
+  assert.equal(curBadgeTextEn.children[0], '[Current]', '英文环境下状态标签必须渲染 [Current]');
+
+  // 5. 无 sessionId 传入时：不渲染定位按钮，所有节点均无发光光晕与 [当前] 标签
+  const noSessionView = pluginZh.CanvasView({ t: tZh });
+  const noSessionButtons = findVNodes(noSessionView, (n) => n && n.type === 'button' && n.props && n.props.className && n.props.className.includes('dsh-canvas-btn'));
+  const noLocateBtn = noSessionButtons.find(b => b.children && b.children.includes('定位当前会话'));
+  assert.equal(noLocateBtn, undefined, '无 sessionId 传入时严禁渲染定位当前会话按钮');
+});
+
+test('Topology Relationship Edges Contrast & WCAG 2.1 Compliance (PRD §3.1, §4.1 & Task t10)', () => {
+  function createMockReact(telemetryData) {
+    return {
+      useState: (initial) => {
+        if (initial && typeof initial === 'object' && 'sessions' in initial) {
+          return [telemetryData, () => {}];
+        }
+        return [initial, () => {}];
+      },
+      useRef: (initial) => ({ current: initial }),
+      useEffect: () => {},
+      createElement: (type, props, ...children) => ({ type, props: props || {}, children })
+    };
+  }
+
+  function findNodeById(node, id) {
+    if (!node || typeof node !== 'object') return null;
+    if (node.props && (node.props.id === id || node.props.key === id)) return node;
+    if (Array.isArray(node.children)) {
+      for (const child of node.children) {
+        const found = findNodeById(child, id);
+        if (found) return found;
+      }
+    }
+    return null;
+  }
+
+  const telemetryWithEdges = {
+    workspaces: [
+      { id: '/path/to/main', name: 'main', isCurrent: true, sessionIds: ['session-auth', 'session-call-src', 'session-call-dst'] }
+    ],
+    sessions: [
+      { id: 'session-auth', title: 'Author Node', state: 'idle', status: 'idle', workspace: '/path/to/main' },
+      { id: 'session-call-src', title: 'Caller Node', state: 'running', status: 'running', workspace: '/path/to/main' },
+      { id: 'session-call-dst', title: 'Target Node', state: 'idle', status: 'idle', workspace: '/path/to/main' }
+    ],
+    posts: [
+      { id: 'post-1', topic: 'task:design', status: 'active', authorSessionId: 'session-auth', ttlRemainingMs: 3600000 }
+    ],
+    calls: [
+      {
+        id: 'call-1',
+        callerSessionId: 'session-call-src',
+        targetSessionId: 'session-call-dst',
+        callType: 'task_dispatch',
+        deliveryMode: 'steer',
+        durationMs: 120,
+        timestamp: Date.now(),
+        contextPostIds: ['post-1'],
+        status: 'active'
+      }
+    ]
+  };
+
+  const reactMock = createMockReact(telemetryWithEdges);
+  const plugin = loadClientBundle((name) => name === 'react' ? reactMock : null);
+  const t = (k) => plugin.zh[k] || k;
+  const view = plugin.CanvasView({ t: t });
+
+  // 1. 发布归属边 (Author Edge) 默认态与规格断言
+  const authorEdgesGroup = findNodeById(view, 'dsh-canvas-author-edges');
+  assert.ok(authorEdgesGroup, 'dsh-canvas-author-edges 图层必须存在');
+  const validAuthorPaths = authorEdgesGroup.children.filter(Boolean);
+  assert.equal(validAuthorPaths.length, 1, '必须生成 1 条发布归属边');
+  const authorEdge = validAuthorPaths[0];
+
+  assert.equal(authorEdge.props.stroke, '#64748b', '归属边默认描边色为 #64748b');
+  assert.equal(authorEdge.props.strokeWidth, '1.2', '归属边默认线宽必须提升至 1.2px');
+  assert.equal(authorEdge.props.strokeDasharray, '4 3', '归属边默认虚线样式必须设置为 4 3');
+  assert.equal(authorEdge.props.strokeOpacity, 0.5, '归属边默认透明度必须提升至 0.50');
+
+  // 2. 上下文引用边 (Context Edge) 默认态与规格断言
+  const contextEdgesGroup = findNodeById(view, 'dsh-canvas-context-edges');
+  assert.ok(contextEdgesGroup, 'dsh-canvas-context-edges 图层必须存在');
+  const validContextPaths = contextEdgesGroup.children.filter(Boolean).flat().filter(Boolean);
+  assert.equal(validContextPaths.length, 1, '必须生成 1 条上下文引用边');
+  const contextEdge = validContextPaths[0];
+
+  assert.equal(contextEdge.props.stroke, '#fbbf24', '上下文引用边必须采用高辨识度琥珀色 #fbbf24');
+  assert.equal(contextEdge.props.strokeWidth, '1.0', '上下文引用边默认线宽必须调整为 1.0px');
+  assert.equal(contextEdge.props.strokeDasharray, '3 3', '上下文引用边虚线样式必须设置为 3 3');
+  assert.equal(contextEdge.props.strokeOpacity, 0.45, '上下文引用边默认透明度必须提升至 0.45');
+
+  // 3. WCAG 2.1 对比度量化数学校验 (对齐 #0b0f19 与 #090d16 背景)
+  function srgbToLinear(c) {
+    const v = c / 255;
+    return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+  }
+  function getLuminance(r, g, b) {
+    return 0.2126 * srgbToLinear(r) + 0.7152 * srgbToLinear(g) + 0.0722 * srgbToLinear(b);
+  }
+  function calcContrast(l1, l2) {
+    const lighter = Math.max(l1, l2);
+    const darker = Math.min(l1, l2);
+    return (lighter + 0.05) / (darker + 0.05);
+  }
+
+  const bgDark = [11, 15, 25]; // #0b0f19
+  const bgBlack = [9, 13, 22]; // #090d16
+  const amber = [251, 191, 36]; // #fbbf24 (琥珀色)
+
+  // 琥珀色引用边在 0.45 透明度混合下的实际像素对比度
+  [bgDark, bgBlack].forEach((bg) => {
+    const blendedContext = [
+      Math.round(amber[0] * 0.45 + bg[0] * 0.55),
+      Math.round(amber[1] * 0.45 + bg[1] * 0.55),
+      Math.round(amber[2] * 0.45 + bg[2] * 0.55)
+    ];
+    const bgLum = getLuminance(...bg);
+    const edgeLum = getLuminance(...blendedContext);
+    const ratio = calcContrast(edgeLum, bgLum);
+    assert.ok(ratio >= 3.0, `上下文引用边在深色背景下的对比度 (${ratio.toFixed(2)}:1) 必须达到 WCAG 2.1 >= 3:1 标准`);
+  });
+
+  // 纯色描边色对比度：琥珀色对背景对比度 > 10:1，归属边 #64748b 对背景对比度 > 4:1
+  [bgDark, bgBlack].forEach((bg) => {
+    const bgLum = getLuminance(...bg);
+    const amberLum = getLuminance(...amber);
+    const slateLum = getLuminance(100, 116, 139); // #64748b
+    assert.ok(calcContrast(amberLum, bgLum) >= 3.0, '琥珀色描边对比度达标');
+    assert.ok(calcContrast(slateLum, bgLum) >= 3.0, '灰色归属边描边对比度达标');
+  });
+});
+
+test('Session Node Title Dynamic Space & Word-Boundary Truncation (PRD §5.1 & Task t11)', () => {
+  const plugin = loadClientBundle();
+  const { truncateTextByWidth } = plugin;
+  assert.equal(typeof truncateTextByWidth, 'function', 'truncateTextByWidth 必须由客户端插件导出');
+
+  // 1. 英文单词边界感知（Word-Boundary Awareness）断言
+  // 场景 1.1：超长带空格英文文本，截断点切入单词内部时优先回退至前一个单词边界空格处
+  // 'Agent Workspace Isolation Plan', maxWidth=105, limitW=89.
+  // 'Agent ' (43.2) + 'Worksp' (43.2) -> 86.4 <= 89. 'Workspace' 单词未完，回退至空格处
+  assert.equal(
+    truncateTextByWidth('Agent Workspace Isolation Plan', 105),
+    'Agent...',
+    '105px 阈值下英文单词腰斩时必须回退到单词边界'
+  );
+
+  // 场景 1.2：放宽至 140px（无徽章留白空间），可完整容纳前两个英文单词
+  // 'Agent Workspace ' (43.2 + 72.0 = 115.2 <= 124) -> 'Agent Workspace...'
+  assert.equal(
+    truncateTextByWidth('Agent Workspace Isolation Plan', 140),
+    'Agent Workspace...',
+    '140px 留白空间下可完整容纳两个单词且在边界截断'
+  );
+
+  // 场景 1.3：更多英文语句单词边界验证
+  assert.equal(
+    truncateTextByWidth('Quick brown fox jumps over lazy dog', 105),
+    'Quick brown...',
+    '避免将 fox 腰斩为 f'
+  );
+  assert.equal(
+    truncateTextByWidth('Quick brown fox jumps over lazy dog', 140),
+    'Quick brown fox...',
+    '放宽留白空间后可完整呈现至 fox 单词边界'
+  );
+
+  // 场景 1.4：无空格单长词降级按字符截断
+  assert.equal(
+    truncateTextByWidth('SingleLongUnbrokenWordThatExceedsLimit', 105),
+    'SingleLongUn...',
+    '无空格单长词必须平滑降级按字符级截断'
+  );
+
+  // 场景 1.5：末尾空白字符自动修剪
+  assert.equal(
+    truncateTextByWidth('Trailing spaces text   ', 105),
+    'Trailing...',
+    '截断追加省略号前必须修剪末尾空白字符'
+  );
+
+  // 2. 中文与中英混排动态留白空间截断断言
+  // 场景 2.1：纯长中文在不同动态阈值下的容纳能力对比
+  // 64px（当前会话展示 [当前] 标签）：limitW = 48 -> 3 个中文字符 (3 * 12.5 = 37.5 <= 48)
+  assert.equal(
+    truncateTextByWidth('深度思考智能体全流程协同', 64),
+    '深度思...',
+    '当前会话 64px 空间容纳 3 个汉字'
+  );
+  // 105px（存在调用计数徽章）：limitW = 89 -> 7 个中文字符 (7 * 12.5 = 87.5 <= 89)
+  assert.equal(
+    truncateTextByWidth('深度思考智能体全流程协同', 105),
+    '深度思考智能体...',
+    '带调用徽章会话 105px 空间容纳 7 个汉字'
+  );
+  // 140px（无徽章普通会话，充分利用右侧留白）：limitW = 124 -> 9 个中文字符 (9 * 12.5 = 112.5 <= 124)
+  assert.equal(
+    truncateTextByWidth('深度思考智能体全流程协同', 140),
+    '深度思考智能体全流...',
+    '无徽章普通会话 140px 空间容纳 9 个汉字（比 105px 多容纳 2 个汉字）'
+  );
+
+  // 场景 2.2：中文带空格文本不误删中文字符
+  assert.equal(
+    truncateTextByWidth('中文 包含 空格 的 文本 测试', 105),
+    '中文 包含 空...',
+    '中文空格不影响后续中文字符正常保留截断'
+  );
+
+  // 3. CanvasView 会话节点 VNode 渲染动态留白与单词边界集成断言
+  function createMockReact(telemetryData) {
+    return {
+      useState: (initial) => {
+        if (initial && typeof initial === 'object' && 'sessions' in initial) {
+          return [telemetryData, () => {}];
+        }
+        return [initial, () => {}];
+      },
+      useRef: (initial) => ({ current: initial }),
+      useEffect: () => {},
+      createElement: (type, props, ...children) => ({ type, props: props || {}, children })
+    };
+  }
+
+  function findNodeById(node, id) {
+    if (!node || typeof node !== 'object') return null;
+    if (node.props && (node.props.id === id || node.props.key === id)) return node;
+    if (Array.isArray(node.children)) {
+      for (const child of node.children) {
+        const found = findNodeById(child, id);
+        if (found) return found;
+      }
+    }
+    return null;
+  }
+
+  function findVNodes(node, predicate, acc = []) {
+    if (!node || typeof node !== 'object') return acc;
+    if (predicate(node)) acc.push(node);
+    if (Array.isArray(node.children)) {
+      for (const child of node.children) {
+        findVNodes(child, predicate, acc);
+      }
+    }
+    return acc;
+  }
+
+  const telemetryData = {
+    timestamp: Date.now(),
+    currentWorkspace: '/ws/main',
+    workspaces: [{ id: '/ws/main', name: 'main-ws', isCurrent: true, sessionIds: ['s-cur', 's-call', 's-plain'] }],
+    sessions: [
+      {
+        id: 's-cur',
+        title: 'Agent Workspace Isolation Plan',
+        workspace: '/ws/main',
+        state: 'running'
+      },
+      {
+        id: 's-call',
+        title: 'Agent Workspace Isolation Plan',
+        workspace: '/ws/main',
+        state: 'idle',
+        stats: { outboundCalls: 3, inboundCalls: 1 }
+      },
+      {
+        id: 's-plain',
+        title: 'Agent Workspace Isolation Plan',
+        workspace: '/ws/main',
+        state: 'idle',
+        stats: { outboundCalls: 0, inboundCalls: 0 }
+      }
+    ],
+    posts: [],
+    calls: []
+  };
+
+  const reactMock = createMockReact(telemetryData);
+  const clientPlugin = loadClientBundle((name) => name === 'react' ? reactMock : null);
+  const view = clientPlugin.CanvasView({
+    sessionId: 's-cur',
+    locale: 'zh',
+    t: (k) => clientPlugin.zh[k] || k
+  });
+
+  const nodesLayer = findNodeById(view, 'dsh-canvas-nodes');
+  assert.ok(nodesLayer, 'dsh-canvas-nodes 容器必须存在');
+
+  // 当前会话 s-cur：具备 [当前] 状态徽章，titleMaxWidth = 64px -> 'Agent...'
+  const curGroup = findNodeById(nodesLayer, 'dsh-canvas-node-s-cur');
+  const curTitle = findVNodes(curGroup, n => n.props && n.props.className === 'dsh-canvas-session-title')[0];
+  assert.equal(curTitle.children[0], 'Agent...', '当前会话节点分配 64px 空间截断标题');
+
+  // 具备调用徽章会话 s-call：具备右侧数字徽章，titleMaxWidth = 105px -> 'Agent...'
+  const callGroup = findNodeById(nodesLayer, 'dsh-canvas-node-s-call');
+  const callTitle = findVNodes(callGroup, n => n.props && n.props.className === 'dsh-canvas-session-title')[0];
+  assert.equal(callTitle.children[0], 'Agent...', '带调用计数徽章节点分配 105px 空间截断标题');
+
+  // 普通会话 s-plain：无任何右侧徽章，充分利用留白，titleMaxWidth = 140px -> 'Agent Workspace...'
+  const plainGroup = findNodeById(nodesLayer, 'dsh-canvas-node-s-plain');
+  const plainTitle = findVNodes(plainGroup, n => n.props && n.props.className === 'dsh-canvas-session-title')[0];
+  assert.equal(plainTitle.children[0], 'Agent Workspace...', '无徽章普通会话放宽至 140px 留白空间，完整呈现两个英文单词');
+});
+
+test('黑板区域在无条目时的平滑压缩与空状态过渡 (PRD §3.1 & Task t12)', () => {
+  const plugin = loadClientBundle();
+  const { computeLayout } = plugin;
+
+  const tZh = (k) => plugin.zh[k] || k;
+  const tEn = (k) => plugin.en[k] || k;
+
+  function createMockReact(telemetryData) {
+    return {
+      useState: (initial) => {
+        if (initial && typeof initial === 'object' && 'sessions' in initial) {
+          return [telemetryData, () => {}];
+        }
+        return [initial, () => {}];
+      },
+      useRef: (initial) => ({ current: initial }),
+      useEffect: () => {},
+      createElement: (type, props, ...children) => ({ type, props: props || {}, children })
+    };
+  }
+
+  function findNodeById(node, id) {
+    if (!node || typeof node !== 'object') return null;
+    if (node.props && (node.props.id === id || node.props.key === id)) return node;
+    if (Array.isArray(node.children)) {
+      for (const child of node.children) {
+        const found = findNodeById(child, id);
+        if (found) return found;
+      }
+    }
+    return null;
+  }
+
+  // 1. 无条目场景 (posts.length === 0)：黑板区域平滑收缩为 38px 轻量状态条
+  const emptyLayout = computeLayout(
+    [{ id: '/ws/1', name: 'proj-1', isCurrent: true }],
+    [{ id: 's1', workspace: '/ws/1', title: 'Worker 1', state: 'idle' }],
+    [],
+    '/ws/1',
+    false
+  );
+
+  assert.ok(emptyLayout.blackboardBound, 'blackboardBound 必须存在');
+  assert.equal(emptyLayout.blackboardBound.x, 40, '起始 X 为 40px');
+  assert.equal(emptyLayout.blackboardBound.y, 24, '起始 Y 为 24px');
+  assert.equal(emptyLayout.blackboardBound.width, 1080, '最小宽度保持 1080px');
+  assert.equal(emptyLayout.blackboardBound.height, 38, '无条目时顶部黑板栏高度优雅收缩为 38px 轻量状态条');
+
+  // 2. 有条目场景 (posts.length > 0)：黑板区域维持 96px 标准高度容纳条目方块
+  const populatedLayout = computeLayout(
+    [{ id: '/ws/1', name: 'proj-1', isCurrent: true }],
+    [{ id: 's1', workspace: '/ws/1', title: 'Worker 1', state: 'idle' }],
+    [
+      { id: 'p1', topic: 'task:review', status: 'active', authorSessionId: 's1' },
+      { id: 'p2', topic: 'task:qa', status: 'active', authorSessionId: 's1' }
+    ],
+    '/ws/1',
+    false
+  );
+
+  assert.equal(populatedLayout.blackboardBound.height, 96, '有条目时顶部黑板栏高度扩展为 96px 标准高度');
+  assert.equal(populatedLayout.postPositions['p1'].y, 52, '第一张条目方块 y 坐标位于 52px');
+  assert.equal(populatedLayout.postPositions['p1'].height, 48, '条目方块高度为 48px');
+
+  // 3. VNode 渲染验证：空状态文字与垂直居中
+  const telemetryEmpty = {
+    timestamp: Date.now(),
+    currentWorkspace: '/ws/1',
+    workspaces: [{ id: '/ws/1', name: 'proj-1', isCurrent: true, sessionIds: ['s1'] }],
+    sessions: [{ id: 's1', title: 'Worker 1', workspace: '/ws/1', state: 'idle' }],
+    posts: [],
+    calls: []
+  };
+
+  const reactMockZh = createMockReact(telemetryEmpty);
+  const pluginZh = loadClientBundle((name) => name === 'react' ? reactMockZh : null);
+  const viewZh = pluginZh.CanvasView({ sessionId: 's1', t: tZh, locale: 'zh' });
+
+  const bbLayerZh = findNodeById(viewZh, 'dsh-canvas-blackboard-layer');
+  assert.ok(bbLayerZh, '必须渲染黑板图层');
+
+  // 背景矩形高度断言
+  const bgRect = bbLayerZh.children.find(c => c && c.type === 'rect' && c.props && c.props.x === 40);
+  assert.ok(bgRect, '必须包含背景矩形');
+  assert.equal(bgRect.props.height, 38, '空态下背景矩形高度严格为 38px');
+
+  // 标题组垂直偏移断言 (blackboardBound.y + 23)
+  const titleGroup = findNodeById(viewZh, 'dsh-canvas-blackboard-title-group');
+  assert.ok(titleGroup, '必须包含标题组');
+  assert.equal(titleGroup.props.transform, 'translate(56, 47)', '空态下标题组纵向偏移调整为 y + 23 = 47px 保持垂直居中');
+
+  // 居中空态提示文本断言
+  const emptyTextNode = bbLayerZh.children.find(c => c && c.type === 'text' && c.children && c.children.includes('暂无黑板条目'));
+  assert.ok(emptyTextNode, '必须渲染「暂无黑板条目」空态提示文本');
+  assert.equal(emptyTextNode.props.x, 40 + 1080 / 2, '空态提示文本水平严格居中');
+  assert.equal(emptyTextNode.props.y, 47, '空态提示文本纵向与 38px 状态条居中对齐 (24 + 23 = 47)');
+  assert.equal(emptyTextNode.props.textAnchor, 'middle', '文本锚点为 middle');
+
+  // 英文空态文案断言
+  const reactMockEn = createMockReact(telemetryEmpty);
+  const pluginEn = loadClientBundle((name) => name === 'react' ? reactMockEn : null);
+  const viewEn = pluginEn.CanvasView({ sessionId: 's1', t: tEn, locale: 'en' });
+  const bbLayerEn = findNodeById(viewEn, 'dsh-canvas-blackboard-layer');
+  const emptyTextEn = bbLayerEn.children.find(c => c && c.type === 'text' && c.children && c.children.includes('No blackboard posts'));
+  assert.ok(emptyTextEn, '英文环境下必须渲染「No blackboard posts」');
+
+  // 4. 包围盒自适应排除过高预留留白断言
+  const emptyBlackboardBottom = emptyLayout.blackboardBound.y + emptyLayout.blackboardBound.height;
+  const populatedBlackboardBottom = populatedLayout.blackboardBound.y + populatedLayout.blackboardBound.height;
+  assert.equal(emptyBlackboardBottom, 62, '空态黑板下边缘收缩至 62px');
+  assert.equal(populatedBlackboardBottom, 120, '有条目黑板下边缘为 120px');
+  assert.equal(populatedBlackboardBottom - emptyBlackboardBottom, 58, '自适应排除 58px 无效预留留白');
+});
+
+test('工作区列在 1 列、2 列、3 列不同规模下的包围盒边界与 Fit View 收敛性 (Task t12)', () => {
+  const plugin = loadClientBundle();
+  const { computeLayout } = plugin;
+
+  function evaluateFitView(layout, vw = 1280, vh = 800) {
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+
+    layout.workspaceBounds.forEach(ws => {
+      minX = Math.min(minX, ws.x);
+      minY = Math.min(minY, ws.y);
+      maxX = Math.max(maxX, ws.x + ws.width);
+      maxY = Math.max(maxY, ws.y + ws.height);
+    });
+
+    Object.keys(layout.nodePositions).forEach(sid => {
+      const node = layout.nodePositions[sid];
+      minX = Math.min(minX, node.x - 96);
+      minY = Math.min(minY, node.y - 26);
+      maxX = Math.max(maxX, node.x + 96);
+      maxY = Math.max(maxY, node.y + 26);
+    });
+
+    if (layout.blackboardBound) {
+      minX = Math.min(minX, layout.blackboardBound.x);
+      minY = Math.min(minY, layout.blackboardBound.y);
+      maxX = Math.max(maxX, layout.blackboardBound.x + layout.blackboardBound.width);
+      maxY = Math.max(maxY, layout.blackboardBound.y + layout.blackboardBound.height);
+    }
+
+    const contentW = Math.max(maxX - minX, 50);
+    const contentH = Math.max(maxY - minY, 50);
+    const padding = 48;
+    const availW = Math.max(vw - padding * 2, 100);
+    const availH = Math.max(vh - padding * 2, 100);
+
+    const fitZoom = Math.min(Math.max(Math.min(availW / contentW, availH / contentH), 0.30), 1.20);
+    const fitPanX = (vw - contentW * fitZoom) / 2 - minX * fitZoom;
+    const fitPanY = (vh - contentH * fitZoom) / 2 - minY * fitZoom;
+
+    return { minX, minY, maxX, maxY, contentW, contentH, fitZoom, fitPanX, fitPanY };
+  }
+
+  // -------------------------------------------------------------
+  // 1 规模验证：单列工作区 (1 Column)
+  // -------------------------------------------------------------
+  const ws1 = [{ id: '/ws/single', name: 'single-col', isCurrent: true }];
+  const sessions1 = [
+    { id: 's1-1', workspace: '/ws/single', title: 'Single Worker 1', state: 'running' },
+    { id: 's1-2', workspace: '/ws/single', title: 'Single Worker 2', state: 'idle' }
+  ];
+  const layout1 = computeLayout(ws1, sessions1, [], '/ws/single', false);
+
+  assert.equal(layout1.workspaceBounds.length, 1, '包含 1 个工作区列');
+  assert.equal(layout1.workspaceBounds[0].x, 40, '第 1 列 X 起始坐标为 40px');
+  assert.equal(layout1.workspaceBounds[0].width, 260, '第 1 列宽度严格为 260px');
+  assert.equal(layout1.workspaceBounds[0].x + layout1.workspaceBounds[0].width, 300, '第 1 列右边界为 300px');
+  assert.equal(layout1.blackboardBound.width, 1080, '顶部黑板栏保持 1080px 最小规约宽度');
+  assert.equal(layout1.blackboardBound.height, 38, '空黑板高度收缩为 38px');
+
+  const fit1 = evaluateFitView(layout1, 1280, 800);
+  assert.equal(fit1.minX, 40, '1 列包围盒 minX 为 40px');
+  assert.equal(fit1.maxX, 1120, '1 列包围盒 maxX 由 1080px 黑板决定为 1120px');
+  assert.equal(fit1.contentW, 1080, '1 列内容宽度为 1080px');
+  assert.ok(fit1.fitZoom >= 0.90 && fit1.fitZoom <= 1.20, '1 列在 1280px 下缩放比例保持舒适可读');
+  assert.ok(fit1.fitPanX > 0, 'fitPanX 正向居中，无左偏出屏');
+
+  // -------------------------------------------------------------
+  // 2 规模验证：两列工作区 (2 Columns)
+  // -------------------------------------------------------------
+  const ws2 = [
+    { id: '/ws/alpha', name: 'alpha-col', isCurrent: true },
+    { id: '/ws/beta', name: 'beta-col', isCurrent: false }
+  ];
+  const sessions2 = [
+    { id: 's2-1', workspace: '/ws/alpha', title: 'Alpha 1', state: 'running' },
+    { id: 's2-2', workspace: '/ws/beta', title: 'Beta 1', state: 'idle' }
+  ];
+  const layout2 = computeLayout(ws2, sessions2, [], '/ws/alpha', true);
+
+  assert.equal(layout2.workspaceBounds.length, 2, '包含 2 个工作区列');
+  assert.equal(layout2.workspaceBounds[0].x, 40, '第 1 列 X 坐标为 40px');
+  assert.equal(layout2.workspaceBounds[1].x, 40 + 260 + 36, '第 2 列 X 坐标为 336px (40 + 260 + 36)');
+  assert.equal(layout2.workspaceBounds[1].x + layout2.workspaceBounds[1].width, 596, '第 2 列右边界为 596px');
+  assert.equal(layout2.blackboardBound.width, 1080, '2 列总跨度 636px <= 1080px，黑板宽保持 1080px');
+
+  const fit2 = evaluateFitView(layout2, 1280, 800);
+  assert.equal(fit2.minX, 40);
+  assert.equal(fit2.maxX, 1120);
+  assert.equal(fit2.contentW, 1080);
+  assert.ok(fit2.fitZoom > 0.85);
+
+  // -------------------------------------------------------------
+  // 3 规模验证：三列工作区 (3 Columns) —— 彻底验证第 3 列不被截断
+  // -------------------------------------------------------------
+  const ws3 = [
+    { id: '/ws/col-1', name: 'col-1', isCurrent: true },
+    { id: '/ws/col-2', name: 'col-2', isCurrent: false },
+    { id: '/ws/col-3', name: 'col-3', isCurrent: false }
+  ];
+  const sessions3 = [
+    { id: 's3-1', workspace: '/ws/col-1', title: 'Col 1 Worker', state: 'running' },
+    { id: 's3-2', workspace: '/ws/col-2', title: 'Col 2 Worker', state: 'idle' },
+    { id: 's3-3', workspace: '/ws/col-3', title: 'Col 3 Worker', state: 'running' }
+  ];
+  const layout3 = computeLayout(ws3, sessions3, [], '/ws/col-1', true);
+
+  assert.equal(layout3.workspaceBounds.length, 3, '包含 3 个工作区列');
+  assert.equal(layout3.workspaceBounds[0].x, 40, '第 1 列 X 坐标为 40px');
+  assert.equal(layout3.workspaceBounds[1].x, 336, '第 2 列 X 坐标为 336px');
+  assert.equal(layout3.workspaceBounds[2].x, 632, '第 3 列 X 坐标为 632px (40 + 2 * 296)');
+  const col3Right = layout3.workspaceBounds[2].x + layout3.workspaceBounds[2].width;
+  assert.equal(col3Right, 892, '第 3 列右边界为 892px (632 + 260)');
+
+  // 黑板宽度计算：3 * 296 - 36 + 80 = 932 <= 1080，因此黑板宽度仍为 1080px
+  assert.equal(layout3.blackboardBound.width, 1080, '3 列黑板宽度为 1080px');
+  assert.equal(layout3.blackboardBound.x + layout3.blackboardBound.width, 1120, '黑板右边界为 1120px');
+  assert.ok(col3Right < 1120, '关键断言：第 3 列右边界 (892px) 完全位于黑板右边界 (1120px) 内部');
+
+  const fit3 = evaluateFitView(layout3, 1280, 800);
+  assert.equal(fit3.minX, 40, '3 列包围盒 minX 必须严格收敛至 40px');
+  assert.equal(fit3.maxX, 1120, '3 列包围盒 maxX 必须严格收敛至 1120px');
+  assert.equal(fit3.contentW, 1080, '3 列全量包围盒宽度严格为 1080px');
+
+  // 关键收敛性断言：在 1280px 常见宽度下，第 3 列在经过 fitZoom/fitPanX 变换后必须完全位于可视区内
+  const col3TransformedLeft = fit3.fitPanX + layout3.workspaceBounds[2].x * fit3.fitZoom;
+  const col3TransformedRight = fit3.fitPanX + col3Right * fit3.fitZoom;
+  assert.ok(col3TransformedLeft > 0, `第 3 列变换后左边界 (${col3TransformedLeft.toFixed(1)}px) 必须大于 0`);
+  assert.ok(col3TransformedRight < 1280, `第 3 列变换后右边界 (${col3TransformedRight.toFixed(1)}px) 必须严格小于视口宽 1280px，杜绝截断`);
+  assert.ok(1280 - col3TransformedRight >= 48, `第 3 列右侧保留安全留白边距 (${(1280 - col3TransformedRight).toFixed(1)}px >= 48px)`);
+
+  // -------------------------------------------------------------
+  // 4 状态对比：空黑板 vs 填充黑板 在 3 列下的包围盒收缩与单调性
+  // -------------------------------------------------------------
+  const layout3Populated = computeLayout(
+    ws3,
+    sessions3,
+    [{ id: 'p1', topic: 'spec:1' }, { id: 'p2', topic: 'spec:2' }, { id: 'p3', topic: 'spec:3' }],
+    '/ws/col-1',
+    true
+  );
+  assert.equal(layout3Populated.blackboardBound.height, 96, '填充态黑板高为 96px');
+  assert.equal(layout3.blackboardBound.height, 38, '空态黑板高为 38px');
+
+  const fit3Populated = evaluateFitView(layout3Populated, 1280, 800);
+  assert.equal(fit3.minX, fit3Populated.minX, '空态与填充态 minX 保持严格一致');
+  assert.equal(fit3.maxX, fit3Populated.maxX, '空态与填充态 maxX 保持严格一致');
+  assert.equal(fit3.contentW, fit3Populated.contentW, '空态与填充态 contentW 保持严格一致');
+  assert.equal(layout3.workspaceBounds[2].x, layout3Populated.workspaceBounds[2].x, '工作区列坐标不受黑板条目增减影响');
+});
+
+

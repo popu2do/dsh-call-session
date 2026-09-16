@@ -203,6 +203,26 @@ export declare function normalizeWorkspace(rawPath: string | null | undefined): 
  * @param post 黑板条目对象
  * @returns 提取得到的标题文本，默认 '(无标题内容)'
  */
+/** 保留主题前缀集合（不区分大小写） */
+export declare const RESERVED_TOPIC_PREFIXES: readonly string[];
+
+/**
+ * 校验主题是否属于保留主题或遥测域。
+ * 遵循 ADR-0001 与 ADR-0012：遥测轨迹严格属于纯内存遥测域，严禁作为持久化黑板条目发布。
+ *
+ * @param topic 待校验的主题字符串
+ * @returns 是否属于保留主题
+ */
+export declare function isReservedTopic(topic: string | null | undefined): boolean;
+
+/**
+ * 获取保留主题拦截错误描述文本。
+ *
+ * @param topic 主题字符串
+ * @returns 错误描述字符串
+ */
+export declare function getReservedTopicErrorMessage(topic: string): string;
+
 export declare function extractTitle(post: BoardPost | Partial<BoardPost> | null | undefined): string;
 
 /**
