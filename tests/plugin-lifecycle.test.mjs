@@ -119,7 +119,7 @@ function createMockCordisContext() {
 
 test('Plugin 基础元数据与配置导出规范', async () => {
   assert.equal(name, 'dsh-call-session');
-  assert.deepEqual(inject, ['agents', 'tools', 'commands', 'systemPrompt']);
+  assert.deepEqual(inject, ['agents', 'tools', 'systemPrompt']);
 
   // Config schema 检验
   assert.ok(Config);
@@ -159,7 +159,7 @@ test('usageSectionText: 规范 System Prompt 段落结构与说明', () => {
   assert.ok(text.includes('board_post'));
   assert.ok(text.includes('board_list'));
   assert.ok(text.includes('board_clear'));
-  assert.ok(text.includes('/dsh-call-session'));
+  assert.equal(text.includes('/dsh-call-session'), false);
   assert.ok(text.includes('Intent routing (session_create vs subagent):'));
   assert.ok(text.includes('创建同级会话'));
   assert.ok(text.includes('新建会话'));
@@ -223,10 +223,9 @@ test('apply: 插件初始化、工具注册与 System Prompt 挂载', async (t) 
   assert.equal(remindContext.order, 130);
   assert.equal(typeof remindContext.text, 'function');
 
-  // 3. 验证 Web 斜杠指令注册
+  // 3. 验证 Web 斜杠指令已彻底退役 (ADR-0007 Superseded)
   const slashCmd = ctx.commands.get('dsh-call-session');
-  assert.ok(slashCmd, '应当成功注册 /dsh-call-session 斜杠指令');
-  assert.equal(typeof slashCmd.handler, 'function');
+  assert.equal(slashCmd, undefined, '斜杠指令必须不再被注册');
 
   // 4. 验证生命周期 dispose 事件触发数据落盘与资源释放
   await ctx.emit('dispose');
@@ -256,7 +255,7 @@ test('apply: 重复注册工具幂等性防护 (registerSafe)', async (t) => {
   await ctx.emit('dispose');
 });
 
-test('Web Slash Command (/dsh-call-session) 行为验证', async (t) => {
+test('Web Slash Command (/dsh-call-session) 退役验证 (ADR-0007 Superseded)', async (t) => {
   const tmpDir = await createTempDir();
   t.after(async () => {
     await fs.rm(tmpDir, { recursive: true, force: true });
@@ -266,54 +265,28 @@ test('Web Slash Command (/dsh-call-session) 行为验证', async (t) => {
   const storagePath = path.join(tmpDir, 'board.json');
   apply(ctx, { storagePath, debounceMs: 50 });
 
+  // 验证斜杠指令未被注册
   const cmd = ctx.commands.get('dsh-call-session');
-  const caller = {
-    id: 'commander-agent',
-    title: 'Commander',
-    session: { cwd: 'c:/app' }
-  };
+  assert.equal(cmd, undefined, '斜杠指令已被退役，不得注册到 commands');
 
-  // 1. 无参数调用：看板无公告时提示空列表
-  const resEmpty = await cmd.handler({ rawInput: '', agent: caller });
-  assert.equal(resEmpty.kind, 'success');
-  assert.ok(resEmpty.text.includes('当前暂无有效公告'));
+  await ctx.emit('dispose');
+});
 
-  // 2. 通过 board_post 插入一条公告后，再次无参数调用
-  const boardPostTool = ctx.tools.get('board_post');
-  await boardPostTool.execute({
-    topic: 'release:v1',
-    content: '# Release Notice\nReady for launch'
-  }, { agent: caller });
-
-  const resWithPost = await cmd.handler({ rawInput: '  ', agent: caller });
-  assert.equal(resWithPost.kind, 'success');
-  assert.ok(resWithPost.text.includes('[BOARD TITLES: 1 active]'));
-  assert.ok(resWithPost.text.includes('Release Notice'));
-
-  // 3. 参数格式错误：仅有目标没有消息
-  const resNoMsg = await cmd.handler({ rawInput: 'worker-session-id', agent: caller });
-  assert.equal(resNoMsg.kind, 'error');
-  assert.ok(resNoMsg.text.includes('用法错误：缺少消息内容'));
-
-  // 4. 正确参数调用呼叫目标
-  const targetWorker = {
-    id: 'worker-session-001',
-    title: 'Worker One',
-    status: 'idle',
-    received: [],
-    followup(msg) { this.received.push(msg); },
-    session: { id: 'worker-session-001', title: 'Worker One', cwd: 'c:/app' }
-  };
-  ctx._agentsList.push(caller, targetWorker);
-
-  const resCall = await cmd.handler({
-    rawInput: 'worker-session-001 Please sync files',
-    agent: caller
+test('无 commands 依赖下的生命周期与解耦验证', async (t) => {
+  const tmpDir = await createTempDir();
+  t.after(async () => {
+    await fs.rm(tmpDir, { recursive: true, force: true });
   });
-  assert.equal(resCall.kind, 'success');
-  assert.ok(resCall.text.includes('成功呼叫会话 [worker-session-001]'));
-  assert.equal(targetWorker.received.length, 1);
 
+  const ctx = createMockCordisContext();
+  delete ctx.commands;
+  const storagePath = path.join(tmpDir, 'board.json');
+
+  assert.doesNotThrow(() => {
+    apply(ctx, { storagePath, debounceMs: 50 });
+  }, '在无 commands 注入/服务存在下必须安全挂载');
+
+  assert.equal(ctx.commands, undefined, '上下文不依赖 commands 服务');
   await ctx.emit('dispose');
 });
 
@@ -600,11 +573,9 @@ test('全局无直接 console 输出 (Full Lifecycle & Tools Execution)', async 
     context_post_ids: [postRes.postId]
   }, { agent: caller });
 
-  // 6. slash command 交互执行
+  // 6. slash command 已退役
   const slashCmd = bareCtx.commands.get('dsh-call-session');
-  assert.ok(slashCmd, '必须成功注册 /dsh-call-session 指令');
-  await slashCmd.handler({ rawInput: '', agent: caller });
-  await slashCmd.handler({ rawInput: 'clean-target-2222 Hello cleanly', agent: caller });
+  assert.equal(slashCmd, undefined);
 
   // 7. board_clear 工具执行
   await bareCtx.tools.get('board_clear').execute({ id: postRes.postId, mode: 'purge' }, { agent: caller });
