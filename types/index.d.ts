@@ -7,9 +7,7 @@
  *    - board_post, board_list, board_clear: 共享黑板发布、查询与管理
  *    - session_call: 进程内会话单播通信
  *    - session_query: 会话发现、工作区过滤与状态规范化
- * 2. Web 命令：
- *    - /dsh-call-session: 单播呼叫与黑板标题摘要
- * 3. 生命周期：
+ * 2. 生命周期：
  *    - 支持 dispose 事件清理与持久化
  */
 
@@ -22,6 +20,9 @@ import {
   normalizeWorkspace,
   extractTitle,
   formatAuthorReminderText,
+  RESERVED_TOPIC_PREFIXES,
+  isReservedTopic,
+  getReservedTopicErrorMessage,
   type BoardPost,
   type BoardPostStatus,
   type BoardClearAction,
@@ -96,7 +97,7 @@ import {
 export declare const name = 'dsh-call-session';
 
 /** 声明式依赖注入服务清单 */
-export declare const inject: readonly ['agents', 'tools', 'commands', 'systemPrompt'];
+export declare const inject: readonly ['agents', 'tools', 'systemPrompt'];
 
 /** 声明式提供服务清单 */
 export declare const provide: readonly ['callTelemetry', 'boardStore'];
@@ -130,8 +131,6 @@ export interface CallSessionConfig {
   promptSectionOrder?: number;
   /** 记名提醒注入 System Prompt Context 的排序权重，默认 130 */
   remindContextOrder?: number;
-  /** 是否注册 /dsh-call-session 斜杠命令，默认 true */
-  slashCommand?: boolean;
 }
 
 /**
@@ -170,6 +169,9 @@ export {
   normalizeWorkspace,
   extractTitle,
   formatAuthorReminderText,
+  RESERVED_TOPIC_PREFIXES,
+  isReservedTopic,
+  getReservedTopicErrorMessage,
   getArchivedSessionIds,
   resolveSessionCwd,
   resolveSessionTitle,

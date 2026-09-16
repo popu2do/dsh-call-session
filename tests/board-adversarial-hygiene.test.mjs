@@ -9,7 +9,10 @@ import {
   BoardStore,
   normalizeWorkspace,
   extractTitle,
-  formatAuthorReminderText
+  formatAuthorReminderText,
+  isReservedTopic,
+  RESERVED_TOPIC_PREFIXES,
+  getReservedTopicErrorMessage
 } from '../lib/board-store.mjs';
 import { apply } from '../index.mjs';
 
@@ -97,9 +100,9 @@ test('board_list 多时间点调用 Prompt 文本幂等性与时间戳处理', a
   const post1Id = post1Res.postId;
 
   const post2Res = await boardPost.execute({
-    topic: 'task:telemetry',
-    content: '## Telemetry Metrics and In-Memory Buffer\nZero-disk and hermetic workspace isolation.',
-    tags: ['telemetry', 'core']
+    topic: 'task:governance',
+    content: '## Governance Metrics and In-Memory Buffer\nZero-disk and hermetic workspace isolation.',
+    tags: ['governance', 'core']
   }, { agent: agentAlpha });
   assert.equal(post2Res.success, true);
   const post2Id = post2Res.postId;
@@ -348,6 +351,199 @@ test('并发 Flush 与 Close 竞争下的时序安全与定时器清理', async 
   const dirFiles = readdirSync(tmpDir);
   const tmpFiles = dirFiles.filter(f => f.includes('.tmp.'));
   assert.equal(tmpFiles.length, 0, `临时目录下无残留临时文件: ${tmpFiles.join(', ')}`);
+});
+
+test('端到端保留主题拒绝与拦截防护：board_post 与 BoardStore.post 拦截 telemetry:*, call:*, sys:* (ADR-0001, ADR-0012)', async (t) => {
+  const tmpDir = await createTempDir();
+  t.after(async () => {
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  });
+
+  const storagePath = path.join(tmpDir, 'board-security.json');
+  const store = new BoardStore({ storagePath, debounceMs: 20 });
+  t.after(async () => {
+    await store.close();
+  });
+
+  // 1. BoardStore.post 对保留前缀与遥测主题的底层抛错拦截
+  const blockedTopics = [
+    'telemetry:call',
+    'telemetry:trace',
+    'telemetry:*',
+    'TELEMETRY:METRICS',
+    'call:steer',
+    'call:followup',
+    'call:dispatch',
+    'CALL:*',
+    'sys:alert',
+    'sys:crash',
+    'sys:*',
+    'SYS:REBOOT',
+    'task:telemetry',
+    'task:telemetry:sync',
+    'audit:telemetry',
+    'task:call'
+  ];
+
+  for (const topic of blockedTopics) {
+    assert.throws(
+      () => {
+        store.post({
+          id: `post-blocked-${Math.random().toString(36).slice(2, 6)}`,
+          topic,
+          content: 'Illegal payload attempting to write to board'
+        });
+      },
+      (err) => {
+        assert.ok(err instanceof Error);
+        assert.ok(err.message.includes('保留主题拦截'));
+        assert.ok(err.message.includes('ADR-0012') || err.message.includes('CallTelemetryRingBuffer'));
+        return true;
+      },
+      `BoardStore.post 必须拦截保留主题 ${topic}`
+    );
+  }
+
+  // 2. 验证合法业务分类主题不受阻断
+  const validTopics = ['task:audit', 'task:build', 'spec:canvas', 'milestone:v2', 'feature:isolation', 'blackboard:hub'];
+  for (const topic of validTopics) {
+    const post = store.post({
+      id: `post-valid-${Math.random().toString(36).slice(2, 8)}`,
+      topic,
+      content: `Valid payload for ${topic}`,
+      status: 'active'
+    });
+    assert.ok(post, `合法主题 ${topic} 应当成功发布`);
+    assert.equal(post.topic, topic);
+  }
+
+  // 3. board_post 工具层端到端契约拦截
+  const ctx = createMockCordisContext();
+  apply(ctx, { storagePath: path.join(tmpDir, 'tool-board-sec.json'), debounceMs: 20 });
+  const agent = createMockAgent('agent-tester', { cwd: 'c:/workspace/proj-test' });
+  const boardPost = ctx.tools.get('board_post');
+  assert.ok(boardPost, 'board_post 工具必须已注册');
+
+  for (const topic of ['telemetry:call', 'call:steer', 'sys:cron', 'task:telemetry']) {
+    const res = await boardPost.execute({
+      topic,
+      content: 'Attempting to inject into blackboard via tool'
+    }, { agent });
+
+    assert.equal(res.success, false, `board_post 工具必须拦截 ${topic}`);
+    assert.ok(res.message.includes('保留主题拦截'), '必须包含保留主题拦截提示');
+    assert.ok(res.message.includes('ADR-0012') || res.message.includes('CallTelemetryRingBuffer'), '错误信息必须引导至 ADR-0012 内存遥测域');
+  }
+
+  // 4. 合法业务调用 board_post 应当成功
+  const validRes = await boardPost.execute({
+    topic: 'task:qa-verification',
+    content: 'All quality gates passed',
+    tags: ['qa', 'pass']
+  }, { agent });
+  assert.equal(validRes.success, true);
+  assert.ok(validRes.postId);
+
+  await ctx.emit('dispose');
+});
+
+test('BoardStore.hydratePosts: 启动水合旧脏数据清洗过滤与自愈落盘 (ADR-0010 & ADR-0012)', async (t) => {
+  const tmpDir = await createTempDir();
+  t.after(async () => {
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  });
+
+  const storagePath = path.join(tmpDir, 'board-legacy.json');
+
+  // 1. 模拟历史脏文件：其中混入了误写入黑板的遥测与保留主题条目
+  const mixedInitialData = {
+    version: 1,
+    posts: [
+      {
+        id: 'post-valid-alpha',
+        topic: 'spec:architecture',
+        content: 'Valid architectural specification.',
+        authorSessionId: 'session-alpha',
+        workspace: 'c:/workspace/proj',
+        status: 'active',
+        createdAt: new Date().toISOString()
+      },
+      {
+        id: 'post-dirty-telemetry',
+        topic: 'telemetry:call:step-1',
+        content: 'Call trace data leaking into board',
+        authorSessionId: 'session-alpha',
+        workspace: 'c:/workspace/proj',
+        status: 'active',
+        createdAt: new Date().toISOString()
+      },
+      {
+        id: 'post-dirty-call',
+        topic: 'call:steer:subagent',
+        content: 'Direct call message payload',
+        authorSessionId: 'session-beta',
+        workspace: 'c:/workspace/proj',
+        status: 'active',
+        createdAt: new Date().toISOString()
+      },
+      {
+        id: 'post-dirty-sys',
+        topic: 'sys:heartbeat',
+        content: 'System ping',
+        authorSessionId: 'session-gamma',
+        workspace: 'c:/workspace/proj',
+        status: 'active',
+        createdAt: new Date().toISOString()
+      },
+      {
+        id: 'post-dirty-task-telemetry',
+        topic: 'task:telemetry',
+        content: 'Task telemetry entry',
+        authorSessionId: 'session-delta',
+        workspace: 'c:/workspace/proj',
+        status: 'active',
+        createdAt: new Date().toISOString()
+      },
+      {
+        id: 'post-valid-beta',
+        topic: 'milestone:release-v1',
+        content: 'Valid release milestone.',
+        authorSessionId: 'session-alpha',
+        workspace: 'c:/workspace/proj',
+        status: 'active',
+        createdAt: new Date().toISOString()
+      }
+    ]
+  };
+
+  writeFileSync(storagePath, JSON.stringify(mixedInitialData, null, 2), 'utf8');
+
+  // 2. 实例化 BoardStore 触发 hydratePosts
+  const store = new BoardStore({ storagePath, debounceMs: 20 });
+
+  // 3. 验证内存中脏数据已被过滤清洗
+  assert.equal(store.posts.size, 2, '内存中必须仅保留 2 条合法业务条目');
+  assert.ok(store.get('post-valid-alpha'), 'post-valid-alpha 必须存在');
+  assert.ok(store.get('post-valid-beta'), 'post-valid-beta 必须存在');
+  assert.equal(store.get('post-dirty-telemetry'), undefined, 'telemetry 脏数据严禁加载进内存');
+  assert.equal(store.get('post-dirty-call'), undefined, 'call 脏数据严禁加载进内存');
+  assert.equal(store.get('post-dirty-sys'), undefined, 'sys 脏数据严禁加载进内存');
+  assert.equal(store.get('post-dirty-task-telemetry'), undefined, 'task:telemetry 脏数据严禁加载进内存');
+
+  // 4. 验证提醒文本不会受脏数据污染（保护 ADR-0010 System Prompt KV Cache）
+  const activePosts = store.findActiveByAuthor('session-alpha', 'c:/workspace/proj');
+  assert.equal(activePosts.length, 2, 'session-alpha 仅能查询到其合法发布的 2 条条目');
+  const reminderText = formatAuthorReminderText(activePosts);
+  assert.ok(!reminderText.includes('telemetry:'), 'System Prompt 提醒文本绝不能包含遥测脏条目');
+  assert.ok(!reminderText.includes('call:'), 'System Prompt 提醒文本绝不能包含调用脏条目');
+
+  // 5. 等待自愈落盘并验证磁盘文件已修复
+  await store.close();
+
+  const diskCleaned = JSON.parse(await fs.readFile(storagePath, 'utf8'));
+  assert.equal(diskCleaned.posts.length, 2, '磁盘上必须已清洗掉全部 4 条脏数据');
+  const diskIds = diskCleaned.posts.map(p => p.id);
+  assert.deepEqual(diskIds.sort(), ['post-valid-alpha', 'post-valid-beta'].sort());
 });
 
 test('工作区根目录无临时文件与备份残留', () => {

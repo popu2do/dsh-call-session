@@ -89,7 +89,6 @@ dsh plugin --profile web remove dsh-call-session
 | `board_post` | Tool | 拉取 | 向黑板发布公告或中间产物，不触发被动唤醒 |
 | `board_list` | Tool | 拉取 | 查询黑板条目，支持标签、主题、id 精确查阅与 titles_only 模式 |
 | `board_clear` | Tool | 管理 | 归档 dismiss 或物理删除 purge 黑板条目 |
-| `/dsh-call-session` | Slash | 交互 | Web 界面快捷指令，支持无参看板摘要与带参单播呼叫 |
 
 ### session_create
 
@@ -194,17 +193,11 @@ dsh plugin --profile web remove dsh-call-session
 }
 ```
 
-## 指令
-
-在 DSH Web 界面中可直接使用 `/dsh-call-session` 斜杠命令：
-- 查看摘要：输入 `/dsh-call-session`，输出当前工作区黑板条目列表；
-- 单播呼叫：输入 `/dsh-call-session <sessionId> <message>`，向指定会话发送消息。
-
 ## 看板
 
 在 DSH Web 会话视图顶部选项卡中提供看板，用于观察当前工作区的跨会话协作全景。
 
-- 呈现内容：工作区泳道聚类、`running` 与 `idle` 两态会话节点、黑板条目及其剩余生存期、跨会话调用连线。连线按 `task_dispatch`、`task_report`、`notice` 三类意图着色，随时间衰减。
+- 呈现内容：工作区分组容器、`running` 与 `idle` 两态会话节点、黑板条目及其剩余生存期、跨会话调用连线。连线按 `task_dispatch`、`task_report`、`notice` 三类意图着色，随时间衰减。
 - 交互层级：悬停高亮 1-Hop 关联子图，双击展开 420px 只读详情抽屉，支持字段复制与 ESC 收起。
 - 只读边界：看板不提供任何修改、删除或触发呼叫的操作，全部状态变更由 Agent 自身产生。
 - 数据来源：宿主注册的只读路由 `GET /plugins/dsh-call-session/telemetry`，经 Connection 认证保护，仅接受 GET，响应不缓存。调用轨迹保存在有界内存环形缓冲区，默认容量 200 条，FIFO 淘汰，不落盘，宿主重启后瞬态连线清空。
@@ -230,7 +223,6 @@ dsh plugin --profile web remove dsh-call-session
 - `debounceMs`: number，默认 `300`。黑板落盘防抖延迟，单位毫秒。
 - `maxCapacity`: number，默认 `200`。黑板条目容量上限，超出后先进先出淘汰。
 - `telemetryCapacity`: number，默认 `200`，范围 10 到 2000。调用遥测环形缓冲区容量上限，超出后先进先出淘汰。
-- `slashCommand`: boolean，默认 `true`。是否注册 Web 斜杠指令。
 
 ## 对比
 
@@ -258,7 +250,7 @@ DSH 原生机制与本插件的定位及协作模型对比如下：
 | [ADR-0004](./docs/adrs/0004-atomic-debounced-persistence-and-healing.md) | 防抖原子写盘与恢复 | Accepted | 300ms 防抖、临时文件替换与 .bak 容灾恢复 |
 | [ADR-0005](./docs/adrs/0005-english-metadata-and-two-state-status.md) | 两态状态模型 | Accepted | 会话状态规整为 running 与 idle |
 | [ADR-0006](./docs/adrs/0006-pure-dsh-native-in-process-context-injection.md) | 原生进程内上下文注入 | Accepted | 宿主直连与原生通知源标记 |
-| [ADR-0007](./docs/adrs/0007-web-slash-command-and-visual-ux.md) | Web 斜杠指令 | Accepted | 提供 /dsh-call-session 指令与低干扰通知呈现 |
+| [ADR-0007](./docs/adrs/0007-web-slash-command-and-visual-ux.md) | Web 斜杠指令 | Superseded | 原生 /dsh-call-session 指令（已废止，由 Agent 工具与 Web 交互接管） |
 | [ADR-0008](./docs/adrs/0008-zero-pollution-global-profile-mounting.md) | Profile 切面挂载 | Accepted | 声明式挂载与生命周期纳管 |
 | [ADR-0009](./docs/adrs/0009-restrained-minimalist-docs-and-anti-ai-slop.md) | 克制文档与反AI堆料 | Accepted | 零Emoji、纯净减法与<=4字小标题 |
 | [ADR-0010](./docs/adrs/0010-dynamic-state-mirror-and-peer-session-lifecycle.md) | 动态状态镜像与同级会话 | Accepted | 纯状态幂等注入保护 KV Cache，同级会话配额与限频熔断 |
