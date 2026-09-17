@@ -7,9 +7,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-09-17
+
+### Summary
+Architecture hardening, performance specifications, and canvas visual restraint release. Establishes quantified deterministic performance SLAs (ADR-0020), concurrent running-only session quotas and caller model inheritance (ADR-0021), canvas motion geometric invariants and visual restraint (ADR-0018), channel-split routing geometry with on-demand lineage focus (ADR-0019), deep domain module decoupling (`SessionDirectory`, `PeerSessionFactory`, `BoardStore`), ecosystem alignment for DSH 0.1.5 (`@deepseek-ai/cordis` `^4.0.2`, `@deepseek-ai/schemastery` `^3.18.2`), and ADR-0009 writing style standard compliance.
+
+### Added
+- **Performance Budgets & SLA Gate Suite (ADR-0020)**:
+  - Enforced strict P99 latency baselines across in-memory operations: blackboard query <= 5ms, unicast dispatch <= 2ms, session directory scan <= 10ms, peer session quota check <= 1ms, telemetry route snapshot aggregation <= 20ms.
+  - Established process memory RSS growth budget (<= 30MB delta) and bounded cache limits.
+  - Implemented throttled frontend polling with 5-minute inactive tab pausing to conserve client resources.
+  - Added dedicated automated performance baseline regression test suite (`tests/performance-baseline.test.mjs`).
+- **Concurrent Running-Only Quota & Dynamic Model Inheritance (ADR-0021)**:
+  - Re-anchored peer session creation quota to actively running sessions (`status === 'running'`) with an upper bound of 5 (`MAX_ACTIVE_PEER_SESSIONS = 5`), preventing idle sessions from exhausting creation budgets.
+  - Enabled dynamic caller model options inheritance (`model`, `reasoning_effort`, `preset`) through `PeerSessionFactory`, honoring caller runtime headers and preventing fallback degradation.
+  - Added TOCTOU reservation locks for in-flight session creations across concurrent calls.
+- **Canvas Motion Token & Geometric Invariants (ADR-0018)**:
+  - Enforced strict ban on CSS `transform: scale` / geometric mutation on SVG topological edge paths, preventing visual dislocation.
+  - Added independent breathing keyframes (`@keyframes dshPulseEdge`, `@keyframes dshPulseEdgeLight`) with opacity and stroke-width restraint.
+  - Ensured full WCAG 2.1 AA contrast compliance and suppressed drop-shadow bloom in light mode.
+  - Added `prefers-reduced-motion` accessibility support scoped under `.dsh-canvas-container`.
+- **Channel-Split Routing & Lineage On-Demand Focus (ADR-0019)**:
+  - Separated upstream and downstream vertical routing channels for intra-column session calls to eliminate edge crossover and S-curve clutter.
+  - Introduced discrete channel offset clamping and concentric clearance geometry preventing overlapping edge lines.
+  - Implemented on-demand lineage focus: suppressed inactive history edge lines by default with active hover/focus highlighting.
+  - Added ultra-compact single-line capsule tooltips avoiding obstruction of adjacent node cards and ports.
+  - Enforced strict layout invariants: 16px header spacing and 72px vertical node distribution steps.
+- **Deep Module Architecture**:
+  - `SessionDirectory` (`lib/session-directory.mjs`, `types/session-directory.d.ts`): encapsulated session discovery, metadata parsing, workspace isolation, target resolution, and running status inspection.
+  - `PeerSessionFactory` (`lib/session-create.mjs`): isolated peer session creation lifecycle, quota validation, rate limiting, and model resolution.
+  - `BoardStore` domain operation methods (`executePost`, `executeList`, `executeClear`, `getAuthorReminder`, `formatAuthorReminderText`).
+
 ### Changed
-- Align ecosystem peer and dev dependencies with DSH 0.1.5 host baseline: `@deepseek-ai/cordis` to `^4.0.2`, `@deepseek-ai/schemastery` to `^3.18.2`.
-- Update README compatibility notes for verified DSH 0.1.5 host distributions.
+- **Ecosystem Baseline & Compatibility**:
+  - Upgraded peer and dev dependencies to DSH 0.1.5 host baseline: `@deepseek-ai/cordis: ^4.0.2`, `@deepseek-ai/schemastery: ^3.18.2`.
+  - Updated compatibility matrix in README and README_ZH for verified DSH 0.1.5 host distributions.
+- **Writing & Terminology Standards (ADR-0009)**:
+  - Purged marketing jargon and hyperbolic terminology across documentation, ADRs, source comments, and test descriptions in adherence to ADR-0009 and Matt Pocock writing standards.
+
+### Fixed
+- Fixed `BoardStore.executeList` error branch return contract to strictly adhere to ADR-0016 §4.2 schema specifications (`success`, `count`, `posts`).
+- Clamped routing channel offsets to prevent bounding box clipping in multi-session topologies.
 
 ## [0.1.2] - 2026-09-16
 
