@@ -328,7 +328,7 @@ test('getCanvasTelemetry: 全景快照结构完整性与离线级联对齐', asy
 
   const snapshot = await getCanvasTelemetry(ctx, { workspace: 'c:/workspace/app' });
 
-  // 验证快照顶级结构
+  // 验证快照顶层结构
   assert.ok(typeof snapshot.timestamp === 'number');
   assert.equal(snapshot.currentWorkspace, 'c:/workspace/app');
   assert.equal(snapshot.sessions.length, 2);
@@ -978,7 +978,7 @@ test('getCanvasTelemetry: 黑板条目状态三态区分与 metrics 计数口径
   }
 });
 
-test('全景会话拓扑上屏与已归档会话过滤 (ADR-0003 & PRD 2.1)', async () => {
+test('看板会话拓扑呈现与已归档会话过滤 (ADR-0003 & PRD 2.1)', async () => {
   const liveIdle = createMockAgent('agent-live-idle', { status: 'idle', cwd: 'c:/workspace/app', title: 'Idle Agent' });
   const liveRunning = createMockAgent('agent-live-running', { status: 'running', cwd: 'c:/workspace/app', title: 'Running Agent' });
   const archived = createMockAgent('agent-archived', { status: 'idle', cwd: 'c:/workspace/app', title: 'Archived Agent' });
@@ -999,7 +999,7 @@ test('全景会话拓扑上屏与已归档会话过滤 (ADR-0003 & PRD 2.1)', as
   assert.ok(!snapshot.sessions.some(s => s.id === 'agent-archived'), '已归档会话不上屏');
 });
 
-test('new session 与未产生调用的新会话在看板中全景上屏 (PRD 2.1 & ADR-0003 & ADR-0012)', async () => {
+test('new session 与未产生调用的新会话在看板中正常呈现 (PRD 2.1 & ADR-0003 & ADR-0012)', async () => {
   const newSession = createMockAgent('session-new-born-1234', {
     status: 'idle',
     cwd: 'c:/workspace/app',
@@ -1017,7 +1017,7 @@ test('new session 与未产生调用的新会话在看板中全景上屏 (PRD 2.
 
   const snapshot = await getCanvasTelemetry(ctx, { workspace: 'c:/workspace/app' });
 
-  // 验证两会话均在快照中正常呈现，杜绝被误作“死会话”剔除
+  // 验证两会话均在快照中正常呈现，避免被误判为已注销会话剔除
   assert.equal(snapshot.sessions.length, 2);
   const ids = snapshot.sessions.map(s => s.id);
   assert.ok(ids.includes('session-new-born-1234'), '新建会话必须在看板中立即可见');

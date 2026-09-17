@@ -172,7 +172,7 @@ test('通配符目标调用拦截检查', async () => {
     );
   }
 
-  // 验证没有任何目标被误广播唤醒
+  // 验证没有任何目标被错误唤醒
   assert.equal(targetA.received.length, 0);
   assert.equal(targetB.received.length, 0);
 });

@@ -29,7 +29,7 @@
 ### 1.2 Architectural Forces & Constraints
 - **In-Memory Execution**：投影与生命周期拦截在 DSH 进程内内存中完成（< 50μs），避免外部 I/O 阻塞。
 - **Prompt Cache Protection (Pure State Invariant)**：上下文投影保证文本幂等性，避免易逝时间戳，以利用服务端 KV 前缀缓存。
-- **Hermetic Workspace Scoping**：遵循 ADR-0003，状态后视镜与会话创建以工作区规范化路径为强制边界，防止跨项目逃逸。
+- **Hermetic Workspace Scoping**：遵循 ADR-0003，状态镜像投影与会话创建以工作区规范化路径为强制边界，防止跨项目逃逸。
 - **Strict Blast Radius Containment**：平级会话创建具备并发配额、调用限频、代际深度限制与敏感标题过滤，防止资源耗尽。
 - **Zero-External Intrusion**：依托 Cordis 生命周期与 DSH 原生注册表，不修改宿主核心源码。
 
@@ -37,7 +37,7 @@
 
 ## 2. Decision Drivers
 
-- **Driver 1 (Eliminate Exploratory Tool Polling)**：通过每轮模型决策前的状态后视镜透明感知最新事实，精简静态提示词，消除冗余的 `board_list` 轮询。
+- **Driver 1 (Eliminate Exploratory Tool Polling)**：通过每轮模型决策前的状态镜像投影感知最新事实，精简静态提示词，消除冗余的 `board_list` 轮询。
 - **Driver 2 (Protect LLM KV Cache via State Idempotency)**：通过纯状态幂等表征，确保无黑板实质变更时 0 冗余快照生成、100% 命中 Prompt Caching。
 - **Driver 3 (Autonomous Peer Session Orchestration)**：提供原生 `session_create` 工具，支持解耦创建独立同级根会话并完成异步任务派发唤醒。
 - **Driver 4 (Robust Blast Radius & Security Safeguards)**：建立工作区配额、限频、代际熔断及防伪造 Title 校验，确保系统级稳定性。
@@ -67,20 +67,20 @@
 
 ## 4. Decision Outcome
 
-**Chosen Decision**: 实施方案 Option 1.3（基于 `systemPrompt.context` 的状态后视镜与级联清理）与 Option 2.3（基于 `ctx.root.agents.create` 的受控同级会话创建接口）。
+**Chosen Decision**: 实施方案 Option 1.3（基于 `systemPrompt.context` 的状态镜像投影与级联清理）与 Option 2.3（基于 `ctx.root.agents.create` 的受控同级会话创建接口）。
 
 ### 4.1 核心规范
 
 1. **Invariant 1 (Pure State Idempotency & Cache Protection)**：
-   状态后视镜文本不输出易逝动态时间（如 `remainingSeconds`、时间差或 `Date.now()`）。过期条目在内存求值时布尔静默过滤。仅当黑板发生离散实体增删改或状态迁移时，投影文本才改变，保证服务端 Prompt KV Cache 命中率。
+   状态镜像投影文本不输出易逝动态时间（如 `remainingSeconds`、时间差或 `Date.now()`）。过期条目在内存求值时布尔静默过滤。仅当黑板发生离散实体增删改或状态迁移时，投影文本才改变，保证服务端 Prompt KV Cache 命中率。
 2. **Invariant 2 (Strict Workspace Encapsulation)**：
-   状态后视镜严格基于 `resolveSessionCwd(context.agent)` 过滤当前工作区条目；`session_create` 强制继承创建者的规范化工作区路径，防止跨越工程边界。
+   状态镜像投影严格基于 `resolveSessionCwd(context.agent)` 过滤当前工作区条目；`session_create` 强制继承创建者的规范化工作区路径，防止跨越工程边界。
 3. **Invariant 3 (Bounded Blast Radius)**：
    同一工作区活跃 Root Session 硬配额为 10；单会话创建限频 5 次/分钟；平级派生代际深度上限为 2（Generation <= 2，拒绝第 3 代递归衍生），防止 Fork Bomb。
 4. **Invariant 4 (Title Integrity & Anti-Spoofing)**：
    会话标题强制过滤 `[SYSTEM]`、`[CAPTAIN]`、`[ROOT]` 等特权伪造前缀，禁止重名，未提供时由初始消息提取并规范化为 `Peer: <Summary>`。
 5. **Invariant 5 (Dual-Track Cascaded Cleanup)**：
-   兼备事件监听（`workspaceRegistry.archiveSession`、`dispose`）与状态后视镜查询时的惰性自愈探针（`ctx.agents.get`），实现分级清理（dismiss 软归档 / purge 物理抹除 / deliverable-retention 成果免死）。
+   兼备事件监听（`workspaceRegistry.archiveSession`、`dispose`）与状态镜像投影查询时的惰性自愈探针（`ctx.agents.get`），实现分级清理（dismiss 软归档 / purge 物理抹除 / deliverable-retention 成果保留）。
 6. **Invariant 6 (Atomic Fire-and-Forget Ignition)**：
    `session_create` 完成平级会话创建与首条指令挂载后，通过 `followup()` 异步启动执行，立即返回会话句柄元数据，严禁同步阻塞等待对端执行。
 
@@ -169,17 +169,17 @@ Active Posts (Memory)   Anti-Snapshot-Storm                      Quota & Rate Ch
       },
       "reasoning_effort": {
         "type": "string",
-        "description": "可选覆写目标会话所使用的推理强度 (如 low, medium, high)。彻底废止 reasoningEffort 别名。"
+        "description": "可选覆写目标会话所使用的推理强度 (如 low, medium, high)。废止 reasoningEffort 别名。"
       },
       "preset": {
         "type": "string",
-        "description": "可选指定挂载的智能体预设 ID。默认继承当前会话或全局默认预设。彻底废止 agentPreset 别名。"
+        "description": "可选指定挂载的智能体预设 ID。默认继承当前会话或全局默认预设。废止 agentPreset 别名。"
       }
     },
     "required": []
   }
   ```
-  > **安全与契约规范 (ADR-0016)**：`session_create` 严禁暴露外部 `sessionId` 入参，会话唯一标识符一律由引擎内部随机生成，彻底杜绝外部劫持与标识碰撞。
+  > **安全与契约规范 (ADR-0016)**：`session_create` 严禁暴露外部 `sessionId` 入参，会话唯一标识符由引擎内部随机生成，防止外部传入引发标识冲突。
 
 - **返回值结构（Return Schema, Machine Layer camelCase）**：
   ```json
@@ -200,7 +200,7 @@ Active Posts (Memory)   Anti-Snapshot-Storm                      Quota & Rate Ch
 ## 5. Consequences
 
 ### 5.1 Positive Consequences
-- **减少试探性工具调用**：Agent 在每轮执行前可在上下文后视镜中读取当前活跃状态，减少 `board_list` 轮询；
+- **减少试探性工具调用**：Agent 在每轮执行前可在上下文状态镜像中读取当前活跃状态，减少 `board_list` 轮询；
 - **保护服务端 Prompt 缓存**：纯状态幂等投影避免了频繁快照生成，维持 LLM 服务端 Prompt 前缀缓存，控制 Token 成本；
 - **支持平级会话拓扑**：补充树状父子 Subagent 机制，支持在同一工程工作区内创建平级根会话；
 - **资源与代际约束**：通过配额限制、频次窗口与代际深度控制，保证系统稳定性；
@@ -217,17 +217,17 @@ Active Posts (Memory)   Anti-Snapshot-Storm                      Quota & Rate Ch
 ## 6. Compliance, Validation & Verification
 
 ### 6.1 Automated Verification Suite
-- **后视镜幂等性与快照防雪崩测试**：
+- **状态镜像投影幂等性与快照防雪崩测试**：
   - 断言连续多个执行 step 且黑板无变更时，`systemPrompt.context` 返回字符串全等；
   - 验证 `RuntimeContextProjection.project` 不产生新的 `user/message`。
 - **工作区隔离测试**：
-  - 模拟多工作区会话，断言后视镜与 `session_create` 不跨越不同工作区的数据与路径。
+  - 模拟多工作区会话，断言状态镜像投影与 `session_create` 不跨越不同工作区的数据与路径。
 - **爆炸半径安全断言**：
   - 配额饱和后调用 `session_create`，断言立即抛出 `[QuotaExceeded]`；
   - 模拟 Generation 2 再次创建，断言拦截代际穿透；
   - 尝试使用 `[SYSTEM]` 伪造标题，断言被沙箱强制重命名或拦截。
 - **生命周期级联清理测试**：
-  - 会话归档后，断言其所发条目从活跃列表和后视镜中消失；
+  - 会话归档后，断言其所发条目从活跃列表和状态镜像投影中消失；
   - 带有 `artifact` 标签的条目保持存在并打标作者已离线。
 
 ---

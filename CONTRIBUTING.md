@@ -9,7 +9,7 @@ Engineering principles and standards:
 - **Zero-Trace Principle**: Code changes must look deliberately designed from day one. Avoid dead code, commented-out experiments, or extraneous temporary markers. Diff and commit history should reflect only the clean, final state.
 - **Fail Fast & Root-Cause Fixes**: Never silently swallow errors; always detect boundary violations early and fix the root cause rather than patching symptoms with fragile workarounds.
 - **SOLID, KISS, DRY, YAGNI**: Keep designs modular, cohesive, and minimal. Do not add speculative features or unnecessary abstractions.
-- **Zero External Subprocesses**: Keep the plugin 100% native within the DSH Node.js runtime. Avoid heavy binary dependencies, external child process spawns, or background daemon sidecars.
+- **Zero External Subprocesses**: Keep the plugin native within the DSH Node.js runtime. Avoid heavy binary dependencies, external child process spawns, or background daemon sidecars.
 - **Bilingual Documentation Sync**: Any user-facing feature, configuration change, or tool parameter modification **must** be documented in both **`README.md` (English)** and **`README_ZH.md` (Simplified Chinese)**.
 - **Architecture Decision Records (ADRs)**: Non-trivial architectural, concurrency, storage, or protocol changes **must** include an ADR in `docs/adrs/`.
 
@@ -56,8 +56,13 @@ dsh-call-session/
 │   └── adrs/                 # ADR records
 ├── lib/                      # Core runtime modules
 │   ├── board-store.mjs       # Debounced atomic storage & self-healing
+│   ├── call-telemetry.mjs    # In-memory call trace ring buffer
+│   ├── client.js             # Visual collaboration canvas client component
 │   ├── session-call.mjs      # Strict unicast dispatch & anti-ambiguity fuse
-│   └── session-query.mjs     # Workspace-scoped two-state session query
+│   ├── session-create.mjs    # Peer session creation & lifecycle control
+│   ├── session-directory.mjs # Workspace session directory & running quota
+│   ├── session-query.mjs     # Workspace-scoped two-state session query
+│   └── web-telemetry-route.mjs # Canvas data HTTP route
 ├── types/                    # TypeScript ambient declarations
 │   └── index.d.ts            # Public API & tool parameter contracts
 ├── tests/                    # Native Node.js test suites

@@ -263,7 +263,7 @@ test('特权前缀过滤、超长参数与换行控制符清洗测试', async ()
   const ctx = createMockCtx({ agentsList: [caller] });
   const exec = { agent: caller };
 
-  // 1. 特权沙箱前缀清洗：[SYSTEM] / [CAPTAIN] / [ROOT] 必须被自动剔除
+  // 1. 特权前缀清洗：[SYSTEM] / [CAPTAIN] / [ROOT] 自动剔除
   const resSys = await executeSessionCreate({
     ctx,
     args: { title: '[SYSTEM] Privileged System Bot', initial_message: 'Test' },
@@ -485,7 +485,7 @@ test('重名限制、配额限制、代际深度与限频滑动窗口测试', as
   resetRateLimits();
 });
 
-test('初始消息分发失败与黑板公告降级处理', async () => {
+test('初始消息分发失败与黑板公告回退处理', async () => {
   resetRateLimits();
   const caller = createMockAgent('caller-fault');
 
@@ -519,7 +519,7 @@ test('初始消息分发失败与黑板公告降级处理', async () => {
     get: (n) => (n === 'agents' ? faultAgentsSvc : undefined)
   };
 
-  // 初始消息分发异常不能导致 executeSessionCreate 失败，会话依然创建成功并记录降级告警
+  // 初始消息分发异常不能导致 executeSessionCreate 失败，会话依然创建成功并记录告警
   const res = await executeSessionCreate(faultCtx, {
     title: 'Fault Tolerant Worker',
     initial_message: 'Will fail initial dispatch'
@@ -527,11 +527,11 @@ test('初始消息分发失败与黑板公告降级处理', async () => {
 
   assert.equal(res.success, true);
   assert.equal(res.title, 'Fault Tolerant Worker');
-  assert.ok(warnLogged >= 1, '初始消息分发失败记录降级告警');
+  assert.ok(warnLogged >= 1, '初始消息分发失败记录告警');
   resetRateLimits();
 });
 
-test('标题追加与重命名服务抛错异常对抗与安全降级 (ADR-0017)', async () => {
+test('标题追加与重命名服务抛错异常对抗与容错处理 (ADR-0017)', async () => {
   resetRateLimits();
   const caller = createMockAgent('caller-title-fault');
 
@@ -576,7 +576,7 @@ test('标题追加与重命名服务抛错异常对抗与安全降级 (ADR-0017)
     get: (n) => (n === 'agents' ? faultAgentsSvc : n === 'sessionTitle' ? faultySessionTitleSvc : undefined)
   };
 
-  // 标题持久化异常不能导致 executeSessionCreate 失败，会话依然创建成功并降级容错
+  // 标题持久化异常不能导致 executeSessionCreate 失败，会话依然创建成功并安全容错
   const res = await executeSessionCreate(faultCtx, {
     title: 'Title Fault Tolerant Worker'
   }, { agent: caller });

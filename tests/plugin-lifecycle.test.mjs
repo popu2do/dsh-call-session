@@ -223,7 +223,7 @@ test('apply: 插件初始化、工具注册与 System Prompt 挂载', async (t) 
   assert.equal(remindContext.order, 130);
   assert.equal(typeof remindContext.text, 'function');
 
-  // 3. 验证 Web 斜杠指令已彻底退役 (ADR-0007 Superseded)
+  // 3. 验证 Web 斜杠指令已退役 (ADR-0007 Superseded)
   const slashCmd = ctx.commands.get('dsh-call-session');
   assert.equal(slashCmd, undefined, '斜杠指令必须不再被注册');
 
@@ -439,9 +439,9 @@ test('ctx.logger 接入与日志级别收敛至 debug', async (t) => {
   // 2. 验证生命周期中的启动、工具注册、斜杠注册日志已触发
   assert.ok(capturedLogs.length > 0, '应当记录生命周期日志');
 
-  // 3. 验证所有生命周期日志均为 debug 级别，绝不使用 info 产生控制台噪音
+  // 3. 验证所有生命周期日志均为 debug 级别，避免输出日志干扰
   const nonDebugLogs = capturedLogs.filter(l => l.level !== 'debug');
-  assert.equal(nonDebugLogs.length, 0, '生命周期正常流程下不输出 info/warn/error 级别日志，避免控制台污染');
+  assert.equal(nonDebugLogs.length, 0, '生命周期正常流程下不输出 info/warn/error 级别日志，避免日志输出污染');
 
   const activationLog = capturedLogs.find(l => l.args[0]?.includes('Activating pure DSH Native Collaboration Plugin'));
   assert.ok(activationLog, '必须包含插件激活 debug 日志');

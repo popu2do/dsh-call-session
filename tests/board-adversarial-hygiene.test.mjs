@@ -447,7 +447,7 @@ test('端到端保留主题拒绝与拦截防护：board_post 与 BoardStore.pos
   await ctx.emit('dispose');
 });
 
-test('BoardStore.hydratePosts: 启动水合旧脏数据清洗过滤与自愈落盘 (ADR-0010 & ADR-0012)', async (t) => {
+test('BoardStore.hydratePosts: 启动水合历史脏数据过滤与持久化恢复 (ADR-0010 & ADR-0012)', async (t) => {
   const tmpDir = await createTempDir();
   t.after(async () => {
     await fs.rm(tmpDir, { recursive: true, force: true });

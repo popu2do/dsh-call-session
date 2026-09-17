@@ -10,7 +10,7 @@
 
 ## 1. Context and Problem Statement
 
-### 1.1 Background & Pain Points
+### 1.1 Background & Issues
 在 DSH 中扩展插件时，存在以下工程约束与常见问题：
 1. **侵入式项目级安装**：在每个代码工程或工作区重复配置依赖，增加维护成本与版本分歧；
 2. **底层代码修改**：直接修改宿主核心文件，升级版本时容易被覆盖；
@@ -97,7 +97,7 @@ export default {
 - **`agents`**：提供 `ctx.agents` 服务（进程内活跃 Agent 实例索引）；
 - **`tools`**：提供 `ctx.tools.register` 服务（面向模型的 Native Tool 挂载）；
 - **`systemPrompt`**：提供 `ctx.systemPrompt.add` 服务（面向模型注入跨会话协作指南）。
-*(注：原 `commands` 服务已随 /dsh-call-session 斜杠指令废止而解耦移除)*
+注：原 `commands` 服务已随 /dsh-call-session 斜杠指令废止而移除。
 
 ### 4.3 Lifecycle Disposal & Resource Recycling Contract
 ```javascript
@@ -140,7 +140,7 @@ export function apply(ctx, config = {}) {
 
 ### 5.2 Negative Consequences (Tradeoffs & Mitigations)
 - **多会话共享单一 BoardStore**：
-  - *Mitigation*: 通过 ADR-0003（默认物理工作区逻辑隔离）确保看板数据不会跨工程串扰，只有显式声明 `cross_workspace: true` 才能穿透全局。
+  - *Mitigation*: 依据 ADR-0003（默认工作区隔离）确保看板数据不会跨工程混淆，只有显式声明 `cross_workspace: true` 才能跨工作区查询。
 
 ---
 

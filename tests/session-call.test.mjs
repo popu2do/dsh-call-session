@@ -90,7 +90,7 @@ test('dispatchNativeMessage: 状态分发 (steer / followup / send)', () => {
   assert.equal(mode2, 'followup');
   assert.equal(idleAgent.received[0].type, 'followup');
 
-  // 3. target 仅具备 send 方法时降级为 followup
+  // 3. target 仅具备 send 方法时回退为 followup
   const sendOnlyAgent = {
     id: 'agent-send',
     status: 'idle',
@@ -357,7 +357,7 @@ test('executeSessionCall: 接入 ctx.logger("dsh-call-session") 并记录 debug 
   assert.equal(res.success, true);
   assert.equal(loggerScope, 'dsh-call-session');
   assert.ok(captured.some(l => l.level === 'debug' && l.args[0]?.includes('Successfully dispatched')));
-  assert.equal(captured.filter(l => l.level !== 'debug').length, 0, '不产生非 debug 级别的控制台日志');
+  assert.equal(captured.filter(l => l.level !== 'debug').length, 0, '不产生非 debug 级别的输出日志');
 });
 
 test('buildTransportPayload: 标准参数生成标准客观报头与双换行正文', () => {
@@ -405,7 +405,7 @@ test('buildTransportPayload: 带 Context Ref 时换行追加引用且格式化 #
   assert.match(payload, HEADER_REGEX);
 });
 
-test('buildTransportPayload: 优雅降级回退机制 (参数缺省、空串、非法类型)', () => {
+test('buildTransportPayload: 回退机制 (参数缺省、空串、非法类型)', () => {
   // 1. 无第二个参数或空对象
   const p1 = buildTransportPayload('Hello fallback');
   assert.equal(p1, '[From: unknown-caller (Session) | CallType: task_dispatch]\n\nHello fallback');
@@ -452,7 +452,7 @@ test('buildTransportPayload: 原始正文 100% 逐字无损与禁止指令污染
   assert.ok(!payload.includes('收到请'));
 });
 
-test('executeSessionCall: 端到端消息格式断言测试 (三大 call_type、Context Ref、优雅降级与全量返回契约)', async () => {
+test('executeSessionCall: 端到端消息格式断言测试 (三大 call_type、Context Ref、回退处理与全量返回契约)', async () => {
 
   const caller = createMockAgent('caller-e2e-12345678', { title: 'Captain Master' });
   const targetIdle = createMockAgent('target-e2e-idle-11111111', { status: 'idle', title: 'Target Worker' });
@@ -514,7 +514,7 @@ test('executeSessionCall: 端到端消息格式断言测试 (三大 call_type、
   );
   assert.ok(msg2.source.summary.includes('[Cross-Session TASK_REPORT]'));
 
-  // 3. 无 exec.agent 时的优雅降级调用
+  // 3. 无 exec.agent 时的回退调用
   const fallbackRes = await executeSessionCall({
     ctx,
     args: {
@@ -585,7 +585,7 @@ test('executeSessionCall: 进程内原生分发网络零调用验证 (ADR-0006 �
   }
 });
 
-test('sanitizePostIds: 关联黑板 ID 清洗、去重与边界防爆', () => {
+test('sanitizePostIds: 关联黑板 ID 清洗、去重与边界容错', () => {
   assert.deepEqual(sanitizePostIds(null), []);
   assert.deepEqual(sanitizePostIds(undefined), []);
   assert.deepEqual(sanitizePostIds('invalid'), []);

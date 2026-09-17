@@ -36,7 +36,7 @@ export declare function createTelemetryHandler(
 ): (req: any, res: any) => Promise<void>;
 
 /**
- * 懒加载挂载遥测路由；无 Web 宿主时保持 tool-only 静默降级。
+ * 懒加载挂载遥测路由；无 Web 宿主时保持 tool-only 回退运行。
  */
 export declare function installTelemetryWebSurface(
   ctx: any,

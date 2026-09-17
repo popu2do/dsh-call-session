@@ -10,11 +10,11 @@
 
 ## 1. Context and Problem Statement
 
-### 1.1 Background & Pain Points
+### 1.1 Background & Issues
 
 在 `dsh-call-session` 插件早期迭代与功能演进过程中，公共黑板（Blackboard）、会话单播呼叫（Session Call）、会话查询（Session Query）以及同级会话创建（Session Create）等能力经历了多轮独立特性迭代（如 ADR-0001 关注域分离、ADR-0005 确立 English Metadata、ADR-0010 确立同级会话生命周期、ADR-0011 治理黑板 Token、ADR-0015 支持预设与模型继承）。
 
-然而，多阶段演进导致了底层接口与技术规范文档之间出现明显的**命名割裂、别名污染与规范断层**：
+然而，多阶段演进导致了底层接口与技术规范文档之间出现明显的**命名差异、别名冗余与规范不一致**：
 
 1. **入参与出参命名风格割裂与理解断层**：
    - 工具入参在不同工具间风格不纯粹：绝大多数参数使用 `snake_case`（如 `target_session_id`, `call_type`, `context_post_ids`, `initial_message`, `running_only`），但部分工具实现与类型定义中引入了 `camelCase` 入参别名（如 `session_create` 中的 `reasoningEffort`、`agentPreset`、`sessionId`，`board_list` 内部的 `topicPrefix`、`crossWorkspace`、`titlesOnly`）。
@@ -39,9 +39,9 @@
 ### 1.2 Architectural Forces & Constraints
 
 - **Single Source of Truth (SSOT)**：全插件所有原生工具的参数与返回值必须有且仅有一套绝对权威的命名规范。
-- **Zero-Alias Anti-Pollution**：彻底废除内部多重别名兼容逻辑，不允许在生产代码中保留用于规避规范的中间层兼容补丁。
+- **Zero-Alias Anti-Pollution**：废除内部多重别名兼容逻辑，不在生产代码中保留别名兼容补丁。
 - **Dual-Domain Protocol Boundary**：严格分立 Agent 提示词交互层（入参）与 Machine/Web 消费层（出参）的命名风格，不可任意混淆。
-- **End-to-End Parameter Symmetry**：工具链之间传递核心实体时，语义与词根必须严格对称，确保无缝衔接。
+- **End-to-End Parameter Symmetry**：工具链之间传递核心实体时，语义与词根必须严格对称，确保调用参数一致。
 
 ---
 
@@ -49,7 +49,7 @@
 
 - **Driver 1 (Eliminate Interface Ambiguity)**：确立明确的命名法则，消除 Agent 在选择工具参数时的猜测与幻觉。
 - **Driver 2 (Preserve Web GUI & Machine Runtime)**：维护 ADR-0005 确立的 Machine Layer camelCase JSON Schema 铁律，保护前端协作看板（Canvas）与看板数据管道的绝对稳定。
-- **Driver 3 (Purge Alias Pollution)**：在运行时代码与 `.d.ts` 中彻底移除所有冗余兼容别名（如 `active_only`, `reasoningEffort`, `agentPreset` 等），还原纯净实现。
+- **Driver 3 (Purge Alias Pollution)**：在运行时代码与 `.d.ts` 中移除所有冗余兼容别名（如 `active_only`, `reasoningEffort`, `agentPreset` 等），保持接口简洁。
 - **Driver 4 (Rectify Historical ADR Inconsistencies)**：出具正式修正案，纠正 ADR-0001, ADR-0005, ADR-0006, ADR-0010, ADR-0011, ADR-0015 中与现行统一规范相悖的历史笔误与模糊描述。
 
 ---
@@ -60,7 +60,7 @@
 - **描述**：将工具入参和出参全部强制统一为 `snake_case`（例如出参全部转为 `session_id`, `target_session_id`, `total_count` 等）。
 - **否决原因**：
   - 严重违背 ADR-0005《English Metadata and Normalized Two-State Status Protocol》核心决策；
-  - 破坏协作看板（`lib/client.js`）中数百处基于 `sessionId`、`targetSessionId`、`callerSessionId` 的响应式属性访问，引发前端灾难性崩溃；
+  - 破坏协作看板（`lib/client.js`）中数百处基于 `sessionId`、`targetSessionId`、`callerSessionId` 的响应式属性访问，引发前端异常与渲染失败；
   - 违反主流 TypeScript / JSON 领域开发惯例（JS 运行时对象原生偏好 camelCase）。
 
 ### Option 2: 全链路全面驼峰化（All-CamelCase Unification）
@@ -80,7 +80,7 @@
   1. **模型调用入参（Agent Tool Inputs）**：100% 严格统一为 **`snake_case`**；
   2. **机器消费出参（Tool Output Payloads）**：100% 严格统一为 **`camelCase`**；
   3. **核心实体词根**：统一使用 `session_id` (入参) / `sessionId` (出参)，结合上下文角色明确前缀；
-  4. **彻底清洗别名**：生产代码和类型定义中完全剔除所有兼容别名。
+  4. **清理兼容别名**：生产代码和类型定义中剔除兼容别名。
 - **采纳优势**：
   - 契合 DSH 工具生态的入参惯例与 JS/TS/Web 前端的出参惯例；
   - 零别名、零额外 Token 损耗、100% 类型安全与全链路参数对称。
@@ -117,7 +117,7 @@
 | 类别 | 规范参数名 | 数据类型 | 必须 | 默认值 | 语义说明与废除别名 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | **入参** | `query` | `string` | 否 | - | 模糊搜索关键词（匹配 Session ID 或 Title） |
-| **入参** | `running_only` | `boolean` | 否 | `false` | 仅返回处于 running 状态的会话。**彻底废除 `active_only` 别名** |
+| **入参** | `running_only` | `boolean` | 否 | `false` | 仅返回处于 running 状态的会话。**废除 `active_only` 别名** |
 | **入参** | `cross_workspace` | `boolean` | 否 | `false` | 是否跨工作区全局查询 |
 | **入参** | `top_level_only` | `boolean` | 否 | `true` | 是否仅列出顶层会话（排除子代理） |
 | **入参** | `limit` | `integer` | 否 | `50` | 返回条数上限（1~100） |
@@ -166,9 +166,9 @@
 | **入参** | `initial_message` | `string` | 否 | - | 可选初始任务指令（<=4000 字符） |
 | **入参** | `context_post_ids` | `string[]` | 否 | `[]` | 可选关联的黑板条目 ID 列表（最多 5 个） |
 | **入参** | `model` | `string` | 否 | 继承 | 可选覆写模型 ID（支持 `provider/model` 格式） |
-| **入参** | `reasoning_effort` | `string` | 否 | 继承 | 可选推理强度。**彻底废除 `reasoningEffort` 别名** |
-| **入参** | `preset` | `string` | 否 | 继承 | 可选智能体预设 ID。**彻底废除 `agentPreset` 别名** |
-| *排除* | *(sessionId)* | - | - | - | **彻底从入参定义移除，禁止作为工具参数传参** |
+| **入参** | `reasoning_effort` | `string` | 否 | 继承 | 可选推理强度。**废除 `reasoningEffort` 别名** |
+| **入参** | `preset` | `string` | 否 | 继承 | 可选智能体预设 ID。**废除 `agentPreset` 别名** |
+| *排除* | *(sessionId)* | - | - | - | **从入参定义移除，禁止作为工具参数传参** |
 | **出参** | `success` | `boolean` | 是 | - | 会话创建是否成功 |
 | **出参** | `sessionId` | `string` | 否 | - | 新建平级会话全局唯一 ID（严禁 `session_id`） |
 | **出参** | `title` | `string` | 否 | - | 会话规范化标题 |
@@ -234,7 +234,7 @@
 
 ---
 
-### 4.3 跨工具链路闭环模型（End-to-End Linkage Pipeline）
+### 4.3 跨工具参数流转模型（End-to-End Linkage Pipeline）
 
 ```
                      [ session_query ]
@@ -285,7 +285,7 @@
    - 废止任何在 `session_query` 入参中支持 `active_only` 的说明，固化入参为 `running_only`。
 
 3. **ADR-0006 修正案**：
-   - §4.2 流程图拓扑勘误：将 `session_call(target_id, message, call_type, context_post_ids)` 纠正为标准参数名 `session_call(target_session_id, message, call_type, context_post_ids)`，彻底消除 `target_id` 伪别名。
+   - §4.2 流程图拓扑勘误：将 `session_call(target_id, message, call_type, context_post_ids)` 纠正为标准参数名 `session_call(target_session_id, message, call_type, context_post_ids)`，消除 `target_id` 别名。
 
 4. **ADR-0010 修正案**：
    - §4.3.2 参数契约修正：将 `session_create` 参数声明全面升级为本规范定义的标准 `snake_case`（含 `reasoning_effort` 与 `preset`）；
@@ -306,9 +306,9 @@
 
 ### 6.1 Positive Consequences (Benefits)
 - **消除全链路认知负荷**：所有工具入参统一为 `snake_case`，出参统一为 `camelCase`，规则简明确定，无特例，无割裂。
-- **彻底净化工程代码**：移除所有双轨别名读取，消除潜在分支漏洞，提升 TypeScript 类型安全与编译期确定性。
-- **保护前端与看板数据系统**：明确固化 `sessionId`、`targetSessionId`、`callerSessionId` 出参，协作看板与看板数据管道零回归。
-- **参数闭环无缝流转**：从会话发现到单播呼叫，再到黑板引用，参数命名对称一致。
+- **清理冗余兼容代码**：移除所有双轨别名读取，消除潜在分支漏洞，提升 TypeScript 类型安全与编译期确定性。
+- **保护前端与看板数据系统**：明确固化 `sessionId`、`targetSessionId`、`callerSessionId` 出参，协作看板与看板数据管道稳定兼容。
+- **参数链路对称流转**：从会话发现到单播呼叫，再到黑板引用，参数命名对称一致。
 
 ### 6.2 Implementation Directives (Handoff to Task 2 & Downstream)
 - **Task 2 (fullstack-dev)**：
@@ -319,7 +319,7 @@
 - **Task 3 (fullstack-dev)**：
   - 更新测试套件中显式使用废除别名的测试用例，全量回归验证 193+ 测试。
 - **Task 4 (code-reviewer)**：
-  - 对照本 ADR 逐项审查代码改造与别名清理的彻底性。
+  - 对照本 ADR 逐项审查代码改造与别名清理的完整性。
 - **Task 5 (fullstack-dev)**：
   - 依据 §5 修正案内容，更新 ADR-0001/0005/0006/0010/0011/0015 并同步至 3080 运行时。
 

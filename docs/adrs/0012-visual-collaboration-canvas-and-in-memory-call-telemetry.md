@@ -15,7 +15,7 @@
 1. 基于拉取（Pull）的公共黑板系统（`board_post`, `board_list`, `board_clear`，ADR-0001, ADR-0002, ADR-0004）；
 2. 基于推送（Push）的严格 1:1 进程内单播调用（`session_call`，含 `steer` 与 `followup`，ADR-0001, ADR-0006）。
 
-然而，在多智能体协作与团队编排（如 AgentTeams）复杂任务场景下，用户与开发者面临严重的**可观测性真空**（Observability Vacuum）：
+然而，在多智能体协作与团队编排场景下，系统缺乏全局可观测性（Observability Vacuum）：
 - **调用痕迹瞬态丢失**：`session_call` 直接在内存中以事件方式分发至目标 Agent，调用完成后无结构化轨迹留存，无法回顾「谁调用了谁」、「何时触发了什么协作任务」；
 - **全景拓扑盲区**：用户仅能在对话列表单条会话内查看折叠行通知，缺乏全局视角的协作看板，无法直观感知跨工作区、多 Agent 之间的拓扑连接度与黑板条目关联；
 - **排障成本高**：发生多 Agent 死锁、调用级联风暴或任务交接断裂时，开发者只能通过零散的系统日志或人工逐个会话排查。
@@ -58,7 +58,7 @@
   1. 在后端实现轻量纯内存环形缓冲区 `CallTelemetryRingBuffer`（默认容量 200 条，FIFO 淘汰）；
   2. `executeSessionCall` 在投递成功后同步（或微任务异步）记录 1 条轻量遥测快照；
   3. 提供只读门面接口 `getCanvasTelemetry({ workspace, crossWorkspace, limit })` 聚合会话、黑板与连线；
-  4. 遥测接口作为 Cordis 服务或内部查询暴露给 Web 前端，绝不向 Agent 暴露为 LLM Tool，捍卫 KV Cache；
+  4. 遥测接口作为内部查询暴露给 Web 前端，不向 Agent 暴露为 LLM Tool，避免影响 KV Cache；
   5. 前端通过 `conversation.view` 插槽挂载「看板」视图，采用 SVG + DOM 分层渲染与 RAF 节流实现 60fps。
 - **Pros**: 内存开销小、无磁盘 I/O、无被动唤醒、内存占用受限、不影响 Prompt KV Cache、契合 DSH 原生扩展规范。
 - **Cons**: 宿主进程重启后瞬态连线重置（拓扑自动基于存活会话与黑板重新投影，符合实时遥测预期）。
@@ -216,12 +216,12 @@ export function installTelemetryWebSurface(ctx: any, deps?: { logger?: any }): {
 
 路由不变式：
 
-- **认证围栏强制**：原生 WebServer 路由不继承 Connection 的认证语义，因此每个请求先经 `connection.requestRejection(req)` 校验。Connection 服务缺失返回 503，未授权返回 401，越权返回 403，围栏之前绝不序列化任何工作区状态；
-- **GET-only 只读**：仅接受 GET；`POST`/`PUT`/`PATCH`/`DELETE`/`HEAD`/`OPTIONS` 一律返回 405 并携带 `allow: GET`。绝不提供任何写入、清理或触发单播的路由；
+- **认证围栏强制**：原生 WebServer 路由不继承 Connection 的认证语义，因此每个请求先经 `connection.requestRejection(req)` 校验。Connection 服务缺失返回 503，未授权返回 401，越权返回 403，围栏校验通过前不序列化工作区状态；
+- **GET-only 只读**：仅接受 GET；`POST`/`PUT`/`PATCH`/`DELETE`/`HEAD`/`OPTIONS` 一律返回 405 并携带 `allow: GET`。不提供写入、清理或触发单播的路由；
 - **无缓存响应**：响应头固定 `cache-control: no-store`，避免过期拓扑被浏览器缓存复用；
 - **懒加载与降级**：通过 `ctx.get('webServer') ?? ctx.get('httpServer')` 探针获取宿主服务，缺失时直接返回并监听 `internal/service` 事件补挂载。Headless 组态下插件保持 tool-only，不阻塞启动；
 - **生命周期自动摘除**：注册经 `ctx.effect` 挂载，插件卸载时路由随之移除；
-- **错误不泄漏**：聚合异常统一降级为 500 `telemetry unavailable`，绝不将内部堆栈或路径写入响应体。
+- **错误不泄漏**：聚合异常统一降级为 500 `telemetry unavailable`，不将内部堆栈或路径写入响应体。
 
 #### 4.3.4 扩展契约
 在 Web 运行时，插件入口通过 `conversation.view` 注册看板选项卡，并从上述规范路由拉取快照：
@@ -245,7 +245,7 @@ ctx.slots.inject('conversation.view', () => ctx.slots.register({
 ### 5.1 Positive Consequences (Benefits)
 - **只读可观测性**：呈现多 Agent 交互拓扑与黑板状态，辅助多智能体协作排障；
 - **无状态破坏风险**：纯只读透视，无反向控制渠道，避免会话或黑板数据误删；
-- **无被动唤醒**：遥测读取完全依赖内存镜像，符合 ADR-0001 架构底线；
+- **无被动唤醒**：遥测读取依赖内存镜像，符合 ADR-0001 架构规范；
 - **不影响 Prompt KV Cache**：遥测服务不暴露为 LLM Tool，系统提示词不变，保持首字响应性能；
 - **恒定内存消耗**：环形缓冲区大小受限（默认 200），内存占用受控，无磁盘 I/O 阻塞。
 
