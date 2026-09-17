@@ -960,7 +960,7 @@ test('Three Relationship Edge Classes: Edge generation and boundary tolerance (m
   // 断言：仅为有合法 authorSessionId 且目标会话存在的条目生成边
   assert.equal(validAuthorPaths.length, 1, '仅生成 1 条合法的 session->post 归属边');
   assert.equal(validAuthorPaths[0].props.key, 'author-s1->post-valid');
-  assert.ok(validAuthorPaths[0].props.d.startsWith('M 170.0 188.0 Q '), '归属边必须从 session 上顶点 (170, 214-26=188) 发起');
+  assert.ok(validAuthorPaths[0].props.d.startsWith('M 266.0 214.0 C '), '归属边必须从 session 右侧边界 (170+96=266, 214) 发起并使用三次贝塞尔走外侧通道');
   assert.ok(validAuthorPaths[0].props.d.includes(' 146.0 100.0'), '归属边终点连接至 post 下边界 (56+90=146, 52+48=100)');
   assert.equal(validAuthorPaths[0].props.stroke, '#64748b', '归属边默认描边颜色为 #64748b');
   assert.equal(validAuthorPaths[0].props.strokeWidth, '1.2', '归属边默认线宽必须提升至 1.2px');
@@ -2071,7 +2071,7 @@ test('协作看板黑板标题口径与卡片视觉状态强化（PRD §6.4 与 
   assert.equal(emptyTitleTexts[1].children[0], '(0)', '空黑板时标题必须显示 (0)');
 });
 
-test('ADR-0003 默认工作区隔离、跨工作区切换开关与当前会话发光视觉锚点', () => {
+test('ADR-0013 看板默认全局透视、首列固定当前工作区、移除跨区开关与当前会话发光锚点', () => {
   const plugin = loadClientBundle();
   const { isMatchingSession } = plugin;
 
@@ -2142,50 +2142,102 @@ test('ADR-0003 默认工作区隔离、跨工作区切换开关与当前会话�
   const pluginZh = loadClientBundle((name) => name === 'react' ? reactZh : null);
   const tZh = (k) => pluginZh.zh[k] || k;
 
-  // 2.1 默认隔离断言（crossWorkspace 未传，必须缺省为 false）
-  const defaultIsolatedView = pluginZh.CanvasView({
+  // 2.1 默认全局透视断言（ADR-0013：无参数时直接渲染全部工作区列，且当前工作区自动排在最左侧首列）
+  const defaultGlobalView = pluginZh.CanvasView({
     sessionId: 'session-cur',
     t: tZh,
     locale: 'zh'
   });
 
-  const swimlanesLayer = findNodeById(defaultIsolatedView, 'dsh-canvas-swimlanes');
+  const swimlanesLayer = findNodeById(defaultGlobalView, 'dsh-canvas-swimlanes');
   assert.ok(swimlanesLayer, 'dsh-canvas-swimlanes 必须存在');
-  assert.equal(swimlanesLayer.children.length, 1, '默认隔离下仅渲染当前工程工作区列');
-  assert.equal(swimlanesLayer.children[0].props.key, '/ws/main', '渲染的工作区必须为当前工作区 /ws/main');
+  assert.equal(swimlanesLayer.children.length, 2, '默认全局模式下渲染全部工作区列');
+  assert.equal(swimlanesLayer.children[0].props.key, '/ws/main', '首列工作区必须自动重排固定为当前工作区 /ws/main');
 
-  const nodesLayer = findNodeById(defaultIsolatedView, 'dsh-canvas-nodes');
+  const nodesLayer = findNodeById(defaultGlobalView, 'dsh-canvas-nodes');
   assert.ok(nodesLayer, 'dsh-canvas-nodes 必须存在');
   const renderedNodeIds = nodesLayer.children.map(n => n.props.key);
   assert.ok(renderedNodeIds.includes('session-cur'), '当前工程会话 session-cur 必须渲染');
   assert.ok(renderedNodeIds.includes('session-other'), '当前工程会话 session-other 必须渲染');
-  assert.equal(renderedNodeIds.includes('session-peer'), false, '外部工作区 session-peer 默认严禁进入画布');
+  assert.ok(renderedNodeIds.includes('session-peer'), '外部工作区 session-peer 默认全局呈现');
 
-  // 工具栏切换开关断言
-  const toolbarButtons = findVNodes(defaultIsolatedView, (n) => n && n.type === 'button' && n.props && n.props.className && n.props.className.includes('dsh-canvas-btn'));
+  // 工具栏彻底移除跨工作区开关断言
+  const toolbarButtons = findVNodes(defaultGlobalView, (n) => n && n.type === 'button' && n.props && n.props.className && n.props.className.includes('dsh-canvas-btn'));
   const crossWsBtn = toolbarButtons.find(b => b.children && b.children.includes('跨工作区拓扑'));
-  assert.ok(crossWsBtn, '顶部工具栏必须提供「跨工作区拓扑」切换开关');
-  assert.equal(crossWsBtn.props.className.includes('active'), false, '默认状态下跨工作区开关不处于 active 状态');
+  assert.equal(crossWsBtn, undefined, '顶部工具栏彻底移除「跨工作区拓扑」按钮');
 
   const locateBtn = toolbarButtons.find(b => b.children && b.children.includes('定位当前会话'));
   assert.ok(locateBtn, '当传入 sessionId 时顶部工具栏必须提供「定位当前会话」按钮');
 
-  // 2.2 显式开启跨工作区断言 (crossWorkspace: true)
-  const permissiveView = pluginZh.CanvasView({
-    sessionId: 'session-cur',
-    crossWorkspace: true,
-    t: tZh,
-    locale: 'zh'
-  });
-  const permissiveSwimlanes = findNodeById(permissiveView, 'dsh-canvas-swimlanes');
-  assert.equal(permissiveSwimlanes.children.length, 2, '开启 crossWorkspace: true 时渲染全部 2 个工作区列');
-  const permissiveNodes = findNodeById(permissiveView, 'dsh-canvas-nodes');
-  const permissiveNodeIds = permissiveNodes.children.map(n => n.props.key);
-  assert.ok(permissiveNodeIds.includes('session-peer'), '开启跨工作区后外部工作区会话必须正常呈现');
+  // 2.2 验证 computeLayout 对当前工作区首列固定与 isCurrent 补齐
+  const { computeLayout } = pluginZh;
+  const unpinnedWorkspaces = [
+    { id: '/ws/other', name: 'other', isCurrent: false },
+    { id: '/ws/target', name: 'target', isCurrent: true }
+  ];
+  const layoutPinned = computeLayout(unpinnedWorkspaces, [], [], '/ws/target');
+  assert.equal(layoutPinned.workspaceBounds[0].id, '/ws/target', '目标工作区必须重排至首位');
+  assert.equal(layoutPinned.workspaceBounds[0].isCurrent, true, '重排后的首位工作区必须拥有 isCurrent: true');
 
-  const permissiveButtons = findVNodes(permissiveView, (n) => n && n.type === 'button' && n.props && n.props.className && n.props.className.includes('dsh-canvas-btn'));
-  const crossWsBtnActive = permissiveButtons.find(b => b.children && b.children.includes('跨工作区拓扑'));
-  assert.ok(crossWsBtnActive.props.className.includes('active'), '跨工作区激活时按钮必须包含 active 类名');
+  // 当工作区原本在首位但缺少 isCurrent 时，必须安全补齐 isCurrent: true
+  const firstWithoutIsCurrent = [
+    { id: '/ws/target', name: 'target' },
+    { id: '/ws/other', name: 'other' }
+  ];
+  const layoutFirstPinned = computeLayout(firstWithoutIsCurrent, [], [], '/ws/target');
+  assert.equal(layoutFirstPinned.workspaceBounds[0].id, '/ws/target');
+  assert.equal(layoutFirstPinned.workspaceBounds[0].isCurrent, true, '首位工作区必须被补齐 isCurrent: true');
+
+  // 当外部未传递 currentWorkspace 但工作区列表中存在 isCurrent: true 时，仍能可靠置首
+  const implicitCurrentWorkspaces = [
+    { id: '/ws/first', name: 'first', isCurrent: false },
+    { id: '/ws/second', name: 'second', isCurrent: true }
+  ];
+  const layoutImplicitPinned = computeLayout(implicitCurrentWorkspaces, [], [], '');
+  assert.equal(layoutImplicitPinned.workspaceBounds[0].id, '/ws/second', '未显式传参时根据内部 isCurrent 依然可靠重排至首位');
+  assert.equal(layoutImplicitPinned.workspaceBounds[0].isCurrent, true);
+
+  // 当 currentWorkspace 不在已有工作区列表中时，自动补齐并置首
+  const missingCurrentWorkspaces = [
+    { id: '/ws/first', name: 'first', isCurrent: false },
+    { id: '/ws/second', name: 'second', isCurrent: false }
+  ];
+  const layoutMissingPinned = computeLayout(missingCurrentWorkspaces, [], [], '/ws/missing-target');
+  assert.equal(layoutMissingPinned.workspaceBounds[0].id, '/ws/missing-target', '缺失当前工作区时自动补齐并置于首位');
+  assert.equal(layoutMissingPinned.workspaceBounds[0].isCurrent, true);
+  assert.equal(layoutMissingPinned.workspaceBounds.length, 3, '总工作区列数正确增补为 3 列');
+
+  // 当显式 currentWorkspace 存在时，路径匹配优先于列表中其他陈旧的 isCurrent 标识
+  const staleIsCurrentWorkspaces = [
+    { id: '/ws/stale', name: 'stale', isCurrent: true },
+    { id: '/ws/explicit-target', name: 'explicit', isCurrent: false }
+  ];
+  const layoutPriorityPinned = computeLayout(staleIsCurrentWorkspaces, [], [], '/ws/explicit-target');
+  assert.equal(layoutPriorityPinned.workspaceBounds[0].id, '/ws/explicit-target', '显式传入路径必须优先于已有陈旧 isCurrent 标记并置首');
+  assert.equal(layoutPriorityPinned.workspaceBounds[0].isCurrent, true);
+
+  // 校验当前工作区排他性：即使输入列表中多个工作区标记了 isCurrent: true，也仅有首列为 true，其余强制重置为 false
+  const multiCurrentWorkspaces = [
+    { id: '/ws/first', name: 'first', isCurrent: true },
+    { id: '/ws/second', name: 'second', isCurrent: true },
+    { id: '/ws/third', name: 'third', isCurrent: true }
+  ];
+  const layoutExclusivePinned = computeLayout(multiCurrentWorkspaces, [], [], '/ws/second');
+  assert.equal(layoutExclusivePinned.workspaceBounds[0].id, '/ws/second', '目标工作区成功置首');
+  assert.equal(layoutExclusivePinned.workspaceBounds[0].isCurrent, true, '首列必须为当前工作区');
+  assert.equal(layoutExclusivePinned.workspaceBounds[1].isCurrent, false, '第二列必须重置为 false');
+  assert.equal(layoutExclusivePinned.workspaceBounds[2].isCurrent, false, '第三列必须重置为 false');
+
+  // 当显式 currentWorkspace 在列表中缺失，但列表中存在陈旧 isCurrent: true 时，绝不被陈旧标记截胡，依然自动补齐真实目标并置首
+  const missingWithStaleIsCurrent = [
+    { id: '/ws/stale-hijack', name: 'stale-hijack', isCurrent: true },
+    { id: '/ws/other', name: 'other', isCurrent: false }
+  ];
+  const layoutAntiHijack = computeLayout(missingWithStaleIsCurrent, [], [], '/ws/real-missing');
+  assert.equal(layoutAntiHijack.workspaceBounds[0].id, '/ws/real-missing', '真实缺失的工作区必须成功补齐并置首');
+  assert.equal(layoutAntiHijack.workspaceBounds[0].isCurrent, true, '真实缺失的工作区为当前工作区');
+  assert.equal(layoutAntiHijack.workspaceBounds[1].isCurrent, false, '陈旧工作区 isCurrent 必须被强制重置为 false');
+  assert.equal(layoutAntiHijack.workspaceBounds.length, 3, '总工作区列数正确增补为 3 列');
 
   // 3. 当前会话高亮发光锚点与 [当前] 状态标签断言
   const curNodeGroup = findNodeById(nodesLayer, 'dsh-canvas-node-session-cur');
@@ -2235,6 +2287,31 @@ test('ADR-0003 默认工作区隔离、跨工作区切换开关与当前会话�
   const noSessionButtons = findVNodes(noSessionView, (n) => n && n.type === 'button' && n.props && n.props.className && n.props.className.includes('dsh-canvas-btn'));
   const noLocateBtn = noSessionButtons.find(b => b.children && b.children.includes('定位当前会话'));
   assert.equal(noLocateBtn, undefined, '无 sessionId 传入时严禁渲染定位当前会话按钮');
+
+  // 6. 当服务端 telemetry 未返回 currentWorkspace 时，CanvasView 自动基于当前 sessionId 反查所属工作区并置首
+  const missingWsTelemetry = {
+    timestamp: Date.now(),
+    currentWorkspace: '',
+    workspaces: [
+      { id: '/ws/other', name: 'other', isCurrent: false, sessionIds: ['session-other'] },
+      { id: '/ws/inferred', name: 'inferred', isCurrent: false, sessionIds: ['session-inferred'] }
+    ],
+    sessions: [
+      { id: 'session-other', workspace: '/ws/other', state: 'running', title: 'Other' },
+      { id: 'session-inferred', workspace: '/ws/inferred', state: 'running', title: 'Inferred' }
+    ],
+    posts: [],
+    calls: []
+  };
+  const reactInferred = createMockReact(missingWsTelemetry);
+  const pluginInferred = loadClientBundle((name) => name === 'react' ? reactInferred : null);
+  const viewInferred = pluginInferred.CanvasView({
+    sessionId: 'session-inferred',
+    t: tZh
+  });
+  const swimlanesInferred = findNodeById(viewInferred, 'dsh-canvas-swimlanes');
+  assert.ok(swimlanesInferred, 'dsh-canvas-swimlanes 必须存在');
+  assert.equal(swimlanesInferred.children[0].props.key, '/ws/inferred', '基于当前 sessionId 反查的工作区必须成功置首');
 });
 
 test('Topology Relationship Edges Contrast & WCAG 2.1 Compliance (PRD §3.1, §4.1 & Task t10)', () => {
@@ -2795,6 +2872,250 @@ test('工作区列在 1 列、2 列、3 列不同规模下的包围盒边界与 
   assert.equal(fit3.maxX, fit3Populated.maxX, '空态与填充态 maxX 保持严格一致');
   assert.equal(fit3.contentW, fit3Populated.contentW, '空态与填充态 contentW 保持严格一致');
   assert.equal(layout3.workspaceBounds[2].x, layout3Populated.workspaceBounds[2].x, '工作区列坐标不受黑板条目增减影响');
+});
+
+test('ADR-0014 拓扑外侧通道走线与右出左进几何规约', () => {
+  const plugin = loadClientBundle();
+  const { calculateBezierPath } = plugin;
+
+  // 1. 同工作区列上下调用：右出左进外侧绕行（相邻节点 dy=72）
+  const intraColPath = calculateBezierPath(170, 214, 170, 286, 0, 1);
+  assert.ok(intraColPath.startsWith('M '), '同列调用必须以 M 起点开始');
+  assert.ok(intraColPath.includes(' C '), '同列调用必须使用三次贝塞尔');
+  const mMatchIntra = intraColPath.match(/^M\s+([-\d.]+)\s+([-\d.]+)\s+C\s+([-\d.]+)\s+([-\d.]+),\s+([-\d.]+)\s+([-\d.]+),\s+([-\d.]+)\s+([-\d.]+)/);
+  assert.ok(mMatchIntra, '同列调用正则匹配合规三次贝塞尔');
+  const startX = parseFloat(mMatchIntra[1]);
+  const c1x = parseFloat(mMatchIntra[3]);
+  const c2x = parseFloat(mMatchIntra[5]);
+  const endX = parseFloat(mMatchIntra[7]);
+  // 右出左进断言
+  assert.ok(startX > 170, '起点必须位于节点右侧 (startX > 170)');
+  assert.ok(c1x > 170 + 96 && c1x <= 170 + 130, '第一控制点必须严格在右走线通道内 (266 < c1x <= 300)');
+  assert.ok(endX < 170, '终点必须进入目标左侧 (endX < 170)');
+  assert.ok(c2x < 170 - 96 && c2x >= 170 - 130, '第二控制点必须严格在左走线通道内 (40 <= c2x < 74)');
+
+  // 1.1 同工作区列上下调用：跨层非相邻节点（dy=144 > 80）两段式避障通道走线
+  const intraNonAdjPath = calculateBezierPath(170, 214, 170, 358, 0, 1);
+  assert.ok(intraNonAdjPath.startsWith('M '), '跨层调用必须以 M 起点开始');
+  const cMatches = [...intraNonAdjPath.matchAll(/C\s+([-\d.]+)\s+([-\d.]+),\s+([-\d.]+)\s+([-\d.]+),\s+([-\d.]+)\s+([-\d.]+)/g)];
+  assert.equal(cMatches.length, 2, '跨层非相邻调用必须生成两段式贝塞尔以避开中间卡片');
+  const mStart = intraNonAdjPath.match(/^M\s+([-\d.]+)\s+([-\d.]+)/);
+  assert.ok(parseFloat(mStart[1]) > 170, '跨层起点严格位于节点右侧');
+  const seg1C1x = parseFloat(cMatches[0][1]);
+  const seg1End = parseFloat(cMatches[0][5]);
+  assert.ok(seg1C1x > 170 + 96 && seg1C1x <= 170 + 130, '第一段第一控制点严格在右走线通道内');
+  assert.ok(seg1End > 170 + 96 && seg1End <= 170 + 130, '第一段终点保持在右走线通道内（避开中间节点）');
+  const seg2C2x = parseFloat(cMatches[1][3]);
+  const seg2End = parseFloat(cMatches[1][5]);
+  assert.ok(seg2C2x < 170 - 96 && seg2C2x >= 170 - 130, '第二段第二控制点严格在左走线通道内');
+  assert.ok(seg2End < 170, '跨层终点严格自目标左侧接入');
+
+  // 2. 正向跨工作区调用 (从左向右)：右出左进平滑贝塞尔
+  const crossForwardPath = calculateBezierPath(170, 214, 466, 214, 0, 1);
+  const mMatchCross = crossForwardPath.match(/^M\s+([-\d.]+)\s+([-\d.]+)\s+C\s+([-\d.]+)\s+([-\d.]+),\s+([-\d.]+)\s+([-\d.]+),\s+([-\d.]+)\s+([-\d.]+)/);
+  assert.ok(mMatchCross);
+  assert.ok(parseFloat(mMatchCross[1]) > 170, '正向跨列发起端自右侧引出');
+  assert.ok(parseFloat(mMatchCross[7]) < 466, '正向跨列接收端自左侧接入');
+
+  // 3. 相邻列反向跨工作区调用 (从右向左，|dx|=296 >= 200)：顶层避障通道走线
+  const crossReversePath = calculateBezierPath(466, 214, 170, 214, 0, 1);
+  assert.ok(crossReversePath.startsWith('M '), '反向跨列调用以 M 开始');
+  const adjRevCMatches = [...crossReversePath.matchAll(/C\s+([-\d.]+)\s+([-\d.]+),\s+([-\d.]+)\s+([-\d.]+),\s+([-\d.]+)\s+([-\d.]+)/g)];
+  assert.equal(adjRevCMatches.length, 3, '相邻列反向跨列调用必须生成三段式顶层走线通道贝塞尔');
+  const mMatchRev = crossReversePath.match(/^M\s+([-\d.]+)\s+([-\d.]+)/);
+  assert.ok(parseFloat(mMatchRev[1]) > 466, '反向跨列发起端自右侧出线 (startX > 466)');
+  assert.equal(parseFloat(adjRevCMatches[0][6]), 130, '第一段升至顶层避障通道高度 y=130');
+  assert.equal(parseFloat(adjRevCMatches[1][6]), 130, '第二段在顶层避障通道 y=130 横跨');
+  assert.ok(parseFloat(adjRevCMatches[2][5]) < 170, '第三段自目标左侧接入 (endX < 170)');
+
+  // 3.1 跨多列反向调用 (|dx| = 592 >= 200)：通过顶层走线通道 (y <= 130) 横跨避障，绝不穿透中间卡片
+  const multiColRevPath = calculateBezierPath(762, 214, 170, 214, 0, 1);
+  assert.ok(multiColRevPath.startsWith('M '), '多列反向调用以 M 开始');
+  const revCMatches = [...multiColRevPath.matchAll(/C\s+([-\d.]+)\s+([-\d.]+),\s+([-\d.]+)\s+([-\d.]+),\s+([-\d.]+)\s+([-\d.]+)/g)];
+  assert.equal(revCMatches.length, 3, '多列反向调用必须生成三段式顶层走线通道贝塞尔');
+  const mStartRev = multiColRevPath.match(/^M\s+([-\d.]+)\s+([-\d.]+)/);
+  assert.ok(parseFloat(mStartRev[1]) > 762, '多列反向发起端严格自右侧出线 (startX > 762)');
+  assert.equal(parseFloat(revCMatches[0][6]), 130, '第一段升至顶层避障通道高度 y=130');
+  assert.equal(parseFloat(revCMatches[1][6]), 130, '第二段在顶层避障通道 y=130 横跨');
+  assert.ok(parseFloat(revCMatches[2][5]) < 170, '第三段严格自目标左侧接入 (endX < 170)');
+
+  // 4. 国际化字典中当前工作区标记完整性 (ADR-0013 [Current])
+  assert.equal(plugin.en['workspace.current'], 'Current', '英文字典必须包含 workspace.current 且值为 Current');
+  assert.equal(plugin.zh['workspace.current'], '当前', '中文字典必须包含 workspace.current 且值为 当前');
+});
+
+test('ADR-0014 严格插件作用域双色主题与工具栏切换映射', () => {
+  let themeCalledWith = null;
+  const mockTheme = {
+    setTheme: (pref) => {
+      themeCalledWith = pref;
+    }
+  };
+
+  const telemetryEmpty = {
+    timestamp: Date.now(),
+    currentWorkspace: '/ws/1',
+    workspaces: [{ id: '/ws/1', name: 'proj-1', isCurrent: true, sessionIds: ['s1'] }],
+    sessions: [{ id: 's1', title: 'Worker 1', workspace: '/ws/1', state: 'idle' }],
+    posts: [],
+    calls: []
+  };
+
+  function createMockReact(telemetryData) {
+    return {
+      useState: (initial) => {
+        if (initial && typeof initial === 'object' && 'sessions' in initial) {
+          return [telemetryData, () => {}];
+        }
+        return [initial, () => {}];
+      },
+      useRef: (initial) => ({ current: initial }),
+      useEffect: () => {},
+      createElement: (type, props, ...children) => ({ type, props: props || {}, children })
+    };
+  }
+
+  function findNodeById(node, id) {
+    if (!node || typeof node !== 'object') return null;
+    if (node.props && (node.props.id === id || node.props.key === id)) return node;
+    if (Array.isArray(node.children)) {
+      for (const child of node.children) {
+        const found = findNodeById(child, id);
+        if (found) return found;
+      }
+    }
+    return null;
+  }
+
+  const reactMock = createMockReact(telemetryEmpty);
+  const plugin = loadClientBundle((name) => name === 'react' ? reactMock : null);
+  const t = (k) => plugin.zh[k] || k;
+
+  const view = plugin.CanvasView({
+    sessionId: 's1',
+    theme: mockTheme,
+    t: t
+  });
+
+  // 1. 工具栏存在主题切换按钮
+  const themeBtn = findNodeById(view, 'dsh-canvas-theme-toggle');
+  assert.ok(themeBtn, '工具栏必须包含 #dsh-canvas-theme-toggle 按钮');
+  assert.equal(typeof themeBtn.props.onClick, 'function', '主题切换按钮必须绑定点击事件');
+
+  // 2. 点击触发宿主主题接口映射
+  themeBtn.props.onClick();
+  assert.equal(themeCalledWith, 'light', '首次点击必须向宿主 setTheme 发起 light 切换');
+
+  // 3. 容器类名具备双色自适应
+  assert.ok(view.props.className.includes('dsh-canvas-container'), '根容器必须具备 dsh-canvas-container 基础类');
+  assert.ok(view.props.className.includes('dsh-canvas-dark') || view.props.className.includes('dsh-canvas-light'), '根容器必须标记明暗主题类名');
+});
+
+test('ADR-0014 严格作用域隔离验证：CSS 严禁使用宿主 body 选择器', () => {
+  const clientPath = path.join(rootDir, 'lib', 'client.js');
+  const code = fs.readFileSync(clientPath, 'utf8');
+  assert.ok(!code.includes('body:not'), '严禁使用 body:not([data-ds-dark-theme]) 污染宿主全局选择器');
+  assert.ok(!code.includes('body .dsh-canvas'), '严禁包含 body 级别样式选择器前缀');
+});
+
+test('Spec 002 & ADR-0014: 浅色模式黑板卡片文字对比度符合 WCAG 2.1 AA 规范', () => {
+  const plugin = loadClientBundle();
+  const activePost = { id: 'p1', topic: 'test topic', status: 'active' };
+  const inactivePost = { id: 'p2', topic: 'old topic', status: 'expired' };
+
+  // 浅色模式验证
+  const lightActive = plugin.resolvePostColors(activePost, true, false);
+  const lightInactive = plugin.resolvePostColors(inactivePost, false, false);
+  assert.equal(lightActive.textColor, '#0f172a', '浅色模式活跃卡片文本必须为深色高对比度 (#0f172a)');
+  assert.equal(lightActive.fillColor, '#ffffff', '浅色模式活跃卡片背景为白色');
+  assert.equal(lightInactive.textColor, '#64748b', '浅色模式非活跃卡片文本必须具备充足对比度 (#64748b)');
+
+  // 深色模式验证
+  const darkActive = plugin.resolvePostColors(activePost, true, true);
+  assert.equal(darkActive.textColor, '#e2e8f0', '深色模式活跃卡片文本为亮色 (#e2e8f0)');
+  assert.equal(darkActive.strokeWidth, '1.8', '活跃卡片描边宽度必须为 1.8');
+  assert.equal(darkActive.strokeDash, 'none', '活跃卡片描边样式为实线');
+  assert.equal(lightInactive.strokeWidth, '1', '过期卡片描边宽度为 1');
+  assert.equal(lightInactive.strokeDash, '1 3', '过期卡片描边虚线模式');
+});
+
+test('Spec 002 & ADR-0014: 宿主主题接口缺失时主题切换严格作用域隔离且不污染外部属性', () => {
+  function createLocalMockReact(telemetryData) {
+    return {
+      useState: (initial) => {
+        if (initial && typeof initial === 'object' && 'sessions' in initial) {
+          return [telemetryData, () => {}];
+        }
+        return [initial, () => {}];
+      },
+      useRef: (initial) => ({ current: initial }),
+      useEffect: () => {},
+      createElement: (type, props, ...children) => ({ type, props: props || {}, children })
+    };
+  }
+  function findLocalNodeById(node, id) {
+    if (!node || typeof node !== 'object') return null;
+    if (node.props && (node.props.id === id || node.props.key === id)) return node;
+    if (Array.isArray(node.children)) {
+      for (const child of node.children) {
+        const found = findLocalNodeById(child, id);
+        if (found) return found;
+      }
+    }
+    return null;
+  }
+  const reactMock = createLocalMockReact({ workspaces: [], sessions: [], posts: [], calls: [] });
+  let docAttribute = null;
+  const mockDoc = {
+    body: {
+      hasAttribute: (n) => docAttribute !== null,
+      getAttribute: (n) => docAttribute,
+      setAttribute: (n, v) => { docAttribute = v; },
+      removeAttribute: (n) => { docAttribute = null; }
+    }
+  };
+
+  const clientPath = path.join(rootDir, 'lib', 'client.js');
+  const code = fs.readFileSync(clientPath, 'utf8');
+  let registration = null;
+  const sandbox = {
+    window: {
+      __ModuleLoader__: { load: (p) => { registration = p; } },
+      innerWidth: 1000,
+      innerHeight: 700
+    },
+    document: mockDoc,
+    console,
+    Date,
+    Set,
+    Map,
+    Array,
+    Object,
+    String,
+    Math,
+    JSON,
+    URLSearchParams,
+    setInterval,
+    clearInterval,
+    setTimeout,
+    clearTimeout
+  };
+  vm.createContext(sandbox);
+  vm.runInContext(code, sandbox);
+  const clientPlugin = registration.factory((name) => name === 'react' ? reactMock : null);
+
+  const view = clientPlugin.CanvasView({
+    sessionId: 's1',
+    theme: null, // 无宿主主题接口
+    t: (k) => clientPlugin.zh[k] || k
+  });
+
+  const themeBtn = findLocalNodeById(view, 'dsh-canvas-theme-toggle');
+  assert.ok(themeBtn, '主题按钮必须存在');
+
+  // 点击触发主题切换：验证严格作用域隔离，不向外部 document.body 写入属性
+  themeBtn.props.onClick();
+  assert.equal(docAttribute, null, '宿主接口缺失时绝不向外部 document.body 写入属性，保持严格作用域隔离');
 });
 
 

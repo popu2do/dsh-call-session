@@ -174,6 +174,13 @@ test('executeSessionQuery: 归档过滤与 running_only 过滤', () => {
   });
   assert.equal(resRunning.count, 1);
   assert.equal(resRunning.sessions[0].sessionId, 'sess-1');
+
+  // 3. active_only 别名已被废除：传入 active_only 不生效，依然返回所有非归档会话 (ADR-0016)
+  const resActiveIgnored = executeSessionQuery({
+    ctx,
+    args: { active_only: true, cross_workspace: true }
+  });
+  assert.equal(resActiveIgnored.count, 2, '废弃的 active_only 别名不生效');
 });
 
 test('executeSessionQuery: top_level_only 过滤子代理与空白会话', () => {

@@ -39,7 +39,7 @@
 
 - **Driver 1 (Eliminate Exploratory Tool Polling)**：通过每轮模型决策前的状态后视镜透明感知最新事实，精简静态提示词，消除冗余的 `board_list` 轮询。
 - **Driver 2 (Protect LLM KV Cache via State Idempotency)**：通过纯状态幂等表征，确保无黑板实质变更时 0 冗余快照生成、100% 命中 Prompt Caching。
-- **Driver 3 (Autonomous Peer Session Orchestration)**：提供原生 `session_create` 工具，支持解耦创建独立同级根会话并完成原子化点火唤醒。
+- **Driver 3 (Autonomous Peer Session Orchestration)**：提供原生 `session_create` 工具，支持解耦创建独立同级根会话并完成异步任务派发唤醒。
 - **Driver 4 (Robust Blast Radius & Security Safeguards)**：建立工作区配额、限频、代际熔断及防伪造 Title 校验，确保系统级稳定性。
 - **Driver 5 (Dual-Track Lifecycle Cascade Cleanup)**：事件驱动结合惰性自愈探针，实现会话终结时的黑板状态级联治理。
 
@@ -82,7 +82,7 @@
 5. **Invariant 5 (Dual-Track Cascaded Cleanup)**：
    兼备事件监听（`workspaceRegistry.archiveSession`、`dispose`）与状态后视镜查询时的惰性自愈探针（`ctx.agents.get`），实现分级清理（dismiss 软归档 / purge 物理抹除 / deliverable-retention 成果免死）。
 6. **Invariant 6 (Atomic Fire-and-Forget Ignition)**：
-   `session_create` 完成平级会话创建与首条指令挂载后，通过 `followup()` 异步点火，立即返回会话句柄元数据，严禁同步阻塞等待对端执行。
+   `session_create` 完成平级会话创建与首条指令挂载后，通过 `followup()` 异步启动执行，立即返回会话句柄元数据，严禁同步阻塞等待对端执行。
 
 ---
 
@@ -155,7 +155,7 @@ Active Posts (Memory)   Anti-Snapshot-Storm                      Quota & Rate Ch
         "type": "string",
         "minLength": 1,
         "maxLength": 4000,
-        "description": "可选点火初始任务指令。若提供则会话创建后立即自动投递并启动第一轮；若未提供则保持 idle 待命状态。"
+        "description": "可选初始任务指令。若提供则会话创建后立即自动投递并启动第一轮；若未提供则保持 idle 待命状态。"
       },
       "context_post_ids": {
         "type": "array",
@@ -166,12 +166,22 @@ Active Posts (Memory)   Anti-Snapshot-Storm                      Quota & Rate Ch
       "model": {
         "type": "string",
         "description": "可选覆写目标会话所使用的模型 ID。默认继承当前会话模型。"
+      },
+      "reasoning_effort": {
+        "type": "string",
+        "description": "可选覆写目标会话所使用的推理强度 (如 low, medium, high)。彻底废止 reasoningEffort 别名。"
+      },
+      "preset": {
+        "type": "string",
+        "description": "可选指定挂载的智能体预设 ID。默认继承当前会话或全局默认预设。彻底废止 agentPreset 别名。"
       }
     },
     "required": []
   }
   ```
-- **返回值结构（Return Schema）**：
+  > **安全与契约规范 (ADR-0016)**：`session_create` 严禁暴露外部 `sessionId` 入参，会话唯一标识符一律由引擎内部随机生成，彻底杜绝外部劫持与标识碰撞。
+
+- **返回值结构（Return Schema, Machine Layer camelCase）**：
   ```json
   {
     "success": true,
@@ -180,7 +190,8 @@ Active Posts (Memory)   Anti-Snapshot-Storm                      Quota & Rate Ch
     "workspace": "d:/workspace/dsh-call-session",
     "status": "running",
     "generation": 1,
-    "bootstrapPostId": "post-1788770000-boot"
+    "bootstrapPostId": "post-1788770000-boot",
+    "contextPostIds": ["post-101"]
   }
   ```
 

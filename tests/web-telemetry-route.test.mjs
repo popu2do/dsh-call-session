@@ -312,6 +312,62 @@ test('Web Telemetry Route: GET 返回只读全景快照与查询参数透传', a
   }
 });
 
+test('Web Telemetry Route: 无 crossWorkspace 参数时默认返回全量多工作区与全部会话 (ADR-0013)', async () => {
+  const telemetry = new CallTelemetryRingBuffer(20);
+  telemetry.record({
+    callerSessionId: 'session-main-1',
+    callerTitle: 'Main Dev',
+    callerWorkspace: 'c:/workspace/proj-main',
+    targetSessionId: 'session-peer-2',
+    targetTitle: 'Peer Dev',
+    targetWorkspace: 'c:/workspace/proj-peer',
+    callType: 'task_dispatch',
+    deliveryMode: 'followup',
+    durationMs: 5,
+    contextPostIds: [],
+    messageSnippet: 'Cross-workspace dispatch',
+    messagePayload: 'Full payload',
+    status: 'active'
+  });
+
+  const agents = [
+    {
+      id: 'session-main-1',
+      status: 'running',
+      title: 'Main Dev',
+      session: { id: 'session-main-1', title: 'Main Dev', cwd: 'c:/workspace/proj-main' }
+    },
+    {
+      id: 'session-peer-2',
+      status: 'idle',
+      title: 'Peer Dev',
+      session: { id: 'session-peer-2', title: 'Peer Dev', cwd: 'c:/workspace/proj-peer' }
+    }
+  ];
+
+  const ctx = createMockCtx({ agentsList: agents });
+  ctx.callTelemetry = telemetry;
+  const baseGet = ctx.get;
+  ctx.get = (name) => (name === 'callTelemetry' ? telemetry : baseGet(name));
+
+  const handler = createTelemetryHandler(ctx, { logger: silentLogger });
+  const res = createMockResponse();
+
+  // 请求时不带任何 crossWorkspace 参数
+  await handler({
+    method: 'GET',
+    url: TELEMETRY_ROUTE_PATH + '?sessionId=session-main-1'
+  }, res);
+
+  assert.equal(res.statusCode, 200);
+  const snapshot = JSON.parse(res.body);
+
+  // 必须返回全部 2 个工作区和全部 2 个会话
+  assert.equal(snapshot.workspaces.length, 2, '未传 crossWorkspace 参数时必须返回全量 2 个工作区');
+  assert.equal(snapshot.sessions.length, 2, '未传 crossWorkspace 参数时必须返回全量 2 个会话');
+  assert.equal(snapshot.calls.length, 1, '跨工作区调用必须包含在内');
+});
+
 test('Web Telemetry Route: 快照聚合抛错时降级 500 且不泄漏内部堆栈', async () => {
   const brokenCtx = createMockCtx({ agentsList: [] });
   brokenCtx.agents = {

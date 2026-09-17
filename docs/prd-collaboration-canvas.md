@@ -3,7 +3,7 @@
 - 文档版本：2.0.0
 - 状态：正式设计规格（Baseline）
 - 依据：系统架构设计原图、缺陷清单（17项）及 ADR-0001 / ADR-0003 / ADR-0005 / ADR-0009 / ADR-0010 / ADR-0012
-- 面向角色：前端看板工程师、宿主遥测工程师、QA 验证工程师、界面评审员、语言风格审查员
+- 面向角色：前端看板工程师、看板架构工程师、QA 验证工程师、界面评审员、语言风格审查员
 
 ---
 
@@ -62,20 +62,20 @@
 
 ---
 
-## 3. 视觉图元
+## 3. 界面元素规格
 
-所有图元默认态均为**空心线框**（描边、无填充或极低饱和微透明填充）。
+所有界面元素默认态均为**空心线框**（描边、无填充或极低饱和微透明填充）。
 
 ### 3.1 规格参数表
 
-| 图元分类 | 几何特征与尺寸 (px) | 布局与间距规则 (px) | 默认态样式（低饱和虚线） | 高亮态样式（1-Hop 聚焦） | 文本排版与色值 |
+| 元素分类 | 几何特征与尺寸 (px) | 布局与间距规则 (px) | 默认态样式（低饱和虚线） | 高亮态样式（1-Hop 聚焦） | 文本排版与色值 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | **1. 顶部黑板栏** | 宽度：跟随工作区总宽（`min-width: 1080px`）；高度：有条目时 `96px`，无条目时自适应收缩为 `38px` 轻量状态条；圆角：`rx=8, ry=8` | 起始坐标：`x=40, y=24`；与下方工作区列纵向间距：`30px` | `fill: rgba(15, 23, 42, 0.35)`<br>`stroke: #475569`<br>`stroke-width: 1.2px`<br>`stroke-dasharray: 6 4` | `stroke: #38bdf8`<br>`stroke-width: 2.0px`<br>`stroke-dasharray: none`<br>`filter: drop-shadow(0 0 6px rgba(56, 189, 248, 0.25))` | 黑板栏标题：`11px`，`#94a3b8`，字重 600；计数徽章：`11px`，`#38bdf8`，存在历史条目时显式标注 `(活跃 / 总计)`；空态提示：居中显示「暂无黑板条目」 |
 | **2. 黑板条目方块** | 宽度：`180px`；高度：`48px`；圆角：`rx=6, ry=6` | 位于黑板栏内，横向单行排列；起始：`x=56, y=52`；水平间距：`16px` | **Active**: `stroke: #64748b, 1.2px, 4 3`<br>**Archived**: `stroke: #334155, 1px, 2 3`<br>**Expired**: `stroke: #1e293b, 1px, 1 3`<br>`fill: rgba(30, 41, 59, 0.45)`（非活跃为低饱和度 `rgba(15, 23, 42, 0.35)`） | `stroke: #38bdf8`<br>`stroke-width: 1.8px`<br>`stroke-dasharray: none`<br>`fill: rgba(15, 23, 42, 0.85)` | Topic: `11px`, `#e2e8f0` (非活跃 `#94a3b8`); 状态标签: `10px`, Active `#38bdf8` / Arch `#64748b`; 非活跃卡片顶部带有灰底状态标签 `[已撤销]` / `[已过期]` |
 | **3. 工作区分组容器** | 宽度：`260px`；最小高度：`480px`；圆角：`rx=10, ry=10` | 纵向起始：`y=150`；工作区列间横向水平净距：`36px`；动态高度公式见 3.2 节 | **当前工作区**: `stroke: #64748b, 1.4px, 6 3, opacity: 0.75`<br>**外部工作区**: `stroke: #334155, 1.2px, 6 4, opacity: 0.45`<br>`fill: rgba(15, 23, 42, 0.2)` | `stroke: #60a5fa`<br>`stroke-width: 2.0px`<br>`stroke-dasharray: none`<br>`stroke-opacity: 0.95` | 容器头部：高度 `38px`；文字：`12px`，字重 600，`#94a3b8`；当前工作区加注 `[Current]` |
 | **4. 会话椭圆节点** | **几何椭圆**：半长轴 `rx=96px`，半短轴 `ry=26px`（外接 `192px × 52px`） | 工作区列内单列纵向居中：`cx = wsX + 130`；首节点 `cy = 214`；垂直中心距：`72px`（外边缘净距 `20px`） | **Running**: `stroke: #22c55e, 1.5px, 5 3`<br>**Idle**: `stroke: #64748b, 1.2px, 4 4`<br>`fill: #090d16`（遮挡底线） | `stroke-width: 2.2px`<br>`stroke-dasharray: none`<br>**Running**: `stroke: #4ade80`<br>**Idle**: `stroke: #93c5fd`<br>扩散光晕：`drop-shadow(0 0 8px ...)`<br>**当前会话 (Current Session)**: `stroke: #38bdf8, 2.4px, none`；发光光晕：`drop-shadow(0 0 8px #38bdf8)`；标题旁加注 `[当前]` 状态标签 | 短码：`11px` 等宽，`#38bdf8`；标题：`12px`，`#f1f5f9`，最大渲染宽 `105px`（当前会话自适应 64px 并加注状态标签） |
-| **5. 跨会话调用连线** | 有向平滑三次贝塞尔曲线；箭头 Marker：底宽 `6px`，高 `8px` | 起终点自几何中心计算，精确裁剪至椭圆轮廓（见 4.2 节） | `stroke-width: 1.2px`<br>`stroke-dasharray: 4 4`<br>**dispatch**: `#818cf8, op: 0.45`<br>**report**: `#34d399, op: 0.45`<br>**notice**: `#94a3b8, op: 0.35` | `stroke-width: 2.2px`<br>`stroke-dasharray: none`<br>`stroke-opacity: 1.0`<br>**dispatch**: `#a5b4fc`<br>**report**: `#6ee7b7`<br>**notice**: `#cbd5e1` | 悬停卡片展示详情；活跃调用流动粒子周期：`1.5s` |
-| **6. 黑板发布归属边** | 平滑二次贝塞尔曲线（Session 椭圆顶部 -> Post 方块底部） | 数据来源：`post.authorSessionId == session.id` | `stroke: #64748b`<br>`stroke-width: 1.2px`<br>`stroke-dasharray: 4 3`<br>`stroke-opacity: 0.50` | `stroke: #38bdf8`<br>`stroke-width: 1.8px`<br>`stroke-dasharray: 4 2`<br>`stroke-opacity: 0.90` | 悬停在 Session 或 Post 时双向激活；默认态达到 WCAG 2.1 对比度标准（>= 3:1） |
+| **5. 跨会话调用连线** | 有向平滑三次贝塞尔曲线（ADR-0014 右出左进与通道避障）；箭头 Marker：底宽 `6px`，高 `8px` | 起终点遵循右出左进几何模型并精确裁剪至椭圆轮廓（见 4.2 节） | `stroke-width: 1.2px`<br>`stroke-dasharray: 4 4`<br>**dispatch**: `#818cf8, op: 0.45`<br>**report**: `#34d399, op: 0.45`<br>**notice**: `#94a3b8, op: 0.35` | `stroke-width: 2.2px`<br>`stroke-dasharray: none`<br>`stroke-opacity: 1.0`<br>**dispatch**: `#a5b4fc`<br>**report**: `#6ee7b7`<br>**notice**: `#cbd5e1` | 悬停卡片展示详情；活跃调用流动粒子周期：`1.5s` |
+| **6. 黑板发布归属边** | 平滑三次贝塞尔外侧通道走线（ADR-0014 Session 椭圆右侧 -> 右走线通道 -> Post 方块底部） | 数据来源：`post.authorSessionId == session.id` | `stroke: #64748b`<br>`stroke-width: 1.2px`<br>`stroke-dasharray: 4 3`<br>`stroke-opacity: 0.50` | `stroke: #38bdf8`<br>`stroke-width: 1.8px`<br>`stroke-dasharray: 4 2`<br>`stroke-opacity: 0.90` | 悬停在 Session 或 Post 时双向激活；严格走外侧通道避开中间会话 |
 | **7. 调用引用黑板边** | 细虚线折线/曲线（Call 连线中点 -> Post 方块底部） | 数据来源：`call.contextPostIds.includes(post.id)` | `stroke: #fbbf24`<br>`stroke-width: 1.0px`<br>`stroke-dasharray: 3 3`<br>`stroke-opacity: 0.45` | `stroke: #fbbf24`<br>`stroke-width: 1.6px`<br>`stroke-dasharray: 3 3`<br>`stroke-opacity: 0.85` | 悬停在 Call 或对应 Post 时高亮激活；默认态采用琥珀色达到 WCAG 2.1 对比度标准（>= 3:1） |
 
 ### 3.2 尺寸计算
@@ -89,7 +89,7 @@
 ## 4. 关系连线
 
 ### 4.1 连线生成
-前端从遥测快照消费三类实体关系并建立拓扑图模型：
+前端从看板快照消费三类实体关系并建立拓扑图模型：
 
 1. **调用连线（Session-to-Session Call Edge）**：
    - 数据源：`snapshot.calls` 数组中每条记录。
@@ -168,7 +168,7 @@ $$t = \frac{1}{\sqrt{\left(\frac{\Delta x}{a}\right)^2 + \left(\frac{\Delta y}{b
     return stripped.slice(0, 8).toLowerCase() || 'unknown';
   }
   ```
-- **输出契约**：遥测快照中每个 `CanvasSessionEntity` 增加只读字段 `shortId: string`（8位小写字母/数字）。
+- **输出契约**：看板快照中每个 `CanvasSessionEntity` 增加只读字段 `shortId: string`（8位小写字母/数字）。
 
 ### 6.2 标题回退
 - **标题策略**：遵循简洁与最小假定原则，直接提取有效展示标题。
@@ -221,7 +221,7 @@ $$t = \frac{1}{\sqrt{\left(\frac{\Delta x}{a}\right)^2 + \left(\frac{\Delta y}{b
     2. 与 $S$ 直接相连的所有 Call 连线转为高亮实线（不透明度 1.0）；
     3. 上述 Call 连线另一端的对端 Session 节点转为高亮实线；
     4. 由 $S$ 发布的 Post 方块以及连接两者的归属边转为高亮实线；
-    5. 画布上所有其余非关联图元在 $180\text{ms}$ 内过渡至 `opacity: 0.20`。
+    5. 画布上所有其余非关联元素在 $180\text{ms}$ 内过渡至 `opacity: 0.20`。
 - **浮层 Tooltip 规范**：
   - 弹出位置：紧贴实体上方或下方 `8px`，带有 `z-index: 100`。
   - 内容结构：
@@ -300,7 +300,7 @@ $$P_{y,\text{new}} = M_y - (M_y - P_y) \times \frac{Z_{\text{new}}}{Z}$$
   ```
 
 ### 9.3 渲染防抖
-- **消除全量重绘**：遥测轮询（`fetchTelemetry`）获取数据后，前端比对 `snapshot.timestamp` 与实体校验和；若无拓扑变动，禁止触发整树 DOM 重算。
+- **消除全量重绘**：看板数据轮询（`fetchTelemetry`）获取数据后，前端比对 `snapshot.timestamp` 与实体校验和；若无拓扑变动，禁止触发整树 DOM 重算。
 - **RAF 动画帧防泄漏**：画布平移（`onMouseMove`）采用 `requestAnimationFrame` 驱动时，必须严格保留 `animFrameId`；在注册下一帧前必须调用 `cancelAnimationFrame(animFrameId)`，严禁未完成帧在事件循环中积压。
 
 ---
@@ -346,7 +346,7 @@ $$P_{y,\text{new}} = M_y - (M_y - P_y) \times \frac{Z_{\text{new}}}{Z}$$
 | **15** | 交互行为 | 点击黑板 hub 把 posts 数组 JSON 裸串倒进抽屉正文 | 抽屉针对实体类型定制结构化卡片排版，禁止裸数据倾倒（第 7.3 节） | frontend / t3 |
 | **16** | 性能调度 | 3 秒全量重绘整棵 SVG；拖拽平移 RAF 帧积压堆叠 | 引入数据校验和跳过无效重绘；平移管理 `animFrameId` 及时 `cancel`（第 9.3 节） | frontend / t3 |
 | **17** | 信息架构 | 缺失发布归属边与上下文引用边，仅剩孤立点线；默认透明度 0.22/0.12 在深色背景下隐形 | 完整生成并渲染 session→post 归属边与 call→post 引用边，默认透明度提升至 0.50/0.45 达到 WCAG 2.1 对比度标准（第 4.1 节） | frontend / t10 |
-| **18** | 架构隔离 | 默认跨工作区拉取破坏 ADR-0003 隔离边界，缺少当前会话视觉锚点 | 默认 `crossWorkspace: false` 仅展示当前工程工作区；工具栏提供「跨工作区拓扑」与「定位当前会话」开关；消费 `props.sessionId` 赋予青色发光描边、实线加粗与 `[当前]` 状态标签（第 3.1、8.2 节） | frontend / t9 |
+| **18** | 架构隔离 | 看板面向人类观察者，默认全局透视并固定当前工作区置首（ADR-0013） | 彻底移除工具栏「跨工作区拓扑」冗余按钮；默认展示全部工作区分组列；当前工作区自动重排固定于最左侧首列并标注 `[Current]`；当前会话赋予青色发光描边、实线加粗与 `[当前]` 状态标签（第 3.1、8.2 节） | frontend / t9 |
 
 ---
 
@@ -354,7 +354,7 @@ $$P_{y,\text{new}} = M_y - (M_y - P_y) \times \frac{Z_{\text{new}}}{Z}$$
 
 下游验证工程师（qa）与界面评审员（reviewer）需依据以下可量化指标进行逐项断言验收：
 
-1. **图元尺寸量化**：
+1. **元素尺寸量化**：
    - 会话椭圆半长轴严格为 `96px`，半短轴严格为 `26px`；
    - 工作区列宽严格为 `260px`，列间横向间距严格为 `36px`；
    - 工作区列内会话节点必须为单列纵向居中排布，水平偏离度为 0。
@@ -364,11 +364,11 @@ $$P_{y,\text{new}} = M_y - (M_y - P_y) \times \frac{Z_{\text{new}}}{Z}$$
    - 验证连线端点与椭圆边缘精确相切，在放大 200% 下无嵌入椭圆现象。
 3. **交互分级与时序**：
    - 悬停触发时间必须严格受限于 `150ms` 延迟防抖；
-   - 1-Hop 高亮时，非关联图元必须在 `180ms` 内过渡到 `0.20` 不透明度；
+   - 1-Hop 高亮时，非关联元素必须在 `180ms` 内过渡到 `0.20` 不透明度；
    - 单击节点不得打开抽屉，双击节点必须在 `240ms` 内滑出 `420px` 抽屉。
 4. **视口变换验证**：
    - 滚轮缩放时光标指向的画布空间点坐标在缩放前后保持物理重合；
-   - 点击自适应居中后，所有图元完整容纳在视口内且外围边距不小于 `48px`。
+   - 点击自适应居中后，所有元素完整容纳在视口内且外围边距不小于 `48px`。
 5. **合规性验证**：
    - 全局静态代码扫描与 DOM 检查中 Emoji 正则匹配计数为 0；
    - 全界面无任何 `<input>`、`<textarea>` 或可编辑 contenteditable 元素；

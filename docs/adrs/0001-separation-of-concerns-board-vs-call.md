@@ -94,9 +94,9 @@ This architectural coupling produced severe operational failures in production:
 ┌─────────────────────────────────────────┐                 ┌─────────────────────────────────────────┐
 │              Board Domain               │                 │               Call Domain               │
 │                                         │                 │                                         │
-│   • board_post(topic, content, ...)     │                 │   • session_call(target, message, ...)  │
-│   • board_list(topic, tags, ...)        │                 │   • session_query(status, filter)       │
-│   • board_clear(post_id, topic)         │                 │                                         │
+│   • board_post(topic, content, ...)     │                 │   • session_call(target_session_id, ...)│
+│   • board_list(topic, tag, ...)         │                 │   • session_query(running_only, ...)    │
+│   • board_clear(id, topic, mode)        │                 │                                         │
 │                                         │                 │   Guards:                               │
 │   Guarantees:                           │                 │   - Minimum prefix length >= 8          │
 │   - In-memory atomic state              │                 │   - No wildcards (*, all, broadcast)    │
@@ -114,12 +114,18 @@ This architectural coupling produced severe operational failures in production:
 ### 4.3 Interface & Protocol Contracts
 
 #### Board Domain Tools (`index.mjs`)
-- `board_post({ topic: string, content: string, tags?: string[], ttl?: number, metadata?: object }) => { success: boolean, postId: string, topic: string, ... }`
-- `board_list({ topic?: string, tags?: string[], authorSessionId?: string, cross_workspace?: boolean, ... }) => { count: number, posts: object[] }`
-- `board_clear({ id?: string, topic?: string, callerWorkspace?: string }) => { success: boolean, clearedCount: number, message: string }`
+- `board_post({ topic: string, content: string, tags?: string[], ttl?: number, metadata?: object }) => { success: boolean, postId: string, topic: string, authorSessionId: string, createdAt: string, expiresAt: string, scope: string, message: string, error?: string }`
+- `board_list({ id?: string, topic?: string, topic_prefix?: string, tag?: string, active_only?: boolean, cross_workspace?: boolean, titles_only?: boolean, limit?: number }) => { success: boolean, count: number, scope: string, titlesOnly: boolean, posts: object[] }`
+- `board_clear({ id?: string, topic?: string, mode?: "dismiss" | "purge" }) => { success: boolean, clearedCount: number, action: string, message: string }`
 
 #### Call Domain Tool (`index.mjs` & `lib/session-call.mjs`)
-- `session_call({ target_session_id: string, message: string, call_type?: "task_dispatch" | "task_report" | "notice", context_post_ids?: string[] }) => { success: boolean, targetSessionId: string, deliveredChannels: string[], noticeText: string }`
+- `session_call({ target_session_id: string, message: string, call_type?: "task_dispatch" | "task_report" | "notice", context_post_ids?: string[] }) => { success: boolean, targetSessionId: string, targetTitle: string, targetStatus: string, deliveryMode: string, callType: string, callerSessionId: string, contextPostIds?: string[], message: string, error?: string }`
+
+### 4.4 Dual-Domain Protocol Boundary & Naming Invariant (ADR-0016 Amendment)
+
+1. **Model Parameter Domain (Inputs)**: All tool input parameters exposed to LLMs must strictly adhere to `snake_case` (e.g. `target_session_id`, `call_type`, `context_post_ids`, `active_only`, `cross_workspace`, `titles_only`).
+2. **Machine/Web Consumption Domain (Outputs)**: All tool execution return payloads consumable by Web GUI (Canvas) and internal machinery must strictly adhere to `camelCase` (e.g. `targetSessionId`, `callerSessionId`, `contextPostIds`, `totalCount`, `activeCount`).
+3. **Zero Alias Tolerance**: Internal implementations must not maintain parallel alias fallbacks.
 
 ---
 
