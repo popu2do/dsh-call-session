@@ -18,7 +18,7 @@
 
 ## Overview
 
-dsh-call-session is a plugin for DeepSeek Harness (DSH) providing in-process cross-session messaging, peer session orchestration, and state sharing.
+dsh-call-session is a plugin for DeepSeek Harness (DSH) providing in-process cross-session messaging, peer session orchestration, and state sharing. Compatible with DSH `>=0.1.1-rc.1` (verified on `0.1.2-rc.1` and `0.1.5-rc.1` / `0.1.5-rc.2`) and Cordis `^4.0.2`.
 
 When multiple agent sessions run concurrently, the plugin provides three collaboration capabilities:
 - Unicast calls: Send 1:1 directives or status reports between independent sessions. Automatically adapts to target state via running steer or idle followup.
