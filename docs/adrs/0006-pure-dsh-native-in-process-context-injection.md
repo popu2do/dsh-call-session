@@ -42,12 +42,12 @@
 ### Option 1: Retain HTTP Prompt and Only Polish Envelope Strings (Rejected)
 - **Description**: 继续保留 `fetch(/api/session.prompt)`，仅简化 `buildCrossSessionNoticeText` 中的定界符。
 - **Pros**: 改动最小，无需深入探究 DSH 底层内部类。
-- **Cons**: 无法解决端口硬编码、本地网络开销、无法在沙箱受限环境下运行等根本问题，依然严重违背 Cordis 插件设计哲学。
+- **Cons**: 无法解决端口硬编码、本地网络开销与沙箱受限环境下的运行限制，且不符合 Cordis 插件架构规范。
 
 ### Option 2: Pure Memory Unicast but Maintain Text Envelope (Rejected)
 - **Description**: 将通信切为 `ctx.agents.get(...)`，但继续保留 RFC-822 假信封文本。
 - **Pros**: 实现了内存直连。
-- **Cons**: 依然未能根治上下文污染与 Token 浪费，前端依然将其当做普通文本处理，破坏了专业的多智能体协同体验。
+- **Cons**: 未能根治上下文污染与 Token 浪费，且无法利用原生折叠通知行展示。
 
 ### Option 3 (Chosen): Pure Native In-Process Direct Lookup + Semantic MessageSource + Dual-Channel Steer/Followup
 - **Description**: 废除 HTTP 与定界符包装，通过 `ctx.agents.get(...)` 获取目标实例；使用 `source: { kind: 'plugin', plugin: 'dsh-call-session', form: 'notice', summary: '...' }` 封装 Payload；目标 `idle` 调用 `followup`，目标 `running` 调用 `steer`。
@@ -163,13 +163,13 @@
 - **报头技术格式检查**：断言目标接收到的首行严格匹配 `^\[From: .+? \(.+?\) \| CallType: (task_dispatch|task_report|notice)\]` 正则；
 - **上下文引用语法检查**：若携带 `context_post_ids`，断言换行追加 `> Context Ref: #...` 引用行；
 - **原始正文无损检查**：断言报头双换行后紧接的内容与入参 `message` 逐字完全相等；
-- **优雅降级容错检查**：发件人上下文缺失或未定义时，断言报头安全回退至 `unknown-caller` 与默认标题，不抛出异常；
+- **容错回退检查**：发件人上下文缺失或未定义时，断言报头安全回退至 `unknown-caller` 与默认标题，不抛出异常；
 - **消息源类型检查**：断言 `userMessage.source` 具有正确的 `kind: 'plugin'` 与 `form: 'notice'`；
 - **双态分支测试**：分别模拟目标处于 `idle` 与 `running`，断言分别触发 `followup` 与 `steer`。
 
 ### 6.2 Review Checklist
 - [ ] `lib/session-call.mjs` 抽象 `buildTransportPayload` 纯函数，包含报头注入与正文组装；
-- [ ] `lib/session-call.mjs` 针对未解析或空白 `callerSessionId` / `callerTitle` 实施优雅降级；
+- [ ] `lib/session-call.mjs` 针对未解析或空白 `callerSessionId` / `callerTitle` 实施容错回退；
 - [ ] `index.mjs` 的 `usageSectionText` 与 `session_call` Schema 完整补充三类意图与结束规则；
 - [ ] 无任何业务指令或催促文本注入；
 - [ ] 无底层轮询、无底层自动 ACK 机制；

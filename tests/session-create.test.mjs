@@ -205,7 +205,7 @@ test('executeSessionCreate: 参数基本校验（空对象/非法数据类型/�
   );
 });
 
-test('executeSessionCreate: 标题推导与特权沙箱过滤', async () => {
+test('executeSessionCreate: 标题推导与特权前缀过滤', async () => {
   resetRateLimits();
   const caller = createMockAgent('caller-root');
   const ctx = createMockCtx({ agentsList: [caller] });
@@ -468,7 +468,7 @@ test('executeSessionCreate: 初始消息分发与 Context Post 关联', async ()
   assert.equal(msg.source.plugin, 'dsh-call-session');
   assert.equal(msg.source.form, 'session_create');
 
-  // 验证黑板就绪广播
+  // 验证黑板会话就绪公告
   assert.equal(boardStore.posts.length, 1);
   assert.equal(boardStore.posts[0].topic, 'session:bootstrap');
   assert.ok(boardStore.posts[0].tags.includes('bootstrap'));
@@ -1121,7 +1121,7 @@ test('executeSessionCreate 端到端: callerAgent.options 继承到新会话且 
   assert.equal(targetAgent.options.reasoningEffort, 'high');
 });
 
-test('executeSessionCreate 端到端: ctx.agentDefaultModel 优雅回退与 args.model 覆写', async () => {
+test('executeSessionCreate 端到端: ctx.agentDefaultModel 回退与 args.model 覆写', async () => {
   resetRateLimits();
   const callerNoOptions = createMockAgent('caller-no-options');
   const agentDefaultModel = {
@@ -1248,7 +1248,7 @@ test('executeSessionCreate 端到端: args.preset 与 args.reasoning_effort 规�
   });
 
   assert.equal(res.success, true);
-  assert.notEqual(res.sessionId, 'illegal-injected-id', '入参 sessionId 必须被彻底忽略并内部唯一生成');
+  assert.notEqual(res.sessionId, 'illegal-injected-id', '入参 sessionId 必须被忽略并内部唯一生成');
   assert.ok(res.sessionId.startsWith('session-'));
   assert.equal(mountedPreset, 'standard-preset-v1', '入参 preset 必须正确挂载');
   assert.deepEqual(res.contextPostIds, ['post-test-1', 'post-test-2'], '出参 contextPostIds 必须以驼峰字段正常返回');

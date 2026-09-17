@@ -10,7 +10,7 @@
 
 ## 1. Context and Problem Statement
 
-### 1.1 Background & Pain Points
+### 1.1 Background & Issues
 
 在 `session_create` 创建同级会话（Peer Session）的机制中，存在两项与宿主设计及调用预期不一致的问题：
 
@@ -18,7 +18,7 @@
    - 当调用方通过 `session_create` 创建同级会话时，无论入参是否指定 `title` 或提供 `initial_message`，在 Web 界面与会话列表侧边栏中，新建的会话依然显示为工作区目录名称（例如 `dsh-call-session`）。
    - 根本原因分析：DSH 宿主前端会话列表（`dsh-api-session-controller`）通过 `displayTitleOf(title, cwd, id)` 渲染标题。若会话日志中没有记录标题，`title` 为 `undefined`，系统自动回退显示为工作目录名称（`workspaceTitleOf(cwd)`）。
    - DSH 宿主的标题管理（`@deepseek-ai/dsh-session-title`）基于纯增量事件驱动模型，标题状态由会话事件日志（Event Log）中的 `session/title` 事件投影决定。
-   - `session_create` 在创建目标会话时，仅在内存中给 `targetAgent.title` 及 `targetAgent.session.title` 赋值，**从未向目标会话的日志追加 `session/title` 事件**；且首条初始任务消息标记为插件源（`source.kind: 'plugin'`），被宿主内置的自动标题服务过滤（该服务仅响应 `source.kind: 'user'` 的人类输入）。因此新建会话永久缺少标题事件，导致前端永久显示工作区目录名。
+   - `session_create` 在创建目标会话时，仅在内存中给 `targetAgent.title` 及 `targetAgent.session.title` 赋值，**未向目标会话的日志追加 `session/title` 事件**；且首条初始任务消息标记为插件源（`source.kind: 'plugin'`），被宿主内置的自动标题服务过滤（该服务仅响应 `source.kind: 'user'` 的人类输入）。因此新建会话缺少标题事件，导致前端持续显示工作区目录名。
 
 2. **模型参数与预设参数声明缺失**：
    - ADR-0015 已定义模型参数与预设能力的继承规范（优先入参覆写 -> 其次继承创建者 -> 最后全局回退），底层逻辑也已在 `resolvePeerAgentOptions` 中实现。
@@ -34,7 +34,7 @@
 
 ## 2. Decision Drivers
 
-- **Driver 1 (Immediate Title Visibility)**：确保通过 `session_create` 创建的新会话在 Web 界面上立即呈现确定的规范化标题，彻底消除默认工作区目录名回退。
+- **Driver 1 (Immediate Title Visibility)**：确保通过 `session_create` 创建的新会话在 Web 界面上立即呈现确定的规范化标题，避免回退为默认工作区目录名。
 - **Driver 2 (Log-Backed Durability)**：标题记录在会话事件日志中，在会话回放、持久化恢复和分页加载中均能准确还原。
 - **Driver 3 (Explicit Capability Declaration)**：在工具定义中完整暴露 `model`、`reasoning_effort` 与 `preset`，并明确说明继承规则，消除调用歧义。
 
@@ -58,7 +58,7 @@
   2. 在 `index.mjs` 中补全 `reasoning_effort` 与 `preset` 的 Schema 定义与描述，同步更新类型定义。
 - **采纳优势**：
   - 符合 DSH 日志事件设计规范；
-  - 标题即时生效且永久持久化；
+  - 标题即时生效并持久化到事件日志；
   - 作用域严格收敛在插件内部。
 
 ---

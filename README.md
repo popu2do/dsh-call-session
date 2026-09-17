@@ -114,7 +114,7 @@ Outputs:
 - `error`: string, optional. Machine error code on failure.
 
 Safety guards:
-- Workspace quota: Maximum 10 active root sessions per workspace, rejected with QuotaExceeded.
+- Concurrent running quota: Maximum 5 concurrent running sessions per workspace, rejected with QuotaExceeded. Idle sessions do not count against this quota.
 - Rate limit: Maximum 5 creations per minute per session, rejected with RateLimitExceeded.
 - Generation limit: Peer derivation depth limit 2, rejected with GenerationLimitExceeded.
 
@@ -122,14 +122,14 @@ Safety guards:
 
 Dispatch a unicast call to target session. Steers target when running, or wakes a new turn via followup when idle.
 
-The transport layer automatically injects an objective metadata header (`[From: <callerSessionId> (<callerTitle>) | CallType: <callType>]`) while retaining message text 100% verbatim without formatting manipulation or nanny instruction pollution.
+The transport layer injects an objective metadata header (`[From: <callerSessionId> (<callerTitle>) | CallType: <callType>]`) while retaining message text verbatim without formatting manipulation or prescriptive instructions.
 
 Parameters:
 - `target_session_id`: string, required. Target session ID or unique prefix of at least 8 chars. Wildcards like `*` or `all` are forbidden.
 - `message`: string, required. Directive or report text up to 4000 characters per call.
 - `call_type`: string, optional. Semantic intent category. Defaults to `task_dispatch`:
   - `task_dispatch`: Task suggestion or dispatch; recipient autonomously decides whether to reply with `task_report`.
-  - `task_report`: Work outcome delivery; marks collaboration closure. Caller archives without conversational chatter.
+  - `task_report`: Work outcome delivery; marks collaboration closure. Caller archives without additional reply.
   - `notice`: One-way status notification; purely informational without reply.
 - `context_post_ids`: string[], optional. Referenced blackboard post IDs. Formatted into `> Context Ref: #post-xxx`.
 
@@ -215,7 +215,7 @@ Example:
 
 The DSH Web session view exposes a `Canvas` tab that observes cross-session collaboration in current workspace.
 
-- Content: workspace swimlanes, session nodes in `running` and `idle` states, board posts with remaining TTL, and cross-session call edges coloured by intent `task_dispatch`, `task_report`, `notice` that decay over time.
+- Content: workspace group columns, session nodes in `running` and `idle` states, board posts with remaining TTL, and cross-session call edges coloured by intent `task_dispatch`, `task_report`, `notice` that decay over time.
 - Interaction: hovering highlights the 1-hop connected subgraph; double-click opens a 420px read-only inspector drawer with field copy and ESC dismissal.
 - Read-only boundary: the canvas offers no edit, delete, or dispatch control. Every state change originates from the agents themselves.
 - Data source: the host route `GET /plugins/dsh-call-session/telemetry`, guarded by Connection authentication, GET-only, never cached. Call traces live in a bounded in-memory ring buffer, default capacity 200, FIFO eviction, never persisted, resetting on host restart.
@@ -225,7 +225,7 @@ Canvas data is never registered as an LLM tool, so System Prompt stays idempoten
 
 ## Config
 
-The plugin works out of the box with built-in defaults: 300ms disk debounce, 200 posts capacity.
+The plugin requires no additional plugins, running with built-in defaults: 300ms disk debounce, 200 posts capacity.
 
 To customize, add property overrides to `~/.dsh/profiles/web/cordis.patch.yml`:
 
@@ -239,7 +239,7 @@ To customize, add property overrides to `~/.dsh/profiles/web/cordis.patch.yml`:
 Options:
 - `enabled`: boolean, default `true`. Enable or disable plugin tools.
 - `debounceMs`: number, default `300`. Atomic disk write debounce delay in milliseconds.
-- `maxCapacity`: number, default `200`. Maximum entries retained in memory FIFO cache.
+- `maxCapacity`: number, default `200`. Maximum board entries, evicted by state-aware policy (expired -> archived -> oldest active).
 - `telemetryCapacity`: number, default `200`, range 10-2000. Maximum call traces retained in canvas data ring buffer, FIFO eviction.
 
 ## Comparison
@@ -279,6 +279,10 @@ Key technical decisions are recorded as Architecture Decision Records (ADRs) in 
 | [ADR-0015](./docs/adrs/0015-peer-session-model-and-preset-inheritance.md) | Peer Session Model & Preset Inheritance | Accepted | Cascade fallback model resolution and preset inheritance for spawned peer sessions |
 | [ADR-0016](./docs/adrs/0016-unified-parameter-naming-and-session-id-standard.md) | Unified Parameter Naming & Session ID Governance | Accepted | Zero-alias parameter naming, strict sessionId format, clean deprecation of legacy aliases |
 | [ADR-0017](./docs/adrs/0017-peer-session-title-event-persistence-and-host-alignment.md) | Peer Session Title Event Persistence | Accepted | Asynchronous title rename emission, contextPostIds return metadata, host alignment |
+| [ADR-0018](./docs/adrs/0018-canvas-motion-and-visual-restraint.md) | Canvas Motion & Visual Restraint | Accepted | Motion noise reduction, low-saturation flow, and bounded glow |
+| [ADR-0019](./docs/adrs/0019-channel-split-routing-and-lineage-on-demand-focus.md) | Channel-Split Routing & Lineage Focus | Accepted | Dual-channel split routing, on-demand lineage focus, conflict-free ports |
+| [ADR-0020](./docs/adrs/0020-system-performance-specifications-and-resource-budgets.md) | Performance Budgets & SLA Baselines | Accepted | Deterministic latency budgets, event-loop protection, baseline tests |
+| [ADR-0021](./docs/adrs/0021-concurrent-running-quota-and-model-inheritance-alignment.md) | Running Quota & Model Inheritance | Accepted | Workspace 5 running-session quota and dispatch model inheritance |
 
 ## Testing
 

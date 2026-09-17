@@ -131,7 +131,7 @@ test('Web Telemetry Route: 宿主懒加载注册与 ctx.effect 卸载摘除', ()
   assert.equal(webServer.registered.length, 1);
 });
 
-test('Web Telemetry Route: 无 Web 宿主时保持 tool-only 静默降级', () => {
+test('Web Telemetry Route: 无 Web 宿主时保持 tool-only 静默回退', () => {
   const ctx = createMockCtx({ webServer: undefined });
   const surface = installTelemetryWebSurface(ctx, { logger: silentLogger });
 
@@ -368,7 +368,7 @@ test('Web Telemetry Route: 无 crossWorkspace 参数时默认返回全量多工�
   assert.equal(snapshot.calls.length, 1, '跨工作区调用必须包含在内');
 });
 
-test('Web Telemetry Route: 快照聚合抛错时降级 500 且不泄漏内部堆栈', async () => {
+test('Web Telemetry Route: 快照聚合抛错时返回 500 且不泄漏内部堆栈', async () => {
   const brokenCtx = createMockCtx({ agentsList: [] });
   brokenCtx.agents = {
     list: () => { throw new Error('agents service exploded'); }

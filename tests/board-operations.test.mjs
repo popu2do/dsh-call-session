@@ -148,7 +148,7 @@ test('BoardStore.executeClear: 条目与主题清理', async () => {
   assert.equal(store.get(p2.postId)?.status, 'archived');
   assert.equal(store.get(pOther.postId)?.status, 'active');
 
-  // 验证 mode: 'purge' 物理删除（彻底移出存储，不保留为 archived）
+  // 验证 mode: 'purge' 物理删除（移出存储，不保留为 archived）
   const purgeRes = await store.executeClear({ args: { id: pOther.postId, mode: 'purge' }, exec });
   assert.equal(purgeRes.success, true);
   assert.equal(purgeRes.clearedCount, 1);

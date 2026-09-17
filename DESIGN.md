@@ -58,7 +58,7 @@ DSH Canvas Design System defines the visual language, design tokens, geometry co
 
 ## Overview & Aesthetic Principles
 
-1. **Information Density with Structural Calm**: The canvas is an operational cockpit for multi-agent collaboration. Spatial rhythm, contrast, and alignment minimize cognitive load without sacrificing telemetry granularity.
+1. **Information Density with Structural Calm**: The canvas provides a visual overview for multi-agent collaboration. Spatial rhythm, contrast, and alignment minimize cognitive load without sacrificing operational detail.
 2. **Strict Scope Isolation**: The canvas operates inside host environments (such as DSH Web). All styles are scoped strictly within `.dsh-canvas-container` to guarantee zero side-effects on host frames.
 3. **WCAG 2.1 AA Accessibility Compliance**: Foreground text must achieve a minimum 4.5:1 contrast ratio against card and canvas surfaces in both light and dark modes.
 4. **Deterministic Geometry**: Topology coordinates, Bezier control corridors, and ellipse intersections follow explicit mathematical invariants rather than arbitrary visual heuristics.
@@ -70,7 +70,7 @@ The collaboration canvas adapts dynamically to host container viewports:
 | Breakpoint | Viewport Width | Layout Behavior |
 |---|---|---|
 | **Compact** | `< 768px` | Single-column collapsed workspace, toolbar wraps to compact icons, drawer occupies 100vw full width. |
-| **Standard** | `>= 768px` | Multi-column swimlanes horizontally laid out, side drawer fixed at 420px (max 90vw). |
+| **Standard** | `>= 768px` | Multi-column workspace group columns (工作区分组列) horizontally laid out, side drawer fixed at 420px (max 90vw). |
 
 ## Theme Tokens & Dual-Theme Architecture
 
@@ -79,15 +79,15 @@ The canvas supports native dark mode (default) and light mode (`.dsh-canvas-ligh
 | Token Role | Base / Light (`.dsh-canvas-light`) | Dark (Default) | Notes |
 |---|---|---|---|
 | `canvas-bg` | `#f8fafc` | `#0b0f19` | Viewport infinite surface |
-| `workspace-surface` | `#ffffff` | `#111827` | Swimlane column surface |
-| `workspace-border` | `#e2e8f0` | `#1f2937` | Swimlane boundary |
+| `workspace-surface` | `#ffffff` | `#111827` | Workspace group column (工作区分组列) surface |
+| `workspace-border` | `#e2e8f0` | `#1f2937` | Workspace group column (工作区分组列) boundary |
 | `node-surface` | `#ffffff` | `#1e293b` | Agent session card surface |
 | `node-border` | `#cbd5e1` | `#334155` | Agent session card boundary |
 | `node-text-primary` | `#0f172a` (`gray-1000`) | `#f8fafc` | Contrast ratio `> 10:1` |
 | `node-text-secondary` | `#475569` (`gray-900`) | `#94a3b8` | Contrast ratio `> 4.5:1` |
 | `call-dispatch` | `#0284c7` (`blue-700`) | `#38bdf8` | Task dispatch active edge |
 | `call-report` | `#16a34a` | `#4ade80` | Task report edge |
-| `call-notice` | `#d97706` (`amber-700`) | `#fbbf24` | Notice broadcast edge |
+| `call-notice` | `#d97706` (`amber-700`) | `#fbbf24` | Notice call edge |
 | `error-offline` | `#e11d48` (`red-700`) | `#f43f5e` | Offline / error indicator |
 
 ## Canvas Geometric Constants (SSOT)
@@ -109,6 +109,6 @@ To resolve stacking context penetration between tooltips, drawers, and viewports
 | **Background** | `1` | `.dsh-canvas-viewport` | Pan/Zoom infinite transform layer |
 | **Entities** | `2` | `.dsh-canvas-node`, `.dsh-canvas-edge` | Interactive SVG graph elements |
 | **Toolbar** | `10` | `.dsh-canvas-toolbar` | View controls, theme toggle, stats |
-| **Tooltip** | `20` | `.dsh-canvas-tooltip` | Hover telemetry popovers |
+| **Tooltip** | `20` | `.dsh-canvas-tooltip` | Hover detail popovers |
 | **Drawer Mask** | `30` | `.dsh-canvas-drawer-mask` | Backdrop dimming barrier |
 | **Drawer Panel** | `40` | `.dsh-canvas-drawer` | L3 deep-dive inspection sidebar |

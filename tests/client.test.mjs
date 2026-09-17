@@ -93,7 +93,7 @@ test('Client Plugin Contract: lib/client.js exports and zero-emoji compliance (A
   assert.ok(plugin.zh['drawer.readonlyBadge']);
   assert.ok(plugin.zh['drawer.copy']);
 
-  // 断言已废弃的工具栏键名与无用死键已被彻底移除（无痕设计）
+  // 断言已废弃的工具栏键名与无用配置已被移除
   assert.equal(plugin.zh['toolbar.workspace'], undefined);
   assert.equal(plugin.zh['toolbar.refresh'], undefined);
   assert.equal(plugin.zh['stats.idleSessions'], undefined);
@@ -208,7 +208,7 @@ test('Client Lifecycle & Slot Registration: conversation.view Tab「看板」', 
   assert.equal(typeof registeredComponent, 'function');
 });
 
-test('Topology Visual Layout Engine: Multi-workspace swimlanes and session node positioning', () => {
+test('Topology Visual Layout Engine: Multi-workspace columns and session node positioning', () => {
   const plugin = loadClientBundle();
   const { computeLayout } = plugin;
   assert.equal(typeof computeLayout, 'function');
@@ -687,7 +687,7 @@ test('Three-State Time-Decayed Bezier: Exact Millisecond Boundary Assertions', (
   assert.ok(selfPath.includes('C '), 'Self-loop must use cubic Bezier (C)');
 });
 
-test('Multi-Workspace Swimlanes & Layout: Empty State, Boundary Separation and Isolation', () => {
+test('Multi-Workspace Columns & Layout: Empty State, Boundary Separation and Isolation', () => {
   const plugin = loadClientBundle();
   const { computeLayout } = plugin;
 
@@ -729,7 +729,7 @@ test('Multi-Workspace Swimlanes & Layout: Empty State, Boundary Separation and I
     const next = fullLayout.workspaceBounds[i + 1];
     assert.ok(
       next.x >= curr.x + curr.width + 30,
-      `Swimlane ${i+1} (${next.name}) must be separated from ${i} (${curr.name}) by at least 30px`
+      `Workspace column ${i+1} (${next.name}) must be separated from ${i} (${curr.name}) by at least 30px`
     );
   }
   for (const s of allSessions) {
@@ -737,7 +737,7 @@ test('Multi-Workspace Swimlanes & Layout: Empty State, Boundary Separation and I
   }
 });
 
-test('Topology Visual Layout Engine: Blackboard strip, side-by-side swimlanes, and single-column session coordinates', () => {
+test('Topology Visual Layout Engine: Blackboard strip, side-by-side workspace columns, and single-column session coordinates', () => {
   const plugin = loadClientBundle();
   const { computeLayout } = plugin;
 
@@ -785,19 +785,19 @@ test('Topology Visual Layout Engine: Blackboard strip, side-by-side swimlanes, a
   const laneAlpha = layout.workspaceBounds[0];
   const laneBeta = layout.workspaceBounds[1];
 
-  assert.equal(laneAlpha.x, 40, 'First swimlane x must be 40');
-  assert.equal(laneAlpha.y, 150, 'Swimlanes y start must be 150');
-  assert.equal(laneAlpha.width, 260, 'Swimlane width must be 260');
-  assert.equal(laneAlpha.height, 480, 'Swimlane minHeight must be 480 (76 + 3*72 + 24 = 316 < 480)');
+  assert.equal(laneAlpha.x, 40, 'First workspace column x must be 40');
+  assert.equal(laneAlpha.y, 150, 'Workspace columns y start must be 150');
+  assert.equal(laneAlpha.width, 260, 'Workspace column width must be 260');
+  assert.equal(laneAlpha.height, 480, 'Workspace column minHeight must be 480 (76 + 3*72 + 24 = 316 < 480)');
 
-  assert.equal(laneBeta.x, 40 + 260 + 36, 'Second swimlane x must be 336 (40 + 260 + 36)');
-  assert.equal(laneBeta.y, 150, 'Second swimlane y start must be 150');
-  assert.equal(laneBeta.width, 260, 'Second swimlane width must be 260');
-  assert.equal(laneBeta.height, 480, 'Second swimlane minHeight must be 480');
+  assert.equal(laneBeta.x, 40 + 260 + 36, 'Second workspace column x must be 336 (40 + 260 + 36)');
+  assert.equal(laneBeta.y, 150, 'Second workspace column y start must be 150');
+  assert.equal(laneBeta.width, 260, 'Second workspace column width must be 260');
+  assert.equal(laneBeta.height, 480, 'Second workspace column minHeight must be 480');
 
   // 3. 工作区列内单列 session 坐标断言 (Single-column vertical centered session nodes)
   // Lane Alpha: cx = 40 + 130 = 170
-  assert.equal(layout.nodePositions['s1'].x, 170, 's1 cx must be centered in swimlane at 170');
+  assert.equal(layout.nodePositions['s1'].x, 170, 's1 cx must be centered in column at 170');
   assert.equal(layout.nodePositions['s1'].y, 240, 's1 cy must start at 240');
 
   assert.equal(layout.nodePositions['s2'].x, 170, 's2 cx must stay in single column at 170');
@@ -1191,7 +1191,7 @@ test('Strict Read-Only Invariants: Zero input controls, zero mutative actions, z
   traverse(view);
 });
 
-test('协作看板实测缺陷回归：真实标题、黑板空态、抽屉遮罩与礼貌性加载', () => {
+test('协作看板实测缺陷回归：真实标题、黑板空态、抽屉遮罩与加载状态', () => {
   const clientPath = path.join(rootDir, 'lib', 'client.js');
   const code = fs.readFileSync(clientPath, 'utf8');
 
@@ -1353,7 +1353,7 @@ test('全量合规审查：三次贝塞尔外切、无重复节点渲染、工�
   const normDist = Math.pow((startX - cx) / 96, 2) + Math.pow((startY - cy) / 26, 2);
   assert.ok(Math.abs(normDist - 1.0) < 0.08, `自环起点必须精确落在椭圆轮廓上，实测归一化距离: ${normDist}`);
 
-  // 2. nodePositions 唯一性断言（杜绝大小写重复插入导致渲染翻倍）
+  // 2. nodePositions 唯一性断言（防止大小写重复插入导致渲染翻倍）
   const sessions = [
     { id: 'Session-Alpha', title: 'Alpha', workspace: '/ws/1' },
     { id: 'SESSION-BETA', title: 'Beta', workspace: '/ws/1' },
@@ -1762,7 +1762,7 @@ test('协作看板点击自适应居中、假零值防御、44px 工具栏校正
   assert.equal(code.includes('container.clientHeight - 44'), true, '必须显式扣除 44px 工具栏垂直高度计算视口居中');
   assert.equal(code.includes('ResizeObserver'), true, '必须接入 ResizeObserver 实现视口尺寸响应式感知');
 
-  // 2. 初始状态自适应居中验证（杜绝 translate3d(0px, 0px, 0px) scale(1) 贴左截断）
+  // 2. 初始状态自适应居中验证（避免 translate3d(0px, 0px, 0px) scale(1) 贴左截断）
   const t = (k) => k;
   const initialVNode = plugin.CanvasView({ sessionId: 'session-test', t });
   function findVNodes(node, predicate, acc = []) {
@@ -1978,7 +1978,7 @@ test('协作看板黑板标题口径与卡片视觉状态强化（PRD §6.4 与 
   const tZh = (k) => pluginZh.zh[k] || k;
   const viewZh = pluginZh.CanvasView({ sessionId: 'session-s1', t: tZh, locale: 'zh' });
 
-  // 1.1 标题口径显式化断言（中文环境）：必须清晰显示 '(0 活跃 / 3 总计)'，杜绝 (0) 与 3 张卡片的同屏矛盾
+  // 1.1 标题口径显式化断言（中文环境）：必须清晰显示 '(0 活跃 / 3 总计)'，避免 (0) 与 3 张卡片的同屏矛盾
   const titleGroup = findNodeById(viewZh, 'dsh-canvas-blackboard-title-group');
   assert.ok(titleGroup, '顶部黑板栏标题分组必须存在');
   const titleTexts = titleGroup.children.filter(c => c && c.type === 'text');
@@ -2161,10 +2161,10 @@ test('ADR-0013 看板默认全局透视、首列固定当前工作区、移除�
   assert.ok(renderedNodeIds.includes('session-other'), '当前工程会话 session-other 必须渲染');
   assert.ok(renderedNodeIds.includes('session-peer'), '外部工作区 session-peer 默认全局呈现');
 
-  // 工具栏彻底移除跨工作区开关断言
+  // 工具栏移除跨工作区开关断言
   const toolbarButtons = findVNodes(defaultGlobalView, (n) => n && n.type === 'button' && n.props && n.props.className && n.props.className.includes('dsh-canvas-btn'));
   const crossWsBtn = toolbarButtons.find(b => b.children && b.children.includes('跨工作区拓扑'));
-  assert.equal(crossWsBtn, undefined, '顶部工具栏彻底移除「跨工作区拓扑」按钮');
+  assert.equal(crossWsBtn, undefined, '顶部工具栏移除「跨工作区拓扑」按钮');
 
   const locateBtn = toolbarButtons.find(b => b.children && b.children.includes('定位当前会话'));
   assert.ok(locateBtn, '当传入 sessionId 时顶部工具栏必须提供「定位当前会话」按钮');
@@ -2473,11 +2473,11 @@ test('Session Node Title Dynamic Space & Word-Boundary Truncation (PRD §5.1 & T
     '放宽留白空间后可完整呈现至 fox 单词边界'
   );
 
-  // 场景 1.4：无空格单长词降级按字符截断
+  // 场景 1.4：无空格单长词按字符截断
   assert.equal(
     truncateTextByWidth('SingleLongUnbrokenWordThatExceedsLimit', 105),
     'SingleLongUn...',
-    '无空格单长词必须平滑降级按字符级截断'
+    '无空格单长词按字符级截断'
   );
 
   // 场景 1.5：末尾空白字符自动修剪
@@ -2656,7 +2656,7 @@ test('黑板区域在无条目时的平滑压缩与空状态过渡 (PRD §3.1 & 
   assert.equal(emptyLayout.blackboardBound.x, 40, '起始 X 为 40px');
   assert.equal(emptyLayout.blackboardBound.y, 24, '起始 Y 为 24px');
   assert.equal(emptyLayout.blackboardBound.width, 1080, '最小宽度保持 1080px');
-  assert.equal(emptyLayout.blackboardBound.height, 38, '无条目时顶部黑板栏高度优雅收缩为 38px 轻量状态条');
+  assert.equal(emptyLayout.blackboardBound.height, 38, '无条目时顶部黑板栏高度收缩为 38px 轻量状态条');
 
   // 2. 有条目场景 (posts.length > 0)：黑板区域维持 96px 标准高度容纳条目方块
   const populatedLayout = computeLayout(
@@ -2816,7 +2816,7 @@ test('工作区列在 1 列、2 列、3 列不同规模下的包围盒边界与 
   assert.ok(fit2.fitZoom > 0.85);
 
   // -------------------------------------------------------------
-  // 3 规模验证：三列工作区 (3 Columns) —— 彻底验证第 3 列不被截断
+  // 3 规模验证：三列工作区 (3 Columns) —— 验证第 3 列不被截断
   // -------------------------------------------------------------
   const ws3 = [
     { id: '/ws/col-1', name: 'col-1', isCurrent: true },
@@ -2851,7 +2851,7 @@ test('工作区列在 1 列、2 列、3 列不同规模下的包围盒边界与 
   const col3TransformedLeft = fit3.fitPanX + layout3.workspaceBounds[2].x * fit3.fitZoom;
   const col3TransformedRight = fit3.fitPanX + col3Right * fit3.fitZoom;
   assert.ok(col3TransformedLeft > 0, `第 3 列变换后左边界 (${col3TransformedLeft.toFixed(1)}px) 必须大于 0`);
-  assert.ok(col3TransformedRight < 1280, `第 3 列变换后右边界 (${col3TransformedRight.toFixed(1)}px) 必须严格小于视口宽 1280px，杜绝截断`);
+  assert.ok(col3TransformedRight < 1280, `第 3 列变换后右边界 (${col3TransformedRight.toFixed(1)}px) 必须小于视口宽 1280px，避免截断`);
   assert.ok(1280 - col3TransformedRight >= 48, `第 3 列右侧保留安全留白边距 (${(1280 - col3TransformedRight).toFixed(1)}px >= 48px)`);
 
   // -------------------------------------------------------------
@@ -2910,7 +2910,7 @@ test('ADR-0014 & ADR-0019 拓扑通道分流走线与上下行解耦几何规约
   assert.ok(upC2x < 170 - 96 && upC2x >= 170 - 126, '向上第二控制点必须严格在左走线通道内 (44 <= c2x < 74)');
   assert.ok(upEndX < 170, '向上终点必须自目标左侧接入 (upEndX < 170，左出左进)');
 
-  // 1.2 同工作区列跨层非相邻向下调用（dy=144 > 80）：同心跳数外扩嵌套，严格钳位在列宽内
+  // 1.2 同工作区列跨层非相邻向下调用（dy=144 > 80）：同心外扩嵌套，严格钳位在列宽内
   const intraNonAdjPath = calculateBezierPath(170, 214, 170, 358, 0, 1);
   assert.ok(intraNonAdjPath.startsWith('M '), '跨层调用必须以 M 起点开始');
   const mMatchNonAdj = intraNonAdjPath.match(/^M\s+([-\d.]+)\s+([-\d.]+)\s+C\s+([-\d.]+)\s+([-\d.]+),\s+([-\d.]+)\s+([-\d.]+),\s+([-\d.]+)\s+([-\d.]+)/);
@@ -3200,7 +3200,7 @@ test('黑板栏防膨胀规约 (PRD §3.2)：大量历史过期条目下宽度�
   }
 });
 
-test('通道走线防塌陷与槽位离散 (ADR-0014)：多条黑板连线右侧通道离散走线杜绝单点重叠', () => {
+test('通道走线槽位离散 (ADR-0014)：多条黑板连线右侧通道离散走线避免单点重叠', () => {
   const sessions = [
     { id: 's1', workspace: '/ws/main', state: 'idle' },
     { id: 's2', workspace: '/ws/main', state: 'idle' }
@@ -3280,7 +3280,7 @@ test('通道走线防塌陷与槽位离散 (ADR-0014)：多条黑板连线右侧
   // 关键断言：多条连线严禁全部塌陷在单一的 (288.0, 130.0) 坐标点上
   assert.ok(
     gutterPoints.size > 1,
-    `多条归属边在右侧通道内必须离散分布（当前检测到 ${gutterPoints.size} 个通道点: ${[...gutterPoints].join('; ')}），杜绝单点乱麻重叠`
+    `多条归属边在右侧通道内必须离散分布（当前检测到 ${gutterPoints.size} 个通道点: ${[...gutterPoints].join('; ')}），避免单点重叠`
   );
 });
 
@@ -3311,7 +3311,7 @@ test('多会话工作区纵向自适应居中 (PRD §8.2)：11会话工作区底
   const padding = 48;
   const availH = vh - padding * 2;
 
-  // 自适应全景缩放计算
+  // 自适应缩放计算
   const contentW = layout.blackboardBound.width;
   const contentH = (ws.y + ws.height) - layout.blackboardBound.y;
   const fitZoom = Math.min(Math.max(Math.min((vw - padding * 2) / contentW, availH / contentH), 0.30), 1.20);
@@ -3390,7 +3390,7 @@ test('ADR-0019 常态按需显影与历史调用连线抑制测试', () => {
     calls: [
       // 活跃调用 (5s 内)：常态下必须渲染
       { id: 'call-fresh', callerSessionId: 's1', targetSessionId: 's2', callType: 'task_dispatch', timestamp: now - 5000, status: 'active' },
-      // 已结算调用：常态下必须完全抑制（返回 null），杜绝大盘蜘蛛网
+      // 已结算调用：常态下返回 null，避免连线冗余
       { id: 'call-settled', callerSessionId: 's1', targetSessionId: 's2', callType: 'task_report', timestamp: now - 3000, status: 'settled' },
       // 历史过期调用 (>15s)：常态下必须完全抑制（返回 null）
       { id: 'call-historical', callerSessionId: 's1', targetSessionId: 's2', callType: 'notice', timestamp: now - 20000, status: 'active' }

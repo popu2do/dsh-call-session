@@ -12,11 +12,11 @@
 
 <!--
 What is the problem we are trying to solve?
-What is the background, context, and operational pain points that triggered this decision?
+What is the background, context, and operational issues that triggered this decision?
 What forces, constraints, and requirements must be considered?
 -->
 
-### 1.1 Background & Pain Points
+### 1.1 Background & Problem Context
 [Describe what existed before, why it failed or caused friction, and the specific failure modes observed in production.]
 
 ### 1.2 Architectural Forces & Constraints

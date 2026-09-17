@@ -228,7 +228,7 @@ test('BoardStore.post: 直接写入保留主题与遥测数据时抛错拦截', 
   await store.close();
 });
 
-test('BoardStore.hydratePosts: 启动水合自动清洗误写入的遥测脏数据并防止击穿 KV Cache', async (t) => {
+test('BoardStore.hydratePosts: 启动水合自动清洗误写入的遥测数据并保护 KV Cache', async (t) => {
   const tmpDir = await createTempDir();
   t.after(async () => {
     await fs.rm(tmpDir, { recursive: true, force: true });
