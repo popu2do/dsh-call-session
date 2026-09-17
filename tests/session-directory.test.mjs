@@ -140,16 +140,19 @@ test('SessionDirectory: listActiveSessions with workspace and status filters', (
   assert.deepEqual(listAll.map(s => s.sessionId), ['s-1', 's-2', 's-3']);
 });
 
-test('SessionDirectory: inspectWorkspace for quota and active title tracking', () => {
-  const a1 = createMockAgent({ id: 's-1', title: 'Planning Agent', cwd: '/app/repo' });
-  const a2 = createMockAgent({ id: 's-2', title: 'Execution Agent', cwd: '/app/repo' });
-  const aOther = createMockAgent({ id: 's-3', title: 'Other', cwd: '/other/repo' });
+test('SessionDirectory: inspectWorkspace for quota and active title tracking (running quota vs unarchived titles)', () => {
+  // a1 is running, a2 is idle; both in /app/repo
+  const a1 = createMockAgent({ id: 's-1', title: 'Planning Agent', cwd: '/app/repo', status: 'running' });
+  const a2 = createMockAgent({ id: 's-2', title: 'Execution Agent', cwd: '/app/repo', status: 'idle' });
+  const aOther = createMockAgent({ id: 's-3', title: 'Other', cwd: '/other/repo', status: 'running' });
 
   const ctx = createMockCordis([a1, a2, aOther]);
   const dir = new SessionDirectory(ctx);
 
   const res = dir.inspectWorkspace('/app/repo');
-  assert.equal(res.count, 2);
+  // Concurrency quota count strictly reflects running sessions (1)
+  assert.equal(res.count, 1);
+  // Title deduplication tracks all unarchived workspace sessions (both running and idle)
   assert.ok(res.activeTitles.has('planning agent'));
   assert.ok(res.activeTitles.has('execution agent'));
   assert.equal(res.activeTitles.has('other'), false);
