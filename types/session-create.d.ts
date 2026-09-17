@@ -1,8 +1,5 @@
-/**
- * @module dsh-call-session/session-create
- * 平级会话创建与受控生命周期契约
- */
 import { SessionStatus } from './session-call.js';
+import { SessionDirectory } from './session-directory.js';
 
 export interface SessionCreateArgs {
   /** 同级会话标题，不包含特权前缀与换行符。 */
@@ -40,6 +37,86 @@ export interface SessionCreateResult {
   error?: string | null;
 }
 
+export interface PeerSessionFactoryOptions {
+  logger?: any;
+  boardStore?: any;
+  directory?: SessionDirectory;
+}
+
+export interface PeerSessionCreateParams {
+  args?: SessionCreateArgs;
+  exec?: any;
+  boardStore?: any;
+  options?: any;
+}
+
+export declare class PeerSessionFactory {
+  ctx: any;
+  options: PeerSessionFactoryOptions;
+  logger: any;
+  directory: SessionDirectory;
+
+  constructor(ctx: any, options?: PeerSessionFactoryOptions);
+
+  static reset(): void;
+  static resetRateLimits(): void;
+  static resetInFlightCreations(): void;
+  static checkRateLimit(callerSessionId: string, now?: number): number | null;
+  static assertRateLimit(callerSessionId: string, now?: number): void;
+  static recordRateLimit(callerSessionId: string, now?: number): number | null;
+  static rollbackRateLimit(callerSessionId: string, timestamp: number): void;
+  static resolveTitle(params: {
+    title?: string;
+    initialMessage?: string;
+    activeTitles?: Set<string>;
+  }): string;
+  static resolveAgentOptions(params?: {
+    ctx?: any;
+    callerAgent?: any;
+    model?: string;
+    reasoningEffort?: string;
+  }): Record<string, any>;
+  static resolvePresetAndSetup(params?: {
+    ctx?: any;
+    callerAgent?: any;
+    args?: any;
+    options?: any;
+    logger?: any;
+  }): Promise<{ presetId?: string; setup?: (agentCtx: any) => Promise<void> | void }>;
+  static resolveRootAgentsService(ctx: any, exec?: any): any;
+
+  resolveTitle(params: {
+    title?: string;
+    initialMessage?: string;
+    activeTitles?: Set<string>;
+  }): string;
+  resolveAgentOptions(params?: {
+    callerAgent?: any;
+    model?: string;
+    reasoningEffort?: string;
+  }): Record<string, any>;
+  resolvePresetAndSetup(params?: {
+    callerAgent?: any;
+    args?: any;
+    options?: any;
+  }): Promise<{ presetId?: string; setup?: (agentCtx: any) => Promise<void> | void }>;
+  inspectWorkspace(
+    callerWorkspace: string,
+    options?: { agentsService?: any; archivedIds?: Set<string> }
+  ): { count: number; activeTitles: Set<string> };
+  checkRateLimit(callerSessionId: string, now?: number): number | null;
+  assertRateLimit(callerSessionId: string, now?: number): void;
+  recordRateLimit(callerSessionId: string, now?: number): number | null;
+  rollbackRateLimit(callerSessionId: string, timestamp: number): void;
+  reset(): void;
+
+  create(
+    argsOrParams?: PeerSessionCreateParams | SessionCreateArgs,
+    maybeExec?: any,
+    maybeOptions?: any
+  ): Promise<SessionCreateResult>;
+}
+
 export declare const PEER_SESSION_CONSTANTS: Readonly<{
   readonly MAX_ACTIVE_PEER_SESSIONS: 10;
   readonly MAX_CREATIONS_PER_MINUTE: 5;
@@ -66,7 +143,7 @@ export declare function resolveRootAgentsService(ctx: any, exec?: any): any;
 
 export declare function resolvePeerTitle(params: {
   title?: string;
-  initial_message?: string;
+  initialMessage?: string;
   activeTitles?: Set<string>;
 }): string;
 

@@ -61,10 +61,21 @@ import {
 } from './session-query.js';
 
 import {
+  SessionDirectory,
+  type SessionIdentityInfo,
+  type WorkspaceInspectionResult,
+  type TargetResolutionResult,
+  type ListActiveSessionsOptions
+} from './session-directory.js';
+
+import {
+  PeerSessionFactory,
   executeSessionCreate,
   PEER_SESSION_CONSTANTS,
   type SessionCreateArgs,
-  type SessionCreateResult
+  type SessionCreateResult,
+  type PeerSessionFactoryOptions,
+  type PeerSessionCreateParams
 } from './session-create.js';
 
 import {
@@ -183,6 +194,7 @@ export {
   dispatchNativeMessage,
   CALL_TYPE_INTENTS,
   buildTransportPayload,
+  PeerSessionFactory,
   executeSessionCreate,
   PEER_SESSION_CONSTANTS,
   CallTelemetryRingBuffer,
@@ -194,7 +206,8 @@ export {
   authenticatedWebRoutes,
   createTelemetryHandler,
   TELEMETRY_ROUTE_PATH,
-  WEB_SERVER_KEYS
+  WEB_SERVER_KEYS,
+  SessionDirectory
 };
 
 export type {
@@ -220,6 +233,8 @@ export type {
   SessionQueryResult,
   SessionCreateArgs,
   SessionCreateResult,
+  PeerSessionFactoryOptions,
+  PeerSessionCreateParams,
   CanvasCallType,
   CanvasDeliveryMode,
   CanvasSessionState,
@@ -231,5 +246,9 @@ export type {
   CanvasBoardPostEntity,
   CanvasTelemetrySnapshot,
   GetCanvasTelemetryOptions,
-  AuthenticatedWebRoutes
+  AuthenticatedWebRoutes,
+  SessionIdentityInfo,
+  WorkspaceInspectionResult,
+  TargetResolutionResult,
+  ListActiveSessionsOptions
 };

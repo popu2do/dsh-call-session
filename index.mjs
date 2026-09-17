@@ -28,6 +28,7 @@ import {
   resolveAgentsService,
   executeSessionQuery
 } from './lib/session-query.mjs';
+import { SessionDirectory } from './lib/session-directory.mjs';
 import {
   executeSessionCall,
   dispatchNativeMessage,
@@ -35,6 +36,7 @@ import {
   buildTransportPayload
 } from './lib/session-call.mjs';
 import {
+  PeerSessionFactory,
   executeSessionCreate,
   PEER_SESSION_CONSTANTS
 } from './lib/session-create.mjs';
@@ -141,6 +143,7 @@ export {
   dispatchNativeMessage,
   CALL_TYPE_INTENTS,
   buildTransportPayload,
+  PeerSessionFactory,
   executeSessionCreate,
   PEER_SESSION_CONSTANTS,
   CallTelemetryRingBuffer,
@@ -152,7 +155,8 @@ export {
   authenticatedWebRoutes,
   createTelemetryHandler,
   TELEMETRY_ROUTE_PATH,
-  WEB_SERVER_KEYS
+  WEB_SERVER_KEYS,
+  SessionDirectory
 };
 
 const noopLogger = Object.freeze({
@@ -235,15 +239,7 @@ export function apply(ctx, config = {}) {
     ctx.systemPrompt.context({
       name: 'board:remind',
       order: config.remindContextOrder ?? 130,
-      text: (context) => {
-        const agent = context?.agent;
-        const authorSessionId = agent?.id || agent?.session?.id;
-        if (!authorSessionId) return '';
-        const callerCwd = resolveSessionCwd(agent);
-        const callerWorkspace = normalizeWorkspace(callerCwd);
-        const activePosts = boardStore.findActiveByAuthor(authorSessionId, callerWorkspace);
-        return formatAuthorReminderText(activePosts);
-      }
+      text: (context) => boardStore.getAuthorReminder(context?.agent, ctx)
     });
   }
 
@@ -326,63 +322,8 @@ export function apply(ctx, config = {}) {
           }];
         }
       },
-      execute: async (args, exec) => {
-        try {
-          if (isReservedTopic(args?.topic)) {
-            const errMsg = getReservedTopicErrorMessage(args.topic);
-            return {
-              success: false,
-              topic: args.topic,
-              error: errMsg,
-              message: `[Board] 发布失败: ${errMsg}`
-            };
-          }
-
-          const callerAgent = exec?.agent;
-          const authorSessionId = callerAgent?.id || 'unknown-session';
-          const authorTitle = resolveSessionTitle(ctx, callerAgent) || 'Session';
-          const authorCwd = resolveSessionCwd(callerAgent);
-          const authorWorkspace = normalizeWorkspace(authorCwd);
-
-          const now = Date.now();
-          const ttlSeconds = typeof args.ttl === 'number' && args.ttl > 0 ? Math.min(args.ttl, 86400) : 3600;
-          const postId = `post-${now}-${Math.random().toString(36).slice(2, 8)}`;
-
-          const post = boardStore.post({
-            id: postId,
-            topic: args.topic,
-            content: args.content,
-            tags: Array.isArray(args.tags) ? args.tags : [],
-            authorSessionId,
-            authorTitle,
-            authorWorkspace,
-            createdAt: new Date(now).toISOString(),
-            createdAtMs: now,
-            expiresAt: new Date(now + ttlSeconds * 1000).toISOString(),
-            expiresAtMs: now + ttlSeconds * 1000,
-            status: 'active',
-            scope: authorWorkspace || 'global',
-            metadata: args.metadata || {}
-          });
-
-          return {
-            success: true,
-            postId: post.id,
-            topic: post.topic,
-            authorSessionId: post.authorSessionId,
-            createdAt: post.createdAt,
-            expiresAt: post.expiresAt,
-            scope: post.scope,
-            message: `[Board] 已发布条目 (#${post.id})`
-          };
-        } catch (err) {
-          logger.debug?.(`[dsh-call-session] board_post execution failed: ${err?.message || err}`);
-          return {
-            success: false,
-            error: err?.message || String(err),
-            message: `[Board] 发布失败: ${err?.message || err}`
-          };
-        }
+      execute: (args, exec) => {
+        return boardStore.executePost({ args, exec, ctx });
       }
     });
 
@@ -472,35 +413,8 @@ export function apply(ctx, config = {}) {
           }];
         }
       },
-      execute: async (args, exec) => {
-        try {
-          const callerAgent = exec?.agent;
-          const callerCwd = resolveSessionCwd(callerAgent);
-
-          const res = boardStore.list({
-            id: args.id,
-            topic: args.topic,
-            topicPrefix: args.topic_prefix,
-            tag: args.tag,
-            status: args.active_only === false ? 'all' : 'active',
-            callerWorkspace: args.cross_workspace ? null : callerCwd,
-            crossWorkspace: !!args.cross_workspace,
-            titlesOnly: args.titles_only !== undefined ? !!args.titles_only : undefined,
-            limit: args.limit || 20
-          });
-
-          const postList = Array.isArray(res) ? res : (res.posts || []);
-          return {
-            success: true,
-            count: postList.length,
-            scope: args.cross_workspace ? 'global' : (callerCwd ? normalizeWorkspace(callerCwd) : 'unknown'),
-            titlesOnly: res && typeof res.titlesOnly === 'boolean' ? res.titlesOnly : (args.titles_only !== undefined ? !!args.titles_only : !args.id),
-            posts: postList
-          };
-        } catch (err) {
-          logger.debug?.(`[dsh-call-session] board_list execution failed: ${err?.message || err}`);
-          return { success: false, error: err?.message || String(err), count: 0, posts: [] };
-        }
+      execute: (args, exec) => {
+        return boardStore.executeList({ args, exec, ctx });
       }
     });
 
@@ -546,37 +460,8 @@ export function apply(ctx, config = {}) {
           }];
         }
       },
-      execute: async (args, exec) => {
-        try {
-          if (!args.id && !args.topic) {
-            return {
-              success: false,
-              clearedCount: 0,
-              error: 'board_clear 必须指定 id 或 topic 筛选条件。'
-            };
-          }
-
-          const callerAgent = exec?.agent;
-          const callerCwd = resolveSessionCwd(callerAgent);
-          const callerWorkspace = normalizeWorkspace(callerCwd);
-
-          const res = boardStore.clear({
-            id: args.id,
-            topic: args.topic,
-            action: args.mode === 'purge' ? 'delete' : 'archive',
-            callerWorkspace
-          });
-
-          return {
-            success: true,
-            clearedCount: res.affectedCount || 0,
-            action: res.action,
-            message: res.message
-          };
-        } catch (err) {
-          logger.debug?.(`[dsh-call-session] board_clear execution failed: ${err?.message || err}`);
-          return { success: false, error: err?.message || String(err), clearedCount: 0 };
-        }
+      execute: (args, exec) => {
+        return boardStore.executeClear({ args, exec, ctx });
       }
     });
 
@@ -811,7 +696,8 @@ export function apply(ctx, config = {}) {
         }
       },
       execute: async (args, exec) => {
-        return executeSessionCreate({ ctx, args, exec, boardStore });
+        const factory = new PeerSessionFactory(ctx, { boardStore });
+        return factory.create({ args, exec });
       }
     });
   }

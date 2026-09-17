@@ -543,10 +543,10 @@ test('端到端全链路联动：创建同级会话、黑板任务派发、记�
 
   // Step 4: 校验 Worker 接收到的初始任务指令携带了 Context Ref
   assert.equal(workerAgent.received.length, 1);
-  const ignitionMsg = workerAgent.received[0].msg;
-  const ignitionText = ignitionMsg.content[0].text;
-  assert.ok(ignitionText.includes(`> Context Ref: #${taskId}`));
-  assert.ok(ignitionText.includes('开始执行 E2E 对抗测试任务'));
+  const bootstrapMsg = workerAgent.received[0].msg;
+  const bootstrapText = bootstrapMsg.content[0].text;
+  assert.ok(bootstrapText.includes(`> Context Ref: #${taskId}`));
+  assert.ok(bootstrapText.includes('开始执行 E2E 对抗测试任务'));
 
   // Step 5: 校验 Worker 的记名提醒目前为空（隔离性：只提醒当前会话自己发布的条目）
   const workerRemind1 = remindContext.text({ agent: workerAgent });
@@ -630,7 +630,7 @@ test('异常处理：agents.create 失败、初始消息分发异常与黑板发
   // 1. 初始消息分发失败时安全捕获，降级为 status: 'idle'，不导致整体创建异常中断
   const faultyAgent = createMockAgent('faulty-target', {
     followupFn: () => {
-      throw new Error('Connection reset during ignition');
+      throw new Error('Connection reset during initial message dispatch');
     }
   });
 
