@@ -378,7 +378,7 @@ test('需求二端到端：单会话限频拦截与时间窗口恢复', async ()
   assert.equal(recoveredRes.success, true);
 });
 
-test('需求二端到端：代际深度限制 (Generation <= 2) 与因果链路追踪元数据', async () => {
+test('需求二端到端：代际深度限制 (Generation <= 2) 与调用元数据', async () => {
   resetRateLimits();
   const { ctx } = createMockHarness();
 
@@ -426,14 +426,14 @@ test('需求二端到端：代际深度限制 (Generation <= 2) 与因果链路�
 test('需求二边界测试：空消息、长消息、特殊字符与特权前缀过滤', () => {
   const activeTitles = new Set(['existing session']);
 
-  // 1. 空消息、纯空白消息 -> 降级为 Peer-<8位UUID>
+  // 1. 空消息、纯空白消息 -> 回退为 Peer-<8位UUID>
   const t1 = resolvePeerTitle({ title: '', initialMessage: '', activeTitles });
   assert.match(t1, /^Peer-[a-z0-9]{8}/i);
 
   const t2 = resolvePeerTitle({ title: '   ', initialMessage: '   \r\n\t  ', activeTitles });
   assert.match(t2, /^Peer-[a-z0-9]{8}/i);
 
-  // 2. 特权前缀剥离沙箱 ([SYSTEM], [CAPTAIN], [ROOT])
+  // 2. 特权前缀剥离过滤 ([SYSTEM], [CAPTAIN], [ROOT])
   const tPriv1 = resolvePeerTitle({ title: '[SYSTEM] Core Watchdog', activeTitles });
   assert.equal(tPriv1, 'Core Watchdog');
 
@@ -535,7 +535,7 @@ test('端到端全链路联动：创建同级会话、黑板任务派发、记�
 
   assert.equal(createRes.success, true);
   assert.equal(createRes.status, 'running');
-  assert.ok(createRes.bootstrapPostId, '应发布 session:bootstrap 就绪广播');
+  assert.ok(createRes.bootstrapPostId, '应发布 session:bootstrap 就绪公告');
   const bootstrapId = createRes.bootstrapPostId;
 
   const workerAgent = ctx.agents.get(createRes.sessionId);
@@ -624,10 +624,10 @@ test('端到端全链路联动：创建同级会话、黑板任务派发、记�
 // Suite 4: 异常与容错测试 (Robustness & Fault Tolerance)
 // ---------------------------------------------------------------------------
 
-test('异常处理：agents.create 失败、初始消息分发异常与黑板发布降级', async () => {
+test('异常处理：agents.create 失败、初始消息分发异常与黑板发布回退', async () => {
   resetRateLimits();
 
-  // 1. 初始消息分发失败时安全捕获，降级为 status: 'idle'，不导致整体创建异常中断
+  // 1. 初始消息分发失败时安全捕获，回退为 status: 'idle'，不导致整体创建异常中断
   const faultyAgent = createMockAgent('faulty-target', {
     followupFn: () => {
       throw new Error('Connection reset during initial message dispatch');
@@ -653,7 +653,7 @@ test('异常处理：agents.create 失败、初始消息分发异常与黑板发
   }, { agent: createMockAgent('caller-1') });
 
   assert.equal(resDispatchFail.success, true);
-  assert.equal(resDispatchFail.status, 'idle', '消息分发异常时应降级为 idle 待命状态');
+  assert.equal(resDispatchFail.status, 'idle', '消息分发异常时应回退为 idle 待命状态');
 
   // 2. 黑板发布异常时不阻断会话创建
   const mockBoardStoreWithFail = {

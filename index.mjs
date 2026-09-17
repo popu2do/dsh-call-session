@@ -65,7 +65,7 @@ try {
   const mod = await import('@deepseek-ai/schemastery');
   zInstance = mod.default || mod;
 } catch {
-  // Graceful fallback when schemastery is optional or not yet installed
+  // Fallback when schemastery is optional or not yet installed
 }
 
 /**
@@ -467,7 +467,7 @@ export function apply(ctx, config = {}) {
 
     registerSafe({
       name: 'session_call',
-      description: '向指定活跃会话发起单播调用。根据目标状态自动选择 steer 运行中引导或 followup 空闲唤醒。支持三大呼叫类别（task_dispatch 派发/建议、task_report 汇报/交付、notice 单向通报）与公共黑板条目关联 context_post_ids。',
+      description: '向指定活跃会话发起单播调用。根据目标状态自动选择 steer 运行中引导或 followup 空闲唤醒。支持呼叫类别（task_dispatch 派发/建议、task_report 汇报/交付、notice 单向通报）与公共黑板条目关联 context_post_ids。',
       isConcurrencySafe: true,
       parameters: {
         type: 'object',

@@ -114,7 +114,7 @@ dsh plugin --profile web remove dsh-call-session
 - `error`: string，可选。失败时的机器可读错误码。
 
 安全防护：
-- 工作区配额：每个工作区最多保持 10 个活跃根会话，超出拦截为 QuotaExceeded。
+- 并发运行配额：单工作区最多保持 5 个并发运行（running）会话，超出拦截为 QuotaExceeded。空闲（idle）会话不计入该配额。
 - 限频保护：单会话每分钟最多创建 5 次，超出拦截为 RateLimitExceeded。
 - 代际熔断：平级衍生代际深度硬限制为 2 代，超出拦截为 GenerationLimitExceeded。
 
@@ -122,14 +122,14 @@ dsh plugin --profile web remove dsh-call-session
 
 向目标会话发起单播调用。目标处于 `running` 状态时通过 `steer` 实时引导，处于 `idle` 状态时通过 `followup` 唤醒新轮次。
 
-传输层自动在正文顶部注入客观元数据报头（`[From: <callerSessionId> (<callerTitle>) | CallType: <callType>]`），原始正文 100% 逐字原样保留，零文本篡改，杜绝任何命令式业务说教。
+传输层在正文顶部注入客观元数据报头（`[From: <callerSessionId> (<callerTitle>) | CallType: <callType>]`），原始正文逐字保留，不追加命令式引导词。
 
 核心参数：
 - `target_session_id`: string，必填。目标会话 ID 或大于等于 8 位的唯一前缀。禁止使用 `*` 或 `all` 等通配符。
 - `message`: string，必填。指令或汇报文本，单次不超过 4000 字符。
 - `call_type`: string，可选。调用意图类别，默认为 `task_dispatch`：
-  - `task_dispatch`：任务派发或协作建议，接收方处理后按需通过 `task_report` 单次闭环答复；
-  - `task_report`：成果交付或最终汇报，标志当前任务收口，发起方查阅归档，禁止无实质客套回复；
+  - `task_dispatch`：任务派发或协作建议，接收方处理后按需通过 `task_report` 单次答复；
+  - `task_report`：成果交付或最终汇报，标志当前任务收口，发起方查阅归档，无须回复；
   - `notice`：单向状态通报，纯通知属性，阅后即止，无须回复。
 - `context_post_ids`: string[]，可选。引用的黑板条目 ID 列表，自动追加 `> Context Ref: #post-xxx` 引用行。
 
@@ -215,7 +215,7 @@ dsh plugin --profile web remove dsh-call-session
 
 在 DSH Web 会话视图顶部选项卡中提供看板，用于观察当前工作区的跨会话协作全景。
 
-- 呈现内容：工作区分组容器、`running` 与 `idle` 两态会话节点、黑板条目及其剩余生存期、跨会话调用连线。连线按 `task_dispatch`、`task_report`、`notice` 三类意图着色，随时间衰减。
+- 呈现内容：工作区分组列、`running` 与 `idle` 两态会话节点、黑板条目及其剩余生存期、跨会话调用连线。连线按 `task_dispatch`、`task_report`、`notice` 三类意图着色，随时间衰减。
 - 交互层级：悬停高亮 1-Hop 关联子图，双击展开 420px 只读详情抽屉，支持字段复制与 ESC 收起。
 - 只读边界：看板不提供任何修改、删除或触发呼叫的操作，全部状态变更由 Agent 自身产生。
 - 数据来源：宿主注册的只读路由 `GET /plugins/dsh-call-session/telemetry`，经 Connection 认证保护，仅接受 GET，响应不缓存。调用轨迹保存在有界内存环形缓冲区，默认容量 200 条，FIFO 淘汰，不落盘，宿主重启后瞬态连线清空。
@@ -225,7 +225,7 @@ dsh plugin --profile web remove dsh-call-session
 
 ## 配置
 
-插件包含默认配置，300ms 写入防抖、容量 200 条，安装后即可使用。
+插件按内置默认配置运行，无需依赖额外插件：300ms 写入防抖、容量 200 条。
 
 如需自定义，可在 `~/.dsh/profiles/web/cordis.patch.yml` 中追加属性覆盖：
 
@@ -239,7 +239,7 @@ dsh plugin --profile web remove dsh-call-session
 配置项：
 - `enabled`: boolean，默认 `true`。是否启用插件。
 - `debounceMs`: number，默认 `300`。黑板落盘防抖延迟，单位毫秒。
-- `maxCapacity`: number，默认 `200`。黑板条目容量上限，超出后先进先出淘汰。
+- `maxCapacity`: number，默认 `200`。黑板条目容量上限，超出后按状态感知策略淘汰（已过期 -> 已归档 -> 最旧条目）。
 - `telemetryCapacity`: number，默认 `200`，范围 10 到 2000。跨会话调用看板数据环形缓冲区容量上限，超出后先进先出淘汰。
 
 ## 对比
@@ -253,7 +253,7 @@ DSH 原生机制与本插件的定位及协作模型对比如下：
 
 ### 选型
 
-- 优先原生：单一独立封闭任务直接使用 DSH 内置的 `subagent`，生命周期由主会话管理，开箱即用无需依赖插件。
+- 优先原生：单一独立封闭任务直接使用 DSH 内置的 `subagent`，生命周期由主会话管理，无需依赖额外插件。
 - 按需选用：当存在多个并行运行的独立顶层会话，且会话间需要传递指令或借助黑板共享大文本上下文时，选用 `dsh-call-session`。
 
 ## 架构
@@ -272,13 +272,17 @@ DSH 原生机制与本插件的定位及协作模型对比如下：
 | [ADR-0008](./docs/adrs/0008-zero-pollution-global-profile-mounting.md) | Profile 切面挂载 | Accepted | 声明式挂载与生命周期纳管 |
 | [ADR-0009](./docs/adrs/0009-restrained-minimalist-docs-and-anti-ai-slop.md) | 克制文档与反AI堆料 | Accepted | 零Emoji、纯净减法与<=4字小标题 |
 | [ADR-0010](./docs/adrs/0010-dynamic-state-mirror-and-peer-session-lifecycle.md) | 动态状态镜像与同级会话 | Accepted | 纯状态幂等注入保护 KV Cache，同级会话配额与限频熔断 |
-| [ADR-0011](./docs/adrs/0011-board-list-token-governance-and-exact-retrieval.md) | 黑板 Token 治理 | Accepted | 默认标题摘要模式，按 id 精确点查智能分流 |
+| [ADR-0011](./docs/adrs/0011-board-list-token-governance-and-exact-retrieval.md) | 黑板 Token 治理 | Accepted | 默认标题摘要模式，按 id 精确点查分流 |
 | [ADR-0012](./docs/adrs/0012-visual-collaboration-canvas-and-in-memory-call-telemetry.md) | 协作看板与调用看板数据 | Accepted | 有界内存环形缓冲区、只读数据门面与原生看板视图 |
 | [ADR-0013](./docs/adrs/0013-human-canvas-global-transparency-vs-agent-workspace-isolation.md) | 人类观察者全局透视与 Agent 执行边界隔离 | Accepted | 人类协作看板默认跨工作区全局透视，Agent 执行工具严格保留工作区安全隔离 |
 | [ADR-0014](./docs/adrs/0014-canvas-gutter-routing-and-scoped-theme-parity.md) | 看板通道走线、链路聚焦与作用域主题 | Accepted | 外侧通道避障走线、焦点链路聚焦降噪与无污染深浅主题切换 |
-| [ADR-0015](./docs/adrs/0015-peer-session-model-and-preset-inheritance.md) | 同级会话模型与预设继承 | Accepted | 级联回退模型决策与调用方预设智能继承机制 |
-| [ADR-0016](./docs/adrs/0016-unified-parameter-naming-and-session-id-standard.md) | 统一参数命名与会话标识治理 | Accepted | 纯净零别名反污染规范，规范 sessionId 格式并安全废止历史别名 |
+| [ADR-0015](./docs/adrs/0015-peer-session-model-and-preset-inheritance.md) | 同级会话模型与预设继承 | Accepted | 级联回退模型决策与调用方预设继承机制 |
+| [ADR-0016](./docs/adrs/0016-unified-parameter-naming-and-session-id-standard.md) | 统一参数命名与会话标识治理 | Accepted | 规范参数命名与 sessionId 格式，废止历史别名 |
 | [ADR-0017](./docs/adrs/0017-peer-session-title-event-persistence-and-host-alignment.md) | 同级会话标题事件持久化与宿主对齐 | Accepted | 异步持久化 session/title 事件，返回 contextPostIds 上下文元数据 |
+| [ADR-0018](./docs/adrs/0018-canvas-motion-and-visual-restraint.md) | 看板动效与视觉克制规范 | Accepted | 动效降噪、低饱和动态流动与受限发光 |
+| [ADR-0019](./docs/adrs/0019-channel-split-routing-and-lineage-on-demand-focus.md) | 通道分流走线与按需聚焦 | Accepted | 双通道分流布线、按需链路聚焦与端口无冲突几何 |
+| [ADR-0020](./docs/adrs/0020-system-performance-specifications-and-resource-budgets.md) | 性能预算与基准约束 | Accepted | 各层硬性性能预算、事件循环保护与基准回归验证 |
+| [ADR-0021](./docs/adrs/0021-concurrent-running-quota-and-model-inheritance-alignment.md) | 运行中配额与模型继承 | Accepted | 单工作区 5 个 running 会话并发配额与派发模型继承 |
 
 ## 测试
 

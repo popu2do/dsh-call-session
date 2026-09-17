@@ -145,7 +145,7 @@ Exposing these raw, transient internal states to LLM subagents caused significan
 
 #### `session_query` Input Parameters (Model Layer, `snake_case`)
 - `query` (`string`): 搜索关键词，匹配 Session ID 或 Title。
-- `running_only` (`boolean`): 仅查询 running 状态会话。彻底废止 `active_only` 别名。
+- `running_only` (`boolean`): 仅查询 running 状态会话。废止 `active_only` 别名。
 - `cross_workspace` (`boolean`): 是否跨工作区查询会话。
 - `top_level_only` (`boolean`): 是否仅列出顶层会话。
 - `limit` (`integer`): 返回结果上限。
