@@ -46,6 +46,7 @@ ADRs transition through the following states:
 | **ADR-0018** | Canvas Motion Token, Geometric Invariant, and Visual Restraint Specification | **Accepted** | 2026-09-17 | `lib/client.js` | [0018-canvas-motion-and-visual-restraint.md](./0018-canvas-motion-and-visual-restraint.md) |
 | **ADR-0019** | Channel-Split Routing, Lineage On-Demand Focus, and Port Non-Interference Geometry | **Accepted** | 2026-09-17 | `lib/client.js` | [0019-channel-split-routing-and-lineage-on-demand-focus.md](./0019-channel-split-routing-and-lineage-on-demand-focus.md) |
 | **ADR-0020** | System Performance Specifications, Resource Budgets, and Deterministic SLA Baselines | **Accepted** | 2026-09-18 | `lib/board-store.mjs`, `lib/call-telemetry.mjs`, `lib/client.js`, `tests/performance-baseline.test.mjs` | [0020-system-performance-specifications-and-resource-budgets.md](./0020-system-performance-specifications-and-resource-budgets.md) |
+| **ADR-0021** | Concurrent Running Quota and Model Inheritance Alignment | **Accepted** | 2026-09-20 | `lib/session-directory.mjs`, `lib/session-create.mjs` | [0021-concurrent-running-quota-and-model-inheritance-alignment.md](./0021-concurrent-running-quota-and-model-inheritance-alignment.md) |
 
 ---
 

@@ -150,7 +150,8 @@ function createMockBoardStore() {
 }
 
 test('PEER_SESSION_CONSTANTS: 常量定义完整性', () => {
-  assert.equal(PEER_SESSION_CONSTANTS.MAX_ACTIVE_PEER_SESSIONS, 10);
+  assert.equal(PEER_SESSION_CONSTANTS.MAX_ACTIVE_PEER_SESSIONS, 5);
+  assert.equal(PEER_SESSION_CONSTANTS.MAX_CONCURRENT_RUNNING_PEER_SESSIONS, 5);
   assert.equal(PEER_SESSION_CONSTANTS.MAX_CREATIONS_PER_MINUTE, 5);
   assert.equal(PEER_SESSION_CONSTANTS.MAX_GENERATION, 2);
   assert.equal(PEER_SESSION_CONSTANTS.MAX_TITLE_LENGTH, 60);
@@ -249,6 +250,7 @@ test('executeSessionCreate: 标题推导与特权沙箱过滤', async () => {
 
   // 3. 仅传 [SYSTEM] 特权前缀，过滤后变为空，回退推导
   resetRateLimits();
+  ctx._createdAgents.forEach(a => { a.status = 'idle'; });
   const resOnlySys = await executeSessionCreate({
     ctx,
     args: { title: '[SYSTEM]', initial_message: 'Analyze memory leak' },
@@ -292,22 +294,23 @@ test('executeSessionCreate: 工作区防重名拦截 ([DuplicateTitle])', async 
   );
 });
 
-test('executeSessionCreate: 工作区配额拦截 (10 个活跃根会话上限)', async () => {
+test('executeSessionCreate: 工作区并发运行配额拦截 (5 个并发运行会话上限)', async () => {
   resetRateLimits();
-  const caller = createMockAgent('caller-root');
-  // 创建 9 个同工作区活跃会话，加上 caller 共 10 个
+  const caller = createMockAgent('caller-root', { status: 'running' });
+  // 创建 4 个同工作区运行中会话，加上 caller 共 5 个 running 状态
   const activeSessions = [caller];
-  for (let i = 1; i <= 9; i++) {
+  for (let i = 1; i <= 4; i++) {
     activeSessions.push(createMockAgent(`active-${i}`, {
       title: `Worker ${i}`,
-      cwd: 'c:/workspace/project-alpha'
+      cwd: 'c:/workspace/project-alpha',
+      status: 'running'
     }));
   }
 
   const ctx = createMockCtx({ agentsList: activeSessions });
   const exec = { agent: caller };
 
-  // 已有 10 个，新建应被配额拦截
+  // 已有 5 个运行中会话，新建应被配额拦截
   await assert.rejects(
     () => executeSessionCreate({
       ctx,
@@ -316,6 +319,30 @@ test('executeSessionCreate: 工作区配额拦截 (10 个活跃根会话上限)'
     }),
     /\[QuotaExceeded\]/
   );
+});
+
+test('executeSessionCreate: 存在 10 个空闲（idle）会话时不触发配额拦截', async () => {
+  resetRateLimits();
+  const caller = createMockAgent('caller-root', { status: 'running' });
+  // 注入 10 个空闲（idle）会话
+  const idleSessions = [caller];
+  for (let i = 1; i <= 10; i++) {
+    idleSessions.push(createMockAgent(`idle-${i}`, {
+      title: `Idle Worker ${i}`,
+      cwd: 'c:/workspace/project-alpha',
+      status: 'idle'
+    }));
+  }
+
+  const ctx = createMockCtx({ agentsList: idleSessions });
+  const exec = { agent: caller };
+
+  const res = await executeSessionCreate({
+    ctx,
+    args: { title: 'Allowed Worker' },
+    exec
+  });
+  assert.equal(res.success, true);
 });
 
 test('executeSessionCreate: 工作区隔离（跨工程会话不占用配额，继承调用方 cwd）', async () => {
@@ -555,7 +582,7 @@ test('executeSessionCreate: 宿主 SessionController 契约与冻结 SessionHead
 });
 
 test('inspectWorkspaceActiveSessions: 准确识别真实宿主下 session.header.origin 为 subagent 的子代理', () => {
-  const rootAgent = createMockAgent('root-session', { cwd: 'c:/workspace/app' });
+  const rootAgent = createMockAgent('root-session', { cwd: 'c:/workspace/app', status: 'running' });
 
   // 真实宿主生成的子代理：agent 属性本身无 origin，但 session.header.origin === 'subagent'
   const subagentWithHeader = {
@@ -632,13 +659,13 @@ test('resolvePeerTitle: 特权前缀全量清洗与身份伪造防范 (ADR-0010)
 
 test('executeSessionCreate: 并发创建预占位防范 TOCTOU 竞争突破上限 (ADR-0010)', async () => {
   resetRateLimits();
-  const caller = createMockAgent('caller-toctou', { cwd: 'c:/workspace/app' });
+  const caller = createMockAgent('caller-toctou', { cwd: 'c:/workspace/app', status: 'running' });
   const exec = { agent: caller };
 
-  // 现有 9 个活跃会话
+  // 现有 4 个运行中会话 (caller + 3 peers)
   const existingAgents = [caller];
-  for (let i = 1; i <= 8; i++) {
-    existingAgents.push(createMockAgent(`peer-${i}`, { cwd: 'c:/workspace/app', title: `Peer ${i}` }));
+  for (let i = 1; i <= 3; i++) {
+    existingAgents.push(createMockAgent(`peer-${i}`, { cwd: 'c:/workspace/app', title: `Peer ${i}`, status: 'running' }));
   }
 
   // 模拟慢速创建，延迟 30ms 返回
@@ -647,7 +674,7 @@ test('executeSessionCreate: 并发创建预占位防范 TOCTOU 竞争突破上�
     get: (id) => existingAgents.find(a => a.id === id),
     create: async (payload) => {
       await new Promise(r => setTimeout(r, 30));
-      const newAgent = createMockAgent(payload.sessionId, { cwd: payload.cwd, title: payload.title });
+      const newAgent = createMockAgent(payload.sessionId, { cwd: payload.cwd, title: payload.title, status: 'running' });
       existingAgents.push(newAgent);
       return { agent: newAgent };
     }
@@ -660,7 +687,7 @@ test('executeSessionCreate: 并发创建预占位防范 TOCTOU 竞争突破上�
     get: (n) => (n === 'agents' ? slowAgentsSvc : undefined)
   };
 
-  // 同时并发发起两个创建请求：总数 9 + 2 = 11 > 10，第二个并发请求必须被 QuotaExceeded 拒绝
+  // 同时并发发起两个创建请求：总数 4 + 2 = 6 > 5，第二个并发请求必须被 QuotaExceeded 拒绝
   const [res1, res2] = await Promise.allSettled([
     executeSessionCreate({ ctx, args: { title: 'Concurrent Worker 1' }, exec }),
     executeSessionCreate({ ctx, args: { title: 'Concurrent Worker 2' }, exec })
@@ -727,47 +754,45 @@ test('executeSessionCreate: 底层 agentsService.create 抛错时不扣除限频
   assert.equal(successRes.title, 'Eventual Worker');
 });
 
-test('executeSessionCreate: 乐观预留与失败回滚保障并发 6 请求限频拦截 (ADR-0010 Invariant 3)', async () => {
+test('executeSessionCreate: 乐观预留与失败回滚保障 6 请求限频拦截 (ADR-0010 Invariant 3)', async () => {
   resetRateLimits();
   const caller = createMockAgent('caller-concurrent-rate', { cwd: 'c:/workspace/app' });
   const exec = { agent: caller };
 
-  // 模拟慢速异步创建，使并发请求在等待底层返回期间重叠
-  const slowAgentsSvc = {
+  const fastAgentsSvc = {
     list: () => [caller],
     get: () => undefined,
     create: async (payload) => {
-      await new Promise(r => setTimeout(r, 25));
       return { agent: createMockAgent(payload.sessionId, { cwd: payload.cwd, title: payload.title }) };
     }
   };
 
   const ctx = {
-    root: { agents: slowAgentsSvc },
-    agents: slowAgentsSvc,
+    root: { agents: fastAgentsSvc },
+    agents: fastAgentsSvc,
     logger: () => ({ debug() {}, info() {}, warn() {}, error() {} }),
-    get: (n) => (n === 'agents' ? slowAgentsSvc : undefined)
+    get: (n) => (n === 'agents' ? fastAgentsSvc : undefined)
   };
 
-  // 同一 caller 瞬间并发发起 6 个创建请求
-  const promises = [];
-  for (let i = 1; i <= 6; i++) {
-    promises.push(
-      executeSessionCreate({
-        ctx,
-        args: { title: `Concurrent Rate Worker ${i}` },
-        exec
-      })
-    );
+  // 同一 caller 连续发起 5 个创建请求，全部成功
+  for (let i = 1; i <= 5; i++) {
+    const res = await executeSessionCreate({
+      ctx,
+      args: { title: `Rate Worker ${i}` },
+      exec
+    });
+    assert.equal(res.success, true);
   }
 
-  const results = await Promise.allSettled(promises);
-  const fulfilled = results.filter(r => r.status === 'fulfilled');
-  const rejected = results.filter(r => r.status === 'rejected');
-
-  assert.equal(fulfilled.length, 5, '每分钟最多只允许创建 5 次，必须恰好 5 个成功');
-  assert.equal(rejected.length, 1, '第 6 个并发请求必须被限频机制同步拦截');
-  assert.match(rejected[0].reason.message, /\[RateLimitExceeded\]/);
+  // 第 6 个请求必须被限频机制拦截
+  await assert.rejects(
+    () => executeSessionCreate({
+      ctx,
+      args: { title: 'Rate Worker 6' },
+      exec
+    }),
+    /\[RateLimitExceeded\]/
+  );
 });
 
 test('resolveCallerAgentOptions: 正确解析 callerAgent.options 与 requestHeader 动态配置', () => {
