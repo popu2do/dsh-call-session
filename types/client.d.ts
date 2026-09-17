@@ -80,7 +80,7 @@ export interface CallEdgeDecayResult {
 }
 
 /**
- * 计算两个拓扑节点之间的贝塞尔平滑曲线路径
+ * 计算两个拓扑节点之间的贝塞尔平滑曲线路径 (ADR-0019 通道分流走线，同列上下行双通道隔离)
  */
 export declare function calculateBezierPath(
   x1: number,

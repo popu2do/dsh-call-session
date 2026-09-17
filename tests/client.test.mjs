@@ -798,20 +798,20 @@ test('Topology Visual Layout Engine: Blackboard strip, side-by-side swimlanes, a
   // 3. 工作区列内单列 session 坐标断言 (Single-column vertical centered session nodes)
   // Lane Alpha: cx = 40 + 130 = 170
   assert.equal(layout.nodePositions['s1'].x, 170, 's1 cx must be centered in swimlane at 170');
-  assert.equal(layout.nodePositions['s1'].y, 214, 's1 cy must start at 214');
+  assert.equal(layout.nodePositions['s1'].y, 240, 's1 cy must start at 240');
 
   assert.equal(layout.nodePositions['s2'].x, 170, 's2 cx must stay in single column at 170');
-  assert.equal(layout.nodePositions['s2'].y, 214 + 72, 's2 cy must be 214 + 72 = 286');
+  assert.equal(layout.nodePositions['s2'].y, 240 + 72, 's2 cy must be 240 + 72 = 312');
 
   assert.equal(layout.nodePositions['s3'].x, 170, 's3 cx must stay in single column at 170');
-  assert.equal(layout.nodePositions['s3'].y, 214 + 2 * 72, 's3 cy must be 214 + 144 = 358');
+  assert.equal(layout.nodePositions['s3'].y, 240 + 2 * 72, 's3 cy must be 240 + 144 = 384');
 
   // Lane Beta: cx = 336 + 130 = 466
   assert.equal(layout.nodePositions['s4'].x, 466, 's4 cx must be centered in swimlane at 466');
-  assert.equal(layout.nodePositions['s4'].y, 214, 's4 cy must start at 214');
+  assert.equal(layout.nodePositions['s4'].y, 240, 's4 cy must start at 240');
 
   assert.equal(layout.nodePositions['s5'].x, 466, 's5 cx must stay in single column at 466');
-  assert.equal(layout.nodePositions['s5'].y, 286, 's5 cy must be 286');
+  assert.equal(layout.nodePositions['s5'].y, 312, 's5 cy must be 312');
 
   // 单列纵向居中不变式：同工作区列内的全部会话 x 坐标必须严格相同
   const alphaXSet = new Set(['s1', 's2', 's3'].map(id => layout.nodePositions[id].x));
@@ -960,7 +960,7 @@ test('Three Relationship Edge Classes: Edge generation and boundary tolerance (m
   // 断言：仅为有合法 authorSessionId 且目标会话存在的条目生成边
   assert.equal(validAuthorPaths.length, 1, '仅生成 1 条合法的 session->post 归属边');
   assert.equal(validAuthorPaths[0].props.key, 'author-s1->post-valid');
-  assert.ok(validAuthorPaths[0].props.d.startsWith('M 266.0 214.0 C '), '归属边必须从 session 右侧边界 (170+96=266, 214) 发起并使用三次贝塞尔走外侧通道');
+  assert.ok(validAuthorPaths[0].props.d.startsWith('M 266.0 240.0 C '), '归属边必须从 session 右侧边界 (170+96=266, 240) 发起并使用三次贝塞尔走外侧通道');
   assert.ok(validAuthorPaths[0].props.d.includes(' 146.0 100.0'), '归属边终点连接至 post 下边界 (56+90=146, 52+48=100)');
   assert.equal(validAuthorPaths[0].props.stroke, '#64748b', '归属边默认描边颜色为 #64748b');
   assert.equal(validAuthorPaths[0].props.strokeWidth, '1.2', '归属边默认线宽必须提升至 1.2px');
@@ -2874,41 +2874,54 @@ test('工作区列在 1 列、2 列、3 列不同规模下的包围盒边界与 
   assert.equal(layout3.workspaceBounds[2].x, layout3Populated.workspaceBounds[2].x, '工作区列坐标不受黑板条目增减影响');
 });
 
-test('ADR-0014 拓扑外侧通道走线与右出左进几何规约', () => {
+test('ADR-0014 & ADR-0019 拓扑通道分流走线与上下行解耦几何规约', () => {
   const plugin = loadClientBundle();
   const { calculateBezierPath } = plugin;
 
-  // 1. 同工作区列上下调用：右出左进外侧绕行（相邻节点 dy=72）
-  const intraColPath = calculateBezierPath(170, 214, 170, 286, 0, 1);
-  assert.ok(intraColPath.startsWith('M '), '同列调用必须以 M 起点开始');
-  assert.ok(intraColPath.includes(' C '), '同列调用必须使用三次贝塞尔');
-  const mMatchIntra = intraColPath.match(/^M\s+([-\d.]+)\s+([-\d.]+)\s+C\s+([-\d.]+)\s+([-\d.]+),\s+([-\d.]+)\s+([-\d.]+),\s+([-\d.]+)\s+([-\d.]+)/);
-  assert.ok(mMatchIntra, '同列调用正则匹配合规三次贝塞尔');
-  const startX = parseFloat(mMatchIntra[1]);
-  const c1x = parseFloat(mMatchIntra[3]);
-  const c2x = parseFloat(mMatchIntra[5]);
-  const endX = parseFloat(mMatchIntra[7]);
-  // 右出左进断言
-  assert.ok(startX > 170, '起点必须位于节点右侧 (startX > 170)');
-  assert.ok(c1x > 170 + 96 && c1x <= 170 + 130, '第一控制点必须严格在右走线通道内 (266 < c1x <= 300)');
-  assert.ok(endX < 170, '终点必须进入目标左侧 (endX < 170)');
-  assert.ok(c2x < 170 - 96 && c2x >= 170 - 130, '第二控制点必须严格在左走线通道内 (40 <= c2x < 74)');
+  // 1. 同工作区列向下调用：右出右进（相邻节点 dy=72 > 0），走右侧通道，零横切中轴
+  const intraColDownPath = calculateBezierPath(170, 214, 170, 286, 0, 1);
+  assert.ok(intraColDownPath.startsWith('M '), '同列向下调用必须以 M 起点开始');
+  assert.ok(intraColDownPath.includes(' C '), '同列向下调用必须使用三次贝塞尔');
+  const mMatchDown = intraColDownPath.match(/^M\s+([-\d.]+)\s+([-\d.]+)\s+C\s+([-\d.]+)\s+([-\d.]+),\s+([-\d.]+)\s+([-\d.]+),\s+([-\d.]+)\s+([-\d.]+)/);
+  assert.ok(mMatchDown, '同列向下调用正则匹配合规三次贝塞尔');
+  const downStartX = parseFloat(mMatchDown[1]);
+  const downC1x = parseFloat(mMatchDown[3]);
+  const downC2x = parseFloat(mMatchDown[5]);
+  const downEndX = parseFloat(mMatchDown[7]);
+  // 右出右进断言（零横切中轴）
+  assert.ok(downStartX > 170, '向下起点必须位于节点右侧 (downStartX > 170)');
+  assert.ok(downC1x > 170 + 96 && downC1x <= 170 + 126, '向下第一控制点必须严格在右走线通道内 (266 < c1x <= 296)');
+  assert.ok(downC2x > 170 + 96 && downC2x <= 170 + 126, '向下第二控制点必须严格在右走线通道内 (266 < c2x <= 296)');
+  assert.ok(downEndX > 170, '向下终点必须自目标右侧接入 (downEndX > 170，右出右进)');
 
-  // 1.1 同工作区列上下调用：跨层非相邻节点（dy=144 > 80）两段式避障通道走线
+  // 1.1 同工作区列向上调用：左出左进（相邻节点 dy=-72 < 0），走左侧通道，零横切中轴
+  const intraColUpPath = calculateBezierPath(170, 286, 170, 214, 0, 1);
+  assert.ok(intraColUpPath.startsWith('M '), '同列向上调用必须以 M 起点开始');
+  assert.ok(intraColUpPath.includes(' C '), '同列向上调用必须使用三次贝塞尔');
+  const mMatchUp = intraColUpPath.match(/^M\s+([-\d.]+)\s+([-\d.]+)\s+C\s+([-\d.]+)\s+([-\d.]+),\s+([-\d.]+)\s+([-\d.]+),\s+([-\d.]+)\s+([-\d.]+)/);
+  assert.ok(mMatchUp, '同列向上调用正则匹配合规三次贝塞尔');
+  const upStartX = parseFloat(mMatchUp[1]);
+  const upC1x = parseFloat(mMatchUp[3]);
+  const upC2x = parseFloat(mMatchUp[5]);
+  const upEndX = parseFloat(mMatchUp[7]);
+  // 左出左进断言（零横切中轴）
+  assert.ok(upStartX < 170, '向上起点必须位于节点左侧 (upStartX < 170)');
+  assert.ok(upC1x < 170 - 96 && upC1x >= 170 - 126, '向上第一控制点必须严格在左走线通道内 (44 <= c1x < 74)');
+  assert.ok(upC2x < 170 - 96 && upC2x >= 170 - 126, '向上第二控制点必须严格在左走线通道内 (44 <= c2x < 74)');
+  assert.ok(upEndX < 170, '向上终点必须自目标左侧接入 (upEndX < 170，左出左进)');
+
+  // 1.2 同工作区列跨层非相邻向下调用（dy=144 > 80）：同心跳数外扩嵌套，严格钳位在列宽内
   const intraNonAdjPath = calculateBezierPath(170, 214, 170, 358, 0, 1);
   assert.ok(intraNonAdjPath.startsWith('M '), '跨层调用必须以 M 起点开始');
-  const cMatches = [...intraNonAdjPath.matchAll(/C\s+([-\d.]+)\s+([-\d.]+),\s+([-\d.]+)\s+([-\d.]+),\s+([-\d.]+)\s+([-\d.]+)/g)];
-  assert.equal(cMatches.length, 2, '跨层非相邻调用必须生成两段式贝塞尔以避开中间卡片');
-  const mStart = intraNonAdjPath.match(/^M\s+([-\d.]+)\s+([-\d.]+)/);
-  assert.ok(parseFloat(mStart[1]) > 170, '跨层起点严格位于节点右侧');
-  const seg1C1x = parseFloat(cMatches[0][1]);
-  const seg1End = parseFloat(cMatches[0][5]);
-  assert.ok(seg1C1x > 170 + 96 && seg1C1x <= 170 + 130, '第一段第一控制点严格在右走线通道内');
-  assert.ok(seg1End > 170 + 96 && seg1End <= 170 + 130, '第一段终点保持在右走线通道内（避开中间节点）');
-  const seg2C2x = parseFloat(cMatches[1][3]);
-  const seg2End = parseFloat(cMatches[1][5]);
-  assert.ok(seg2C2x < 170 - 96 && seg2C2x >= 170 - 130, '第二段第二控制点严格在左走线通道内');
-  assert.ok(seg2End < 170, '跨层终点严格自目标左侧接入');
+  const mMatchNonAdj = intraNonAdjPath.match(/^M\s+([-\d.]+)\s+([-\d.]+)\s+C\s+([-\d.]+)\s+([-\d.]+),\s+([-\d.]+)\s+([-\d.]+),\s+([-\d.]+)\s+([-\d.]+)/);
+  assert.ok(mMatchNonAdj, '跨层调用生成合规三次贝塞尔');
+  const nonAdjStartX = parseFloat(mMatchNonAdj[1]);
+  const nonAdjC1x = parseFloat(mMatchNonAdj[3]);
+  const nonAdjEndX = parseFloat(mMatchNonAdj[7]);
+  assert.ok(nonAdjStartX > 170, '跨层向下起点严格位于节点右侧');
+  assert.ok(nonAdjC1x > downC1x, '跨层调用第一控制点外扩半径大于相邻调用（同心嵌套）');
+  assert.ok(nonAdjC1x <= 170 + 126, '跨层第一控制点严格限制在列宽边界内 (<= 296)');
+  assert.ok(nonAdjEndX > 170, '跨层向下终点严格自目标右侧接入');
 
   // 2. 正向跨工作区调用 (从左向右)：右出左进平滑贝塞尔
   const crossForwardPath = calculateBezierPath(170, 214, 466, 214, 0, 1);
@@ -3117,5 +3130,312 @@ test('Spec 002 & ADR-0014: 宿主主题接口缺失时主题切换严格作用�
   themeBtn.props.onClick();
   assert.equal(docAttribute, null, '宿主接口缺失时绝不向外部 document.body 写入属性，保持严格作用域隔离');
 });
+
+test('画布视口防裁切：.dsh-canvas-surface 显式声明 overflow: visible 防变换硬切', () => {
+  const clientPath = path.join(rootDir, 'lib', 'client.js');
+  const code = fs.readFileSync(clientPath, 'utf8');
+  const surfaceRuleMatch = code.match(/\.dsh-canvas-surface\s*\{([^}]*)\}/);
+  assert.ok(surfaceRuleMatch, '.dsh-canvas-surface 样式规则必须存在');
+  const surfaceStyles = surfaceRuleMatch[1];
+  assert.ok(
+    surfaceStyles.includes('overflow: visible') || surfaceStyles.includes('overflow:visible'),
+    '.dsh-canvas-surface 必须显式声明 overflow: visible，防止浏览器对 scale/translate3d 的 SVG 内容进行 100% 矩形视口硬裁切'
+  );
+});
+
+test('黑板栏防膨胀规约 (PRD §3.2)：大量历史过期条目下宽度不超标且活跃项优先置首', () => {
+  const plugin = loadClientBundle();
+  const { computeLayout } = plugin;
+
+  const sessions = Array.from({ length: 11 }, (_, i) => ({
+    id: 's-' + i,
+    workspace: '/ws/main',
+    state: 'idle'
+  }));
+
+  // 35 条已过期条目 + 2 条活跃条目（模拟真实黑板历史累积）
+  const posts = [
+    ...Array.from({ length: 35 }, (_, i) => ({
+      id: 'expired-' + i,
+      topic: 'sync:task-' + i,
+      status: 'expired',
+      createdAt: 1000 + i
+    })),
+    { id: 'active-1', topic: 'sync:urgent-1', status: 'active', createdAt: 5000 },
+    { id: 'active-2', topic: 'sync:urgent-2', status: 'active', createdAt: 6000 }
+  ];
+
+  const layout = computeLayout(
+    [{ id: '/ws/main', name: 'main', isCurrent: true }],
+    sessions,
+    posts,
+    '/ws/main',
+    false
+  );
+
+  // 1. 黑板宽度严格遵循 PRD §3.2 公式：单工作区为 1080px，严禁线性膨胀至 7000+ px
+  assert.equal(
+    layout.blackboardBound.width,
+    1080,
+    '单工作区黑板栏宽度必须严格遵循 PRD §3.2 的 1080px 规约，严禁被历史过期条目撑爆'
+  );
+
+  // 2. 活跃条目优先排布：2 条 active 条目必须被赋予可视坐标，且排在最前
+  assert.ok(layout.postPositions['active-1'], '活跃条目 active-1 必须成功分配可视坐标');
+  assert.ok(layout.postPositions['active-2'], '活跃条目 active-2 必须成功分配可视坐标');
+  assert.equal(layout.postPositions['active-2'].x, 56, '最新活跃条目必须排在黑板第 1 位 (x=56)');
+  assert.equal(layout.postPositions['active-1'].x, 56 + 196, '次新活跃条目排在第 2 位 (x=252)');
+
+  // 3. 超出黑板容量的条目不分配越界坐标（防止连线穿向 7000px 虚空）
+  const visiblePositions = Object.values(layout.postPositions);
+  assert.ok(
+    visiblePositions.length <= 5,
+    `1080px 黑板栏内仅容纳不多于 5 张卡片，实际分配 ${visiblePositions.length} 张`
+  );
+  for (const pos of visiblePositions) {
+    assert.ok(
+      pos.x + pos.width <= layout.blackboardBound.x + layout.blackboardBound.width,
+      `卡片右边界 (${pos.x + pos.width}) 严禁超出黑板边界 (${layout.blackboardBound.x + layout.blackboardBound.width})`
+    );
+  }
+});
+
+test('通道走线防塌陷与槽位离散 (ADR-0014)：多条黑板连线右侧通道离散走线杜绝单点重叠', () => {
+  const sessions = [
+    { id: 's1', workspace: '/ws/main', state: 'idle' },
+    { id: 's2', workspace: '/ws/main', state: 'idle' }
+  ];
+
+  // 同一会话发布 4 条黑板条目
+  const posts = [
+    { id: 'p-0', topic: 'task-0', status: 'active', authorSessionId: 's1', createdAt: 4000 },
+    { id: 'p-1', topic: 'task-1', status: 'active', authorSessionId: 's1', createdAt: 3000 },
+    { id: 'p-2', topic: 'task-2', status: 'active', authorSessionId: 's1', createdAt: 2000 },
+    { id: 'p-3', topic: 'task-3', status: 'active', authorSessionId: 's1', createdAt: 1000 }
+  ];
+
+  const mockTelemetry = {
+    metrics: { runningSessions: 0, totalSessions: 2, activeCalls: 0, totalPosts: 4 },
+    workspaces: [{ id: '/ws/main', name: 'main', isCurrent: true, sessionIds: ['s1', 's2'] }],
+    sessions,
+    posts,
+    calls: []
+  };
+
+  const mockReact = {
+    useState: (initial) => {
+      if (initial && typeof initial === 'object' && 'sessions' in initial) {
+        return [mockTelemetry, () => {}];
+      }
+      return [initial, () => {}];
+    },
+    useRef: (initial) => ({ current: initial }),
+    useEffect: () => {},
+    useCallback: (fn) => fn,
+    useMemo: (fn) => fn(),
+    createElement: (type, props, ...children) => ({ type, props: props || {}, children })
+  };
+
+  const clientPath = path.join(rootDir, 'lib', 'client.js');
+  const code = fs.readFileSync(clientPath, 'utf8');
+  let registration = null;
+  const sandbox = {
+    window: { __ModuleLoader__: { load: (p) => { registration = p; } } },
+    document: { getElementById: () => null, createElement: () => ({ id: '', textContent: '' }), head: { appendChild: () => {} } },
+    console, Date, Set, Map, Array, Object, String, Math, JSON, URLSearchParams,
+    setInterval, clearInterval, setTimeout, clearTimeout
+  };
+  vm.createContext(sandbox);
+  vm.runInContext(code, sandbox);
+  const plugin = registration.factory((name) => name === 'react' ? mockReact : null);
+
+  const view = plugin.CanvasView({ sessionId: 's1', t: (k) => k });
+
+  function findNodeById(node, id) {
+    if (!node || typeof node !== 'object') return null;
+    if (node.props && node.props.id === id) return node;
+    if (Array.isArray(node.children)) {
+      for (const child of node.children) {
+        const found = findNodeById(child, id);
+        if (found) return found;
+      }
+    }
+    return null;
+  }
+
+  const authorEdgesGroup = findNodeById(view, 'dsh-canvas-author-edges');
+  assert.ok(authorEdgesGroup, 'authorEdgesGroup 必须存在');
+  const validAuthorPaths = authorEdgesGroup.children.filter(Boolean);
+  assert.equal(validAuthorPaths.length, 4, '必须生成 4 条发布归属边');
+
+  // 提取每条边的通道过渡坐标 (gutterX, gutterY)
+  const gutterPoints = new Set();
+  for (const p of validAuthorPaths) {
+    const d = p.props.d;
+    const m = d.match(/C\s+([-\d.]+)\s+([-\d.]+),\s+([-\d.]+)\s+([-\d.]+),\s+([-\d.]+)\s+([-\d.]+)/);
+    assert.ok(m, '边路径必须匹配合规两段式贝塞尔');
+    gutterPoints.add(m[5] + ',' + m[6]);
+  }
+
+  // 关键断言：多条连线严禁全部塌陷在单一的 (288.0, 130.0) 坐标点上
+  assert.ok(
+    gutterPoints.size > 1,
+    `多条归属边在右侧通道内必须离散分布（当前检测到 ${gutterPoints.size} 个通道点: ${[...gutterPoints].join('; ')}），杜绝单点乱麻重叠`
+  );
+});
+
+test('多会话工作区纵向自适应居中 (PRD §8.2)：11会话工作区底端安全容纳在视口内', () => {
+  const plugin = loadClientBundle();
+  const { computeLayout } = plugin;
+
+  const sessions = Array.from({ length: 11 }, (_, i) => ({
+    id: 's-' + i,
+    workspace: '/ws/main',
+    state: 'idle'
+  }));
+
+  const layout = computeLayout(
+    [{ id: '/ws/main', name: 'main', isCurrent: true }],
+    sessions,
+    [],
+    '/ws/main',
+    false
+  );
+
+  const ws = layout.workspaceBounds[0];
+  const lastSession = layout.nodePositions['s-10'];
+
+  // 视口尺寸设为标准 1000 x 700 (可用高度 700 - 44 顶栏 = 656)
+  const vw = 1000;
+  const vh = 656;
+  const padding = 48;
+  const availH = vh - padding * 2;
+
+  // 自适应全景缩放计算
+  const contentW = layout.blackboardBound.width;
+  const contentH = (ws.y + ws.height) - layout.blackboardBound.y;
+  const fitZoom = Math.min(Math.max(Math.min((vw - padding * 2) / contentW, availH / contentH), 0.30), 1.20);
+  const fitPanY = (vh - contentH * fitZoom) / 2 - layout.blackboardBound.y * fitZoom;
+
+  // 验证在自适应居中下，工作区底端与最后一个会话完全容纳在可视高度内
+  const wsBottomScreenY = (ws.y + ws.height) * fitZoom + fitPanY;
+  const lastSessionBottomScreenY = (lastSession.y + 26) * fitZoom + fitPanY;
+
+  assert.ok(
+    wsBottomScreenY <= vh - 20,
+    `工作区底端屏幕位置 (${wsBottomScreenY.toFixed(1)}px) 必须在视口高度 (${vh}px) 安全边距内`
+  );
+  assert.ok(
+    lastSessionBottomScreenY <= vh - 20,
+    `第 11 个会话底端 (${lastSessionBottomScreenY.toFixed(1)}px) 必须完全可见且不被截断`
+  );
+});
+
+test('ADR-0019 常态按需显影与历史调用连线抑制测试', () => {
+  const now = Date.now();
+  const mockTelemetry = {
+    workspaces: [{ id: '/ws/1', name: 'main', isCurrent: true }],
+    sessions: [
+      { id: 's1', workspace: '/ws/1', title: 'Agent 1', status: 'idle', state: 'idle' },
+      { id: 's2', workspace: '/ws/1', title: 'Agent 2', status: 'idle', state: 'idle' }
+    ],
+    posts: [],
+    calls: [
+      // 活跃调用 (5s 内)：常态下必须渲染
+      { id: 'call-fresh', callerSessionId: 's1', targetSessionId: 's2', callType: 'task_dispatch', timestamp: now - 5000, status: 'active' },
+      // 已结算调用：常态下必须完全抑制（返回 null），杜绝大盘蜘蛛网
+      { id: 'call-settled', callerSessionId: 's1', targetSessionId: 's2', callType: 'task_report', timestamp: now - 3000, status: 'settled' },
+      // 历史过期调用 (>15s)：常态下必须完全抑制（返回 null）
+      { id: 'call-historical', callerSessionId: 's1', targetSessionId: 's2', callType: 'notice', timestamp: now - 20000, status: 'active' }
+    ],
+    metrics: { totalSessions: 2, runningSessions: 0, activeCalls: 1, totalPosts: 0 }
+  };
+
+  const mockReact = {
+    useState: (initial) => {
+      if (initial && typeof initial === 'object' && 'sessions' in initial) {
+        return [mockTelemetry, () => {}];
+      }
+      return [initial, () => {}];
+    },
+    useRef: (initial) => ({ current: initial }),
+    useEffect: () => {},
+    createElement: (type, props, ...children) => ({ type, props: props || {}, children })
+  };
+
+  const plugin = loadClientBundle((name) => name === 'react' ? mockReact : null);
+  const view = plugin.CanvasView({ sessionId: 's1', t: (k) => k });
+
+  function findNodeById(node, id) {
+    if (!node || typeof node !== 'object') return null;
+    if (node.props && node.props.id === id) return node;
+    if (Array.isArray(node.children)) {
+      for (const child of node.children) {
+        const found = findNodeById(child, id);
+        if (found) return found;
+      }
+    }
+    return null;
+  }
+
+  const callEdgesGroup = findNodeById(view, 'dsh-canvas-call-edges');
+  assert.ok(callEdgesGroup, 'dsh-canvas-call-edges 容器必须存在');
+
+  const renderedEdges = callEdgesGroup.children.filter(Boolean);
+  assert.equal(renderedEdges.length, 1, '常态下仅渲染 1 条活跃新鲜调用边');
+  assert.equal(renderedEdges[0].props.key, 'call-fresh', '常态下渲染的边必须为活跃新鲜调用');
+});
+
+test('ADR-0019 超轻量单行胶囊 Tooltip 结构与尺寸测试', () => {
+  const mockTelemetry = {
+    workspaces: [{ id: '/ws/1', name: 'main', isCurrent: true }],
+    sessions: [
+      { id: 's1', workspace: '/ws/1', title: 'Agent Worker', status: 'running', state: 'running' }
+    ],
+    posts: [],
+    calls: [],
+    metrics: { totalSessions: 1, runningSessions: 1, activeCalls: 0, totalPosts: 0 }
+  };
+
+  function findVNodes(node, predicate) {
+    const results = [];
+    if (!node || typeof node !== 'object') return results;
+    if (predicate(node)) results.push(node);
+    if (Array.isArray(node.children)) {
+      for (const child of node.children) {
+        results.push(...findVNodes(child, predicate));
+      }
+    }
+    return results;
+  }
+
+  let hookCounter = 0;
+  const mockReact = {
+    useState: (initial) => {
+      hookCounter++;
+      // 1: telemetry, 2: selectedEntity, 3: focusedEntity, 4: hoveredEntity
+      if (hookCounter === 1) return [mockTelemetry, () => {}];
+      if (hookCounter === 4) return [{ kind: 'session', id: 's1', entity: mockTelemetry.sessions[0], x: 200, y: 200 }, () => {}];
+      return [initial, () => {}];
+    },
+    useRef: (initial) => ({ current: initial }),
+    useEffect: () => {},
+    createElement: (type, props, ...children) => ({ type, props: props || {}, children })
+  };
+
+  const plugin = loadClientBundle((name) => name === 'react' ? mockReact : null);
+  const view = plugin.CanvasView({ sessionId: 's1', t: (k) => k });
+
+  const tooltipNode = findVNodes(view, (n) => n && n.props && n.props.className === 'dsh-canvas-tooltip')[0];
+  assert.ok(tooltipNode, '必须渲染 Session Tooltip');
+  assert.equal(tooltipNode.props.style.height, '26px', 'Tooltip 胶囊高度严格为 26px (<= 28px)');
+  assert.equal(tooltipNode.props.style.display, 'inline-flex', 'Tooltip 采用 inline-flex 单行布局');
+
+  const dotNode = findVNodes(tooltipNode, (n) => n && n.props && n.props.className === 'dsh-canvas-capsule-dot')[0];
+  assert.ok(dotNode, '胶囊必须包含状态圆点');
+  assert.equal(dotNode.props.style.backgroundColor, '#22c55e', '运行中状态圆点颜色为绿色 #22c55e');
+});
+
+
 
 
