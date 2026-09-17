@@ -657,7 +657,7 @@ test('resolvePeerTitle: 特权前缀全量清洗与身份伪造防范 (ADR-0010)
   assert.equal(resolvePeerTitle({ title: '[ROOT] superuser' }), 'superuser');
 });
 
-test('executeSessionCreate: 并发创建预占位防范 TOCTOU 竞争突破上限 (ADR-0010)', async () => {
+test('executeSessionCreate: 在途创建登记防范并发请求突破上限 (ADR-0010)', async () => {
   resetRateLimits();
   const caller = createMockAgent('caller-toctou', { cwd: 'c:/workspace/app', status: 'running' });
   const exec = { agent: caller };
