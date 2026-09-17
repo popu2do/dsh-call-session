@@ -117,3 +117,33 @@ export declare function executeSessionCall(
   rawExec?: any,
   rawOptions?: any
 ): Promise<SessionCallResult>;
+
+/**
+ * buildTransportPayload 选项参数
+ */
+export interface TransportPayloadOptions {
+  /** 发件人 Session ID */
+  callerSessionId?: string;
+  /** 发件人人类可读标题 */
+  callerTitle?: string;
+  /** 呼叫意图分类 */
+  callType?: CallType | string;
+  /** 关联黑板条目 ID 列表 */
+  cleanPostIds?: string[];
+}
+
+/**
+ * 构造客观传输层语义载荷 (Transport Semantic Header)
+ *
+ * @param rawMessage 原始正文
+ * @param options 报头选项
+ * @returns 注入客观报头后的完整消息载荷
+ */
+export declare function buildTransportPayload(
+  rawMessage: string,
+  options?: TransportPayloadOptions
+): string;
+/**
+ * 清洗并去重关联黑板条目 ID 列表
+ */
+export declare function sanitizePostIds(postIds?: unknown): string[];

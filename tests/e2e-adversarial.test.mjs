@@ -427,10 +427,10 @@ test('需求二边界测试：空消息、长消息、特殊字符与特权前�
   const activeTitles = new Set(['existing session']);
 
   // 1. 空消息、纯空白消息 -> 降级为 Peer-<8位UUID>
-  const t1 = resolvePeerTitle({ title: '', initial_message: '', activeTitles });
+  const t1 = resolvePeerTitle({ title: '', initialMessage: '', activeTitles });
   assert.match(t1, /^Peer-[a-z0-9]{8}/i);
 
-  const t2 = resolvePeerTitle({ title: '   ', initial_message: '   \r\n\t  ', activeTitles });
+  const t2 = resolvePeerTitle({ title: '   ', initialMessage: '   \r\n\t  ', activeTitles });
   assert.match(t2, /^Peer-[a-z0-9]{8}/i);
 
   // 2. 特权前缀剥离沙箱 ([SYSTEM], [CAPTAIN], [ROOT])
@@ -446,28 +446,28 @@ test('需求二边界测试：空消息、长消息、特殊字符与特权前�
   // 若特权前缀剥离后为空，回退到 initial_message 推导
   const tPrivEmpty = resolvePeerTitle({
     title: '[SYSTEM]',
-    initial_message: 'Audit security logs now',
+    initialMessage: 'Audit security logs now',
     activeTitles
   });
   assert.equal(tPrivEmpty, 'Peer: Audit security logs now');
 
   // 3. 4000 字符长消息与特殊符号摘要截断测试
   const longMessage = '### **Analysis Task**: Perform deep security verification for multi-agent architecture.\n\n' + 'X'.repeat(3900);
-  const tLong = resolvePeerTitle({ initial_message: longMessage, activeTitles });
+  const tLong = resolvePeerTitle({ initialMessage: longMessage, activeTitles });
   assert.ok(tLong.startsWith('Peer: Analysis Task'));
   assert.ok(tLong.length <= PEER_SESSION_CONSTANTS.MAX_TITLE_LENGTH);
 
   // 4. 重复推导标题自动编号消歧（特殊字符如 # 会被过滤替换）
   const initialMsg = 'Review pull request 1024';
-  const tColl1 = resolvePeerTitle({ initial_message: initialMsg, activeTitles });
+  const tColl1 = resolvePeerTitle({ initialMessage: initialMsg, activeTitles });
   assert.equal(tColl1, 'Peer: Review pull request 1024');
 
   activeTitles.add(tColl1.toLowerCase());
-  const tColl2 = resolvePeerTitle({ initial_message: initialMsg, activeTitles });
+  const tColl2 = resolvePeerTitle({ initialMessage: initialMsg, activeTitles });
   assert.equal(tColl2, 'Peer: Review pull request 1024 (2)');
 
   activeTitles.add(tColl2.toLowerCase());
-  const tColl3 = resolvePeerTitle({ initial_message: initialMsg, activeTitles });
+  const tColl3 = resolvePeerTitle({ initialMessage: initialMsg, activeTitles });
   assert.equal(tColl3, 'Peer: Review pull request 1024 (3)');
 
   // 5. 显式重复标题拦截
@@ -541,7 +541,7 @@ test('端到端全链路联动：创建同级会话、黑板任务派发、记�
   const workerAgent = ctx.agents.get(createRes.sessionId);
   assert.ok(workerAgent);
 
-  // Step 4: 校验 Worker 接收到的点火指令携带了 Context Ref
+  // Step 4: 校验 Worker 接收到的初始任务指令携带了 Context Ref
   assert.equal(workerAgent.received.length, 1);
   const ignitionMsg = workerAgent.received[0].msg;
   const ignitionText = ignitionMsg.content[0].text;
@@ -624,10 +624,10 @@ test('端到端全链路联动：创建同级会话、黑板任务派发、记�
 // Suite 4: 异常与容错测试 (Robustness & Fault Tolerance)
 // ---------------------------------------------------------------------------
 
-test('异常处理：agents.create 失败、点火消息分发异常与黑板发布降级', async () => {
+test('异常处理：agents.create 失败、初始消息分发异常与黑板发布降级', async () => {
   resetRateLimits();
 
-  // 1. 点火分发失败时安全捕获，降级为 status: 'idle'，不导致整体创建异常中断
+  // 1. 初始消息分发失败时安全捕获，降级为 status: 'idle'，不导致整体创建异常中断
   const faultyAgent = createMockAgent('faulty-target', {
     followupFn: () => {
       throw new Error('Connection reset during ignition');
@@ -647,13 +647,13 @@ test('异常处理：agents.create 失败、点火消息分发异常与黑板发
     get: (n) => (n === 'agents' ? agentsSvcWithFaulty : undefined)
   };
 
-  const resIgnitionFail = await executeSessionCreate(harnessCtx, {
+  const resDispatchFail = await executeSessionCreate(harnessCtx, {
     title: 'Faulty Session',
-    initial_message: 'Should catch ignition error'
+    initial_message: 'Should catch dispatch error'
   }, { agent: createMockAgent('caller-1') });
 
-  assert.equal(resIgnitionFail.success, true);
-  assert.equal(resIgnitionFail.status, 'idle', '点火异常时应降级为 idle 待命状态');
+  assert.equal(resDispatchFail.success, true);
+  assert.equal(resDispatchFail.status, 'idle', '消息分发异常时应降级为 idle 待命状态');
 
   // 2. 黑板发布异常时不阻断会话创建
   const mockBoardStoreWithFail = {

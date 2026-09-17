@@ -481,22 +481,12 @@ test('BoardStore: ADR-0011 规范验证 (默认 titlesOnly: true、id 精确查�
   assert.equal(pointDigest.posts[0].id, 'post-adr-1');
   assert.equal(pointDigest.posts[0].content, undefined, '显式指定 titlesOnly: true 时不包含 content');
 
-  // 3b. 蛇形参数别名 titles_only: true 同样遵循显式意图
-  const pointDigestSnake = store.list({ id: 'post-adr-1', titles_only: true, callerWorkspace: 'c:/repo' });
-  assert.equal(pointDigestSnake.titlesOnly, true);
-  assert.equal(pointDigestSnake.posts[0].content, undefined);
-
   // 4. 显式意图优先：未传 id 但显式指定 titlesOnly: false，全量返回包含 content
   const fullList = store.list({ titlesOnly: false, callerWorkspace: 'c:/repo' });
   assert.equal(fullList.titlesOnly, false);
   assert.equal(fullList.total, 2);
   assert.equal(fullList.posts[0].content, '## Implementation Detail\nSource code changes in lib/board-store.mjs...');
   assert.equal(fullList.posts[1].content, '# ADR-0011 Token Governance\nMassive 64KB architecture spec text goes here...');
-
-  // 4b. 蛇形参数别名 titles_only: false 同样生效
-  const fullListSnake = store.list({ titles_only: false, callerWorkspace: 'c:/repo' });
-  assert.equal(fullListSnake.titlesOnly, false);
-  assert.ok(fullListSnake.posts[0].content);
 
   // 5. 不存在的 id 精确查询返回空列表
   const nonExistent = store.list({ id: 'post-does-not-exist', callerWorkspace: 'c:/repo' });
@@ -567,14 +557,14 @@ test('BoardStore: id 精确查阅的工作区隔离与跨工作区查询', async
   assert.equal(crossAllowed.posts[0].content, 'Backend auth specification');
   assert.equal(crossAllowed.titlesOnly, false);
 
-  // 4. 蛇形参数 cross_workspace: true 同样支持
-  const crossSnakeAllowed = store.list({
+  // 4. 显式 crossWorkspace: true 跨工作区查询验证 (ADR-0016 纯驼峰契约)
+  const crossExplicitAllowed = store.list({
     id: 'post-isolated-backend',
     callerWorkspace: callerWs,
-    cross_workspace: true
+    crossWorkspace: true
   });
-  assert.equal(crossSnakeAllowed.total, 1);
-  assert.equal(crossSnakeAllowed.posts[0].id, 'post-isolated-backend');
+  assert.equal(crossExplicitAllowed.total, 1);
+  assert.equal(crossExplicitAllowed.posts[0].id, 'post-isolated-backend');
 
   await store.close();
 });

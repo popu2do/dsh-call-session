@@ -62,18 +62,37 @@
 
 ### 4.1 Core Architectural Invariants
 1. **Invariant 1 (Zero-HTTP)**：插件源码内不出现针对宿主自身 prompt API 的 HTTP 调用；
-2. **Invariant 2 (Zero-Envelope)**：`content[0].text` 只包含调用消息本身，不拼装额外信封定界符；
+2. **Invariant 2 (Zero-Envelope & Transport Semantic Header)**：
+   - **严格区分客观报头与指令污染**：禁止伪造系统角色（如 `[SYSTEM: CROSS-SESSION...]`）或注入命令式业务指令（如 `[SYSTEM DIRECTIVE] 请立刻处理...`）。正文前注入客观传输层语义报头（Transport Semantic Header），承载发件人身份与调用类别元数据，属于基础通信设施而非指令污染；
+   - **报头技术规范**：
+     - 首行注入标准报头：`[From: <callerSessionId> (<callerTitle>) | CallType: <callType>]`；
+     - 若携带公共黑板上下文关联，换行追加：`> Context Ref: #post-xxx, #post-yyy`；
+     - 报头与原始正文之间使用空行（`\n\n`）隔离；
+     - 原始正文保持原样透传，不篡改内容，不追加指令；
 3. **Invariant 3 (Pure Plugin Source)**：消息源显式声明为 `{ kind: 'plugin', plugin: 'dsh-call-session', form: 'notice', summary: '...' }`；
 4. **Invariant 4 (State-Adaptive Routing)**：
-   - 目标为 `idle`：使用 `targetAgent.followup(userMessage)`；
-   - 目标为 `running`：使用 `targetAgent.steer(userMessage)` 在 step boundary 注入。
+   - 目标为 `idle`：使用 `targetAgent.followup(userMessage)` 唤醒下一轮对话；
+   - 目标为 `running`：使用 `targetAgent.steer(userMessage)` 在单步决策边界注入；
+5. **Invariant 5 (Clean Transport Pipe & Zero Auto-ACK)**：
+   - 插件仅作为进程内通信传输管道，不承担上层业务编排职责；
+   - 禁止在插件底层引入自动确认（Auto-ACK）、自动回音或轮询守护；通信何时回复、何时收口，由双方模型依据类别语义与业务上下文自主决断；
+6. **Invariant 6 (Graceful Degradation)**：
+   - 当发件人 `callerSessionId` 或标题缺失时，报头降级为默认占位标识（如 `unknown-caller` 与默认标题），避免调用中断。
 
-### 4.2 In-Memory Dispatch Topology
+### 4.2 In-Memory Dispatch Topology (ADR-0016 Parameter Alignment)
 ```
-[Caller Agent] ---> session_call(target_id, message)
+[Caller Agent] ---> session_call(target_session_id, message, call_type, context_post_ids)
+                         │
+                         ▼  buildTransportPayload (with graceful fallback)
+           ┌───────────────────────────────────────────────┐
+           │ [From: caller-xxx (Title) | CallType: type]   │
+           │ > Context Ref: #post-123 (Optional)           │
+           │                                               │
+           │ <rawMessage> (100% untouched)                 │
+           └───────────────────────────────────────────────┘
                          │
                          ▼
-             [ctx.agents.get(target_id)]
+         [resolveAgent(target_session_id)]
                          │
         ┌────────────────┴────────────────┐
         ▼                                 ▼
@@ -89,19 +108,51 @@
               (Plugin Notice 折叠条)
 ```
 
+### 4.3 模式对照
+
+| 维度 | 传输层客观报头 (Transport Semantic Header) | 指令污染反模式 (Prohibited Anti-patterns) |
+|---|---|---|
+| **定位** | 底层通信元数据（类比邮件报头） | 侵入式指令与催促文本 |
+| **典型内容** | `[From: caller (Title) | CallType: dispatch]`、`> Context Ref: #...` | `[SYSTEM DIRECTIVE] 请立即处理并回复...`、`[SYSTEM: DISPATCH]` |
+| **正文处理** | 空行隔离，消息内容逐字原样保留 | 包装、篡改或追加格式化尾部指令 |
+| **语气** | 客观元数据，无人称代词，无情绪倾向 | 命令式催促、伪系统角色 |
+| **规则判定** | **允许且必需 (Required)** | **严格禁止 (Prohibited)** |
+
+#### 架构反模式清单
+1. **反模式 1：伪系统指令与命令式催促**
+   - 严禁在消息中注入“请立即执行”、“收到请答复”等命令式文本，不得干涉目标 Agent 的自主规划。
+2. **反模式 2：底层自动确认回路（Auto-ACK Loop）**
+   - 严禁在插件底层或消息接收时由基础设施自动反向调用 `session_call` 进行确认，避免引发连锁反射风暴。
+3. **反模式 3：底层轮询守护与状态机**
+   - 严禁在插件底层轮询目标会话状态等待回复，严禁硬编码对话轮次计数器；通信流程由双方模型根据语义决定是否结束。
+
+### 4.4 意图收敛
+
+在系统提示词与工具契约中明确三类调用意图的结束规则：
+
+| 呼叫意图 (`call_type`) | 语义定位 | 交互结束规则 (Convergence Rule) |
+|---|---|---|
+| `task_dispatch` | 任务派发、行动建议或前置请求 | 接收方处理后，仅在需要回传产物或结论时以单次 `task_report` 答复；无需返回结果则不回复。 |
+| `task_report` | 任务结果汇报、产物交付或答复 | 表示当前协作单元已收口。发起方接收后归档，无需回复。 |
+| `notice` | 单向状态通报或客观知悉 | 纯通知属性，阅后即止，接收方不调用 `session_call` 发起回复。 |
+
 ---
 
 ## 5. Consequences
 
 ### 5.1 Positive Consequences (Benefits)
-- **低延迟调用**：消除网络 TCP 握手与 HTTP 解析开销，采用进程内内存调用；
-- **纯净上下文**：目标 LLM 接收直接任务指令，不包含信封定界符干扰；
-- **界面展现清晰**：在 Web 界面呈现为折叠通知行，点击展开后可查验原始指令，减少对话流信息干扰；
-- **并发安全性**：通过 `steer` 支持目标执行过程中的安全引导，避免状态冲突。
+- **低延迟调用**：消除网络 TCP 握手与 HTTP 解析开销，直接使用进程内调用；
+- **来源与意图明确**：通过客观报头透传发件人身份与分类意图，避免回复目标缺失或意图不明；
+- **语义收敛**：确立 dispatch / report / notice 的交互语义，避免无限循环与双向等待；
+- **正文保持无损**：原始消息内容原样保留，不拼接额外指令；
+- **界面展现紧凑**：Web 界面呈现为折叠通知行，展开后可查看原始指令与报头，减少视觉干扰；
+- **并发安全**：通过 `steer` 支持目标执行过程中的安全引导，避免状态冲突。
 
 ### 5.2 Negative Consequences (Tradeoffs & Mitigations)
-- **向下兼容性**：旧实现中若有依赖正则解析 `[SYSTEM: CROSS-SESSION` 的 Prompt 将无法匹配。
-  - *Mitigation*: 新实现对齐 Tool Call 与纯文本指令规范，不再支持旧定界符。
+- **正文前置包含元数据**：接收端正文包含 1~2 行元数据。
+  - *Mitigation*: 采用中括号与引用语法隔离，模型可将报头与后续正文自然区分。
+- **旧测试断言变更**：针对裸消息正文的全等断言需更新为报头正则加正文校验。
+  - *Mitigation*: 同步更新单元测试断言，验证报头格式与正文无损。
 
 ---
 
@@ -109,23 +160,31 @@
 
 ### 6.1 Automated Verification Suite
 - **网络零调用检查**：单元测试断言 `session_call` 执行过程无 `fetch` 或网络 I/O；
-- **文本信封清理检查**：验证目标 Agent 接收到的 `userMessage.content[0].text` 与输入 `message` 一致；
+- **报头技术格式检查**：断言目标接收到的首行严格匹配 `^\[From: .+? \(.+?\) \| CallType: (task_dispatch|task_report|notice)\]` 正则；
+- **上下文引用语法检查**：若携带 `context_post_ids`，断言换行追加 `> Context Ref: #...` 引用行；
+- **原始正文无损检查**：断言报头双换行后紧接的内容与入参 `message` 逐字完全相等；
+- **优雅降级容错检查**：发件人上下文缺失或未定义时，断言报头安全回退至 `unknown-caller` 与默认标题，不抛出异常；
 - **消息源类型检查**：断言 `userMessage.source` 具有正确的 `kind: 'plugin'` 与 `form: 'notice'`；
 - **双态分支测试**：分别模拟目标处于 `idle` 与 `running`，断言分别触发 `followup` 与 `steer`。
 
 ### 6.2 Review Checklist
-- [ ] `lib/session-call.mjs` 中删除 `fetch` 与 `resolveHostEndpoint`；
-- [ ] 删除 `buildCrossSessionNoticeText` 函数；
-- [ ] 移除 `targetAgent.send(userMessage, 'next-turn', true)` 的裸调，改用规范的 `followup` 与 `steer` 双态调度。
+- [ ] `lib/session-call.mjs` 抽象 `buildTransportPayload` 纯函数，包含报头注入与正文组装；
+- [ ] `lib/session-call.mjs` 针对未解析或空白 `callerSessionId` / `callerTitle` 实施优雅降级；
+- [ ] `index.mjs` 的 `usageSectionText` 与 `session_call` Schema 完整补充三类意图与结束规则；
+- [ ] 无任何业务指令或催促文本注入；
+- [ ] 无底层轮询、无底层自动 ACK 机制；
+- [ ] 全量回归测试 100% 通过。
 
 ---
 
 ## 7. Status History & Related Artifacts
 
-- **2026-09-04**: Proposed & Accepted by Engineering Team
+- **2026-09-04**: Proposed & Accepted by Engineering Team (Initial In-Process Direct Lookup)
+- **2026-09-15**: Clarified & Revised by Architect (Clarify Zero-Envelope vs Transport Semantic Header, Specify Objective Headers, Define Convergence Contracts, Anti-patterns, and Graceful Degradation)
 - **Related ADRs**:
   - Supersedes: 废除 ADR-0001 中关于 HTTP 触发与文本报文生成的残留实现描述
-  - Related to: ADR-0007 (Web Slash Command - Superseded), ADR-0008 (Global Profile Mounting)
+  - Related to: ADR-0007 (Web Slash Command - Superseded), ADR-0008 (Global Profile Mounting), ADR-0010 (State Idempotency), ADR-0012 (Call Telemetry & Canvas Isolation)
 - **Implementation Artifacts**:
   - `lib/session-call.mjs`
   - `index.mjs`
+  - `tests/session-call.test.mjs`
