@@ -342,6 +342,7 @@ test('特权前缀过滤、超长参数与换行控制符清洗测试', async ()
 
   // 6. context_post_ids 超过 5 个条目时截断至 5 个，并注入至 initial_message
   resetRateLimits();
+  for (const a of ctx.agents.list()) a.status = 'idle';
   const tenPosts = Array.from({ length: 10 }, (_, i) => `post-${i + 1}`);
   const resPosts = await executeSessionCreate({
     ctx,
@@ -390,34 +391,34 @@ test('重名限制、配额限制、代际深度与限频滑动窗口测试', as
   assert.equal(resCrossWs.success, true);
   resetRateLimits();
 
-  // 2. 配额熔断 [QuotaExceeded]：10 个平级会话 + 若干子代理/空白/归档会话极限干扰
-  const tenAlphaRoots = Array.from({ length: 10 }, (_, i) =>
-    createMockAgent(`root-${i}`, { title: `Root Worker ${i}`, cwd: 'c:/workspace/project-alpha' })
+  // 2. 配额熔断 [QuotaExceeded]：5 个并发运行根会话 + 若干子代理/空白/归档会话极限干扰
+  const fiveAlphaRoots = Array.from({ length: 5 }, (_, i) =>
+    createMockAgent(`root-${i}`, { title: `Root Worker ${i}`, cwd: 'c:/workspace/project-alpha', status: 'running' })
   );
   // 注入 5 个子代理（带 header.origin === 'subagent'）
   const fiveSubagents = Array.from({ length: 5 }, (_, i) => {
-    const sub = createMockAgent(`sub-${i}`, { title: `Subagent ${i}`, cwd: 'c:/workspace/project-alpha' });
+    const sub = createMockAgent(`sub-${i}`, { title: `Subagent ${i}`, cwd: 'c:/workspace/project-alpha', status: 'running' });
     sub.session.header.origin = 'subagent';
     return sub;
   });
   // 注入 3 个 blank 会话
   const threeBlanks = Array.from({ length: 3 }, (_, i) =>
-    createMockAgent(`blank-${i}`, { blank: true, cwd: 'c:/workspace/project-alpha' })
+    createMockAgent(`blank-${i}`, { blank: true, cwd: 'c:/workspace/project-alpha', status: 'running' })
   );
   // 注入 2 个归档会话
-  const archivedCaller = createMockAgent('archived-1', { cwd: 'c:/workspace/project-alpha' });
+  const archivedCaller = createMockAgent('archived-1', { cwd: 'c:/workspace/project-alpha', status: 'running' });
 
   const quotaCtx = createMockCtx({
-    agentsList: [...tenAlphaRoots, ...fiveSubagents, ...threeBlanks, archivedCaller],
+    agentsList: [...fiveAlphaRoots, ...fiveSubagents, ...threeBlanks, archivedCaller],
     archivedIds: ['archived-1']
   });
 
-  // 此时活跃根会话刚好为 10 个，第 11 个创建返回 [QuotaExceeded] 拦截
+  // 此时并发运行根会话刚好为 5 个，第 6 个创建返回 [QuotaExceeded] 拦截
   await assert.rejects(
     () => executeSessionCreate({
       ctx: quotaCtx,
-      args: { title: 'Eleventh Worker', initial_message: 'Should block' },
-      exec: { agent: tenAlphaRoots[0] }
+      args: { title: 'Sixth Worker', initial_message: 'Should block' },
+      exec: { agent: fiveAlphaRoots[0] }
     }),
     /\[QuotaExceeded\]/
   );

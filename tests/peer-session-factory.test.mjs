@@ -161,13 +161,14 @@ test('PeerSessionFactory: 代际深度与工作区配额拦截', async () => {
     /GenerationLimitExceeded/
   );
 
-  // 工作区配额达到 10 个拦截
+  // 工作区并发运行配额达到上限 5 个拦截
   const env10 = createMockEnvironment();
-  const caller0 = createMockAgent('caller-quota');
+  const caller0 = createMockAgent('caller-quota', { status: 'running' });
   for (let i = 0; i < PEER_SESSION_CONSTANTS.MAX_ACTIVE_PEER_SESSIONS; i++) {
     env10.list.push(createMockAgent(`existing-${i}`, {
       title: `Existing ${i}`,
-      cwd: 'c:/workspace/project-alpha'
+      cwd: 'c:/workspace/project-alpha',
+      status: 'running'
     }));
   }
   const factory10 = new PeerSessionFactory(env10.ctx);
