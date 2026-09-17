@@ -187,27 +187,24 @@ However, operational field analysis and multi-agent execution in AgentTeams reve
 }
 ```
 
-#### 4.3.2 Default Resolution Logic in `BoardStore.prototype.list`
+#### 4.3.2 Canonical Resolution Logic in `BoardStore.prototype.list` (ADR-0016 Amendment)
+> **规范修正 (ADR-0016)**：`board_list` 工具对外暴露的入参严格收敛为纯正 `snake_case`（`id`, `topic`, `topic_prefix`, `tag`, `active_only`, `cross_workspace`, `titles_only`, `limit`）。历史草稿中的 `topicPrefix`、`crossWorkspace`、`titlesOnly` 等驼峰别名在工具层全面废除。
+
 ```javascript
 list({
   id,
   topic,
-  topicPrefix,
   topic_prefix,
   tag,
   author,
   status = 'active',
   limit = 20,
   callerWorkspace,
-  workspace,
-  crossWorkspace = false,
   cross_workspace = false,
-  titlesOnly,
   titles_only
 } = {}) {
-  const explicitTitlesOnly = titlesOnly !== undefined ? titlesOnly : titles_only;
-  const effectiveTitlesOnly = explicitTitlesOnly !== undefined
-    ? Boolean(explicitTitlesOnly)
+  const effectiveTitlesOnly = titles_only !== undefined
+    ? Boolean(titles_only)
     : (id ? false : true);
 
   // Exact ID matching

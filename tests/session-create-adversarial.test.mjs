@@ -484,7 +484,7 @@ test('重名限制、配额限制、代际深度与限频滑动窗口测试', as
   resetRateLimits();
 });
 
-test('点火分发失败与黑板公告降级处理', async () => {
+test('初始消息分发失败与黑板公告降级处理', async () => {
   resetRateLimits();
   const caller = createMockAgent('caller-fault');
 
@@ -496,7 +496,7 @@ test('点火分发失败与黑板公告降级处理', async () => {
     error() {}
   };
 
-  // 模拟目标会话 followup 点火同步抛出异常
+  // 模拟目标会话 followup 消息分发同步抛出异常
   const faultAgentsSvc = {
     list: () => [],
     create: async (payload) => {
@@ -518,7 +518,7 @@ test('点火分发失败与黑板公告降级处理', async () => {
     get: (n) => (n === 'agents' ? faultAgentsSvc : undefined)
   };
 
-  // 点火异常不能导致 executeSessionCreate 失败，会话依然创建成功并记录降级告警
+  // 初始消息分发异常不能导致 executeSessionCreate 失败，会话依然创建成功并记录降级告警
   const res = await executeSessionCreate(faultCtx, {
     title: 'Fault Tolerant Worker',
     initial_message: 'Will fail ignition'
@@ -526,6 +526,62 @@ test('点火分发失败与黑板公告降级处理', async () => {
 
   assert.equal(res.success, true);
   assert.equal(res.title, 'Fault Tolerant Worker');
-  assert.ok(warnLogged >= 1, '点火失败记录降级告警');
+  assert.ok(warnLogged >= 1, '初始消息分发失败记录降级告警');
+  resetRateLimits();
+});
+
+test('标题追加与重命名服务抛错异常对抗与安全降级 (ADR-0017)', async () => {
+  resetRateLimits();
+  const caller = createMockAgent('caller-title-fault');
+
+  let debugLogged = 0;
+  const interceptingLogger = {
+    debug() { debugLogged++; },
+    info() {},
+    warn() {},
+    error() {}
+  };
+
+  // 模拟 sessionTitle.rename 抛错，且底层 targetAgent.session.append 亦抛错
+  const faultSession = {
+    id: 'fault-session-1',
+    cwd: 'c:/workspace/app',
+    append: () => { throw new Error('Simulated event log disk error'); }
+  };
+
+  const faultAgentsSvc = {
+    list: () => [],
+    create: async (payload) => {
+      const faultAgent = {
+        id: payload.sessionId,
+        title: payload.title,
+        status: 'idle',
+        session: faultSession,
+        followup: () => {},
+        steer: () => {}
+      };
+      return { agent: faultAgent };
+    }
+  };
+
+  const faultySessionTitleSvc = {
+    rename: () => { throw new Error('Simulated sessionTitle.rename service crash'); }
+  };
+
+  const faultCtx = {
+    agents: faultAgentsSvc,
+    sessionTitle: faultySessionTitleSvc,
+    logger: () => interceptingLogger,
+    get: (n) => (n === 'agents' ? faultAgentsSvc : n === 'sessionTitle' ? faultySessionTitleSvc : undefined)
+  };
+
+  // 标题持久化异常不能导致 executeSessionCreate 失败，会话依然创建成功并降级容错
+  const res = await executeSessionCreate(faultCtx, {
+    title: 'Title Fault Tolerant Worker'
+  }, { agent: caller });
+
+  assert.equal(res.success, true);
+  assert.equal(res.title, 'Title Fault Tolerant Worker');
+  assert.ok(debugLogged >= 1, '重命名与事件追加失败时安全捕获并记录日志');
   resetRateLimits();
 });

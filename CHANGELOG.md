@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-09-16
+
+### Summary
+Feature and architecture alignment release introducing the Transport Semantic Header (`buildTransportPayload`) and Category Semantic Contract for peer-to-peer session communication, resolving the identity blindness and dead-wait stalemates while strictly upholding the Zero-Envelope and Zero-Preach invariants of ADR-0006.
+
+### Added
+- **Transport Semantic Header (`buildTransportPayload`)**:
+  - Automatically prepends an objective header `[From: <callerSessionId> (<callerTitle>) | CallType: <callType>]` to the user message content during `session_call`.
+  - Supports optional context reference line `> Context Ref: #post-xxx, #post-yyy` when blackboard posts are attached.
+  - 100% verbatim retention of original message content without trimming, formatting manipulation, or nanny instruction injection.
+  - Comprehensive graceful degradation: missing caller metadata falls back smoothly to `unknown-caller`, default `Session` title, and safe `task_dispatch` category.
+  - Full TypeScript types exported via `types/session-call.d.ts` and `types/index.d.ts`.
+- **Category Semantic Contract & Autonomous Closure Protocol**:
+  - Enforces three explicit call categories (`task_dispatch`, `task_report`, `notice`) in `usageSectionText` and tool schema.
+  - Empowers recipient and caller LLMs to autonomously determine collaboration convergence without low-level auto-ACK loops or intrusive state-machine polling.
+
+### Changed
+- **ADR-0006 Revision**: Clarified the boundaries of Zero-Envelope to distinguish between pure transport-layer metadata (infrastructure) and business instruction pollution (anti-pattern).
 ## [0.1.1] - 2026-09-15
 
 ### Summary

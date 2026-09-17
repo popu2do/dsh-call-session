@@ -107,16 +107,10 @@ export interface BoardListOptions {
   limit?: number;
   /** 调用方所在工作区规范化路径 (camelCase) */
   callerWorkspace?: string;
-  /** 工作区过滤别名 */
-  workspace?: string;
   /** 是否跨工程穿透查询所有工作区的公告 (camelCase) */
   crossWorkspace?: boolean;
-  /** 是否跨工程穿透查询所有工作区的公告 (snake_case) */
-  cross_workspace?: boolean;
   /** 是否仅返回标题与元数据摘要。未指定 id 时默认为 true，指定 id 时默认为 false (camelCase) */
   titlesOnly?: boolean;
-  /** 是否仅返回标题与元数据摘要。未指定 id 时默认为 true，指定 id 时默认为 false (snake_case) */
-  titles_only?: boolean;
 }
 
 /**

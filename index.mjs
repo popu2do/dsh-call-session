@@ -31,7 +31,8 @@ import {
 import {
   executeSessionCall,
   dispatchNativeMessage,
-  CALL_TYPE_INTENTS
+  CALL_TYPE_INTENTS,
+  buildTransportPayload
 } from './lib/session-call.mjs';
 import {
   executeSessionCreate,
@@ -73,7 +74,7 @@ export const Config = zInstance ? zInstance.object({
   storagePath: zInstance.string().description('黑板持久化存储文件路径'),
   debounceMs: zInstance.natural().default(300).description('黑板数据持久化防抖延迟毫秒数'),
   maxCapacity: zInstance.natural().min(10).max(10000).default(200).description('公共黑板保留条目上限，按 FIFO 淘汰'),
-  telemetryCapacity: zInstance.natural().min(10).max(2000).default(200).description('跨会话调用遥测环形缓冲区保留上限，按 FIFO 淘汰'),
+  telemetryCapacity: zInstance.natural().min(10).max(2000).default(200).description('跨会话调用看板数据环形缓冲区保留上限，按 FIFO 淘汰'),
   promptSectionOrder: zInstance.natural().default(118).description('注入全局 System Prompt 的排序权重'),
   remindContextOrder: zInstance.natural().default(130).description('记名提醒注入 System Prompt Context 的排序权重'),
 }) : Object.freeze({
@@ -100,8 +101,14 @@ export function usageSectionText() {
     '3. Create peer session: Use `session_create` to create a peer session in the current workspace.',
     '4. Shared blackboard: Use `board_post` to publish milestones, tasks, or shared state. Use `board_list` to query blackboard posts, and `board_clear` to dismiss or purge them.',
     '',
+    'Call types and convergence rules for `session_call`:',
+    '- `task_dispatch`: 分派任务、提供建议或发起协作请求。接收方处理后，仅在确需回传产物或结论时通过单次 `task_report` 答复；无需返回结果则不回复。',
+    '- `task_report`: 任务结果汇报、交付或答复。表示当前协作单元已收口，接收方知悉归档，无需回复。',
+    '- `notice`: 单向状态通报或客观知悉。纯通知属性，阅后即止，接收方不调用 `session_call` 回复。',
+    '- 通信自主收敛守则：由双方模型根据类别语义与业务上下文自主收敛，严禁无实质内容的客套回复（如单纯回复“收到”、“明白”）。',
+    '',
     'Intent routing (session_create vs subagent):',
-    '- Use `session_create`: 创建同级会话。用户要求新建会话、新开 session 或平级会话时使用。独立会话可长期并行运行，不同于临时子任务 subagent。',
+    '- Use `session_create`: 创建同级会话。用户要求新建会话、新开 session 或平级会话时使用。独立会话可长期并行运行，不同于临时子任务 subagent。默认继承当前会话的模型参数与预设配置，除非手动指定。',
     '- Use `subagent`: Only for internal parent-child delegation where the parent waits for or collects the child result.'
   ].join('\n');
 }
@@ -133,6 +140,7 @@ export {
   executeSessionCall,
   dispatchNativeMessage,
   CALL_TYPE_INTENTS,
+  buildTransportPayload,
   executeSessionCreate,
   PEER_SESSION_CONSTANTS,
   CallTelemetryRingBuffer,
@@ -430,6 +438,7 @@ export function apply(ctx, config = {}) {
           type: 'object',
           properties: {
             success: { type: 'boolean' },
+            error: { type: 'string' },
             count: { type: 'number' },
             scope: { type: 'string' },
             titlesOnly: { type: 'boolean' },
@@ -525,7 +534,8 @@ export function apply(ctx, config = {}) {
             success: { type: 'boolean' },
             clearedCount: { type: 'number' },
             action: { type: 'string' },
-            message: { type: 'string' }
+            message: { type: 'string' },
+            error: { type: 'string' }
           },
           additionalProperties: false
         },
@@ -572,7 +582,7 @@ export function apply(ctx, config = {}) {
 
     registerSafe({
       name: 'session_call',
-      description: '向指定活跃会话发起单播调用。根据目标状态自动选择 steer 运行中引导或 followup 空闲唤醒。支持关联黑板条目 context_post_ids。',
+      description: '向指定活跃会话发起单播调用。根据目标状态自动选择 steer 运行中引导或 followup 空闲唤醒。支持三大呼叫类别（task_dispatch 派发/建议、task_report 汇报/交付、notice 单向通报）与公共黑板条目关联 context_post_ids。',
       isConcurrencySafe: true,
       parameters: {
         type: 'object',
@@ -593,7 +603,7 @@ export function apply(ctx, config = {}) {
             type: 'string',
             enum: ['task_dispatch', 'task_report', 'notice'],
             default: 'task_dispatch',
-            description: '呼叫意图类型：task_dispatch 任务派发、task_report 任务汇报、notice 状态同步通知。默认 task_dispatch。'
+            description: '呼叫类别与收敛语义：task_dispatch（任务派发/协作请求，需结果时单次 task_report 答复）、task_report（结果汇报/收口归档，无需回复）、notice（单向通报，无需回复）。默认 task_dispatch。'
           },
           context_post_ids: {
             type: 'array',
@@ -618,7 +628,8 @@ export function apply(ctx, config = {}) {
               type: 'array',
               items: { type: 'string' }
             },
-            message: { type: 'string' }
+            message: { type: 'string' },
+            error: { type: 'string' }
           },
           additionalProperties: false
         },
@@ -735,7 +746,7 @@ export function apply(ctx, config = {}) {
 
     registerSafe({
       name: 'session_create',
-      description: '创建同级会话。用户要求新建会话、新开 session 或平级会话时使用。独立会话可长期并行运行，不同于临时子任务 subagent。',
+      description: '创建同级会话。用户要求新建会话、新开 session 或平级会话时使用。独立会话可长期并行运行，不同于临时子任务 subagent。默认继承当前会话的模型参数与预设配置，除非手动指定。',
       isConcurrencySafe: true,
       parameters: {
         type: 'object',
@@ -759,7 +770,15 @@ export function apply(ctx, config = {}) {
           },
           model: {
             type: 'string',
-            description: '可选覆写目标会话所使用的模型 ID。默认继承当前会话模型。'
+            description: '可选覆写目标会话所使用的模型 ID。默认继承当前会话模型，除非手动指定。'
+          },
+          reasoning_effort: {
+            type: 'string',
+            description: '可选覆写目标会话所使用的推理强度 (如 low, medium, high)。默认继承当前会话推理强度，除非手动指定。'
+          },
+          preset: {
+            type: 'string',
+            description: '可选指定挂载的智能体预设 ID。默认继承当前会话或全局默认预设，除非手动指定。'
           }
         }
       },
@@ -773,9 +792,14 @@ export function apply(ctx, config = {}) {
             workspace: { type: 'string' },
             status: { type: 'string' },
             generation: { type: 'number' },
-            bootstrapPostId: { type: 'string' }
+            bootstrapPostId: { type: ['string', 'null'] },
+            contextPostIds: {
+              type: 'array',
+              items: { type: 'string' }
+            },
+            error: { type: ['string', 'null'] }
           },
-          additionalProperties: true
+          additionalProperties: false
         },
         render(_args, value) {
           return [{
