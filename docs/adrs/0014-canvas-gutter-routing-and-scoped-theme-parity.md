@@ -19,7 +19,7 @@
 
 ## 2. Decision Outcome
 
-我们确立以下三项设计与渲染规范：
+我们确立以下四项设计与渲染规范：
 
 ### 2.1 外侧通道走线与右出左进几何模型（Gutter Routing & Right-Exit Left-Enter）
 1. **端口进出规范**：调用发起端或黑板发布端统一由节点右侧引出（Outbound）；调用接收端统一由节点左侧接入（Inbound）。
@@ -34,6 +34,13 @@
 ### 2.3 严格插件作用域主题适配（Scoped Theme Parity）
 1. **宿主接口映射**：看板工具栏右侧增加明暗模式切换按钮（深色显太阳，浅色显月亮）。按钮点击仅作为 DSH 宿主 `ctx.theme.setTheme` 接口的映射触发。
 2. **严格作用域隔离**：深色与浅色样式全部收敛在 `.dsh-canvas-container` 及其子类选择器内，基于 `body[data-ds-dark-theme]` 与 DSH 语义变量（`--dsw-alias-*`）自适应渲染，严禁向插件作用域外注入全局样式。
+
+### 2.4 工作区列布局几何与头间距不变量（Workspace Column Geometry & Clearance）
+1. **工作区列起始与头部尺寸**：工作区列纵向起始点为 $startY = 150\text{px}$；列头部胶囊包围盒位于相对坐标 `(12, 10)`，高度为 $38\text{px}$，其底边绝对坐标为 $startY + 10 + 38 = 198\text{px}$。
+2. **严格 16px 头间距不变量**：依据 `DESIGN.md` 标准留白规约（`spacing-4 = 16px`），工作区头部底边与首个会话卡片顶边之间必须保持严格的 $16\text{px}$ 正向净间距，首卡片顶边绝对坐标固定为 $198 + 16 = 214\text{px}$。
+3. **会话节点中心垂直坐标推导**：会话卡片垂直半轴为 $ry = 26\text{px}$，行间距步长为 $72\text{px}$。首个会话节点垂直中心必须由布局原点推导而来：
+   $$sessionStartY = startY + 10 + 38 + 16 + 26 = startY + 90\text{px}$$
+   第 $i$ 个会话节点的垂直中心为 $centerY = sessionStartY + i \times 72\text{px}$。严禁将首节点中心硬编码为错误切入头部的数值（如历史缺陷值 $214\text{px}$）。
 
 ---
 

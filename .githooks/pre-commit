@@ -1,5 +1,16 @@
 #!/bin/sh
 set -e
 
+if [ "$ALLOW_README" != "1" ] && git diff --cached --name-only | grep -qE '^(README\.md|README_ZH\.md)$'; then
+  echo "hook: README locked. Set ALLOW_README=1 to commit." >&2
+  exit 1
+fi
+
+bad_docs=$(git diff --cached --name-only --diff-filter=d | grep '^docs/' | grep -vE '^docs/(adrs/|agents/|README\.md$)' || true)
+if [ -n "$bad_docs" ]; then
+  echo "hook: unauthorized docs path. Allowed: docs/adrs/, docs/agents/, docs/README.md" >&2
+  exit 1
+fi
+
 node scripts/scan-secrets.mjs --staged
 npm run --silent verify
