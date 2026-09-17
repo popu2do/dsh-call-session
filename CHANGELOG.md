@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Align ecosystem peer and dev dependencies with DSH 0.1.5 host baseline: `@deepseek-ai/cordis` to `^4.0.2`, `@deepseek-ai/schemastery` to `^3.18.2`.
+- Update README compatibility notes for verified DSH 0.1.5 host distributions.
+
 ## [0.1.2] - 2026-09-16
 
 ### Summary

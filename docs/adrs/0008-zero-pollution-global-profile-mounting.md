@@ -19,7 +19,7 @@
 `dsh-call-session` 需要实现全局可用、会话环境隔离与生命周期可逆管理。
 
 ### 1.2 Architectural Forces & Constraints
-- **Universal Availability**：宿主启动后，当前 DSH 实例下的任意会话均可调用 `session_call`、`session_query`、`board_*` 及 `/dsh-call-session` 命令；
+- **Universal Availability**：宿主启动后，当前 DSH 实例下的任意会话均可调用 `session_call`、`session_query`、`session_create` 及 `board_*` 原生工具，人类用户通过 Web 协作看板进行交互；
 - **Zero Configuration in Projects**：业务工程工作区无需额外配置文件或 node_modules；
 - **Reversible Lifecycle**：插件的加载与卸载保持对偶可逆，卸载时注销所有注册句柄与定时器。
 
