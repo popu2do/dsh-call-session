@@ -288,14 +288,14 @@ test('需求一端到端：条目清理消除与自然过期 (TTL Expiration)', 
 
 test('需求二端到端：活跃会话达配额上限拦截与配额释放', async () => {
   resetRateLimits();
-  const initialAgent = createMockAgent('root-session', { cwd: 'c:/workspace/project-alpha' });
+  const initialAgent = createMockAgent('root-session', { cwd: 'c:/workspace/project-alpha', status: 'running' });
   const { ctx } = createMockHarness({ initialAgents: [initialAgent] });
 
   // 初始工作区已有 1 个活跃会话 (root-session)
   // 模拟多个不同会话发起创建（以避开单会话 5次/分 的限频，纯粹针对工作区 10 个配额硬防线对抗）
   const createdSessions = [];
 
-  for (let i = 1; i <= 9; i++) {
+  for (let i = 1; i <= 4; i++) {
     const callerId = `caller-session-${i}`;
     const caller = createMockAgent(callerId, { cwd: 'c:/workspace/project-alpha' });
     const res = await executeSessionCreate(ctx, {
@@ -308,26 +308,26 @@ test('需求二端到端：活跃会话达配额上限拦截与配额释放', as
     createdSessions.push(res.sessionId);
   }
 
-  // 此时工作区活跃会话数已达到 1 + 9 = 10 个硬上限
-  // 第 11 个会话创建必须被 [QuotaExceeded] 拦截
+  // 此时工作区并发运行会话数已达到 1 + 4 = 5 个硬上限
+  // 第 6 个会话创建必须被 [QuotaExceeded] 拦截
   const overflowCaller = createMockAgent('caller-overflow', { cwd: 'c:/workspace/project-alpha' });
   await assert.rejects(
     async () => {
       await executeSessionCreate(ctx, {
-        title: 'Peer Worker 11',
+        title: 'Peer Worker 6',
         initial_message: 'Should be rejected'
       }, { agent: overflowCaller });
     },
     (err) => {
       assert.ok(err.message.includes('[QuotaExceeded]'), `应抛出 [QuotaExceeded]，实际为: ${err.message}`);
-      assert.ok(err.message.includes('已达上限 10'));
+      assert.ok(err.message.includes('已达上限 5'));
       return true;
     }
   );
 
   // 验证孤儿防范：被拦截的会话绝未遗留在 agents 服务中
   const liveCount = ctx.agents.list().length;
-  assert.equal(liveCount, 10, '活跃会话总数保持为 10');
+  assert.equal(liveCount, 5, '活跃会话总数保持为 5');
 
   // 模拟归档其中 1 个会话，释放 1 个配额
   const archivedId = createdSessions[0];
@@ -335,12 +335,12 @@ test('需求二端到端：活跃会话达配额上限拦截与配额释放', as
 
   // 再次尝试创建，应成功占用释放出来的配额
   const retryRes = await executeSessionCreate(ctx, {
-    title: 'Peer Worker 11 Recovered',
+    title: 'Peer Worker 6 Recovered',
     initial_message: 'Should succeed after quota released'
   }, { agent: overflowCaller });
 
   assert.equal(retryRes.success, true);
-  assert.equal(retryRes.title, 'Peer Worker 11 Recovered');
+  assert.equal(retryRes.title, 'Peer Worker 6 Recovered');
 });
 
 test('需求二端到端：单会话限频拦截与时间窗口恢复', async () => {
