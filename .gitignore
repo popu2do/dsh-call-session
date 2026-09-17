@@ -61,6 +61,8 @@ jspm_packages/
 # =============================================================================
 .dsh/
 .dsh-vision-toolkit/
+.dsh-vision-router
+.agents/
 .agent-teams/
 .mstar/
 .reasonix/
