@@ -82,8 +82,9 @@ test('BoardStore.executeList: 工作区作用域隔离与摘要过滤', async ()
   });
   assert.equal(listAlpha.success, true);
   assert.equal(listAlpha.count, 1);
-  assert.equal(listAlpha.posts[0].id, postAlpha.postId);
+  assert.equal(listAlpha.scope, '/workspaces/alpha');
   assert.equal(listAlpha.titlesOnly, true);
+  assert.equal(listAlpha.posts[0].id, postAlpha.postId);
   assert.equal(listAlpha.posts[0].content, undefined); // 默认摘要不返回 content
 
   const listCross = await store.executeList({
@@ -187,13 +188,12 @@ test('normalizeExecParams: 多态参数解包与工作区解析', () => {
   assert.deepEqual(fromObj.exec, { e: 2 });
   assert.deepEqual(fromObj.ctx, { c: 3 });
 
-  // 验证 resolveCallerDirectory 统一解析作者会话 ID、目录与工作区
   const dummyStore = Object.create(BoardStore.prototype);
-  const mockAgent = createMockAgent('agent-test-dir', { cwd: '/workspaces/unified' });
-  const dirInfo = dummyStore.resolveCallerDirectory(mockAgent);
+  const mockAgent = createMockAgent('agent-test-dir', { title: 'Worker Alpha', cwd: '/workspaces/unified' });
+  const dirInfo = dummyStore.resolveCallerContext(mockAgent);
   assert.equal(dirInfo.authorSessionId, 'agent-test-dir');
+  assert.equal(dirInfo.authorTitle, 'Worker Alpha');
   assert.equal(dirInfo.callerWorkspace, '/workspaces/unified');
-  assert.ok(dirInfo.directory);
 
   const fromPos = normalizeExecParams({ a: 1 }, { e: 2 }, { c: 3 });
   assert.deepEqual(fromPos.args, { a: 1 });
@@ -204,4 +204,25 @@ test('normalizeExecParams: 多态参数解包与工作区解析', () => {
   assert.deepEqual(fromEmpty.args, {});
   assert.equal(fromEmpty.exec, undefined);
   assert.equal(fromEmpty.ctx, undefined);
+});
+
+test('BoardStore.executeList: 异常分支返回值严格符合 ADR-0016 §4.2 必须出参契约', async () => {
+  const badStore = Object.create(BoardStore.prototype);
+  badStore.list = () => { throw new Error('底层查询模拟异常'); };
+  badStore.resolveCallerContext = () => ({ callerWorkspace: '/workspaces/mock' });
+  badStore.logger = { debug() {} };
+
+  const failRes = await badStore.executeList({ args: { cross_workspace: false, titles_only: false } });
+  assert.equal(failRes.success, false);
+  assert.equal(failRes.count, 0);
+  assert.equal(typeof failRes.scope, 'string');
+  assert.equal(failRes.scope, '/workspaces/mock');
+  assert.equal(typeof failRes.titlesOnly, 'boolean');
+  assert.equal(failRes.titlesOnly, false);
+  assert.deepEqual(failRes.posts, []);
+  assert.ok(failRes.error.includes('底层查询模拟异常'));
+
+  const failGlobal = await badStore.executeList({ args: { cross_workspace: true } });
+  assert.equal(failGlobal.scope, 'global');
+  assert.equal(failGlobal.titlesOnly, true);
 });
