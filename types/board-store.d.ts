@@ -336,12 +336,12 @@ export declare class BoardStore {
   close(): Promise<void>;
 
   /**
-   * 解析调用方 Agent 的会话标识、工作区与会话目录
+   * 解析调用方 Agent 的会话标识、标题与工作区上下文
    */
-  resolveCallerDirectory(
+  resolveCallerContext(
     agent?: any,
     ctx?: any
-  ): { authorSessionId: string; directory: any; callerWorkspace: string };
+  ): { authorSessionId: string; authorTitle: string; callerWorkspace: string };
 
   /**
    * 执行 board_post 领域操作：参数校验、保留主题拦截、调用方工作区解析与条目落盘
@@ -373,8 +373,8 @@ export declare class BoardStore {
     success: boolean;
     error?: string;
     count: number;
-    scope?: string;
-    titlesOnly?: boolean;
+    scope: string;
+    titlesOnly: boolean;
     posts: any[];
   }>;
 
