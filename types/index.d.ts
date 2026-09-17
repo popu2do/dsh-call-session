@@ -39,12 +39,14 @@ import {
   CALL_TYPE_INTENTS,
   dispatchNativeMessage,
   executeSessionCall,
+  buildTransportPayload,
   type CallType,
   type DeliveryMode,
   type SessionStatus,
   type SessionCallArgs,
   type SessionCallResult,
-  type NativeUserMessage
+  type NativeUserMessage,
+  type TransportPayloadOptions
 } from './session-call.js';
 
 import {
@@ -180,6 +182,7 @@ export {
   executeSessionCall,
   dispatchNativeMessage,
   CALL_TYPE_INTENTS,
+  buildTransportPayload,
   executeSessionCreate,
   PEER_SESSION_CONSTANTS,
   CallTelemetryRingBuffer,
@@ -211,6 +214,7 @@ export type {
   SessionCallArgs,
   SessionCallResult,
   NativeUserMessage,
+  TransportPayloadOptions,
   SessionInfo,
   SessionQueryArgs,
   SessionQueryResult,

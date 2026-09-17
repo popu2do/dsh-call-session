@@ -104,7 +104,7 @@ export declare function computeLayout(
   sessions: any[],
   posts: any[],
   currentWorkspace: string,
-  crossWorkspace: boolean,
+  crossWorkspace?: boolean,
   calls?: any[]
 ): {
   workspaceBounds: Array<{ id: string; name: string; isCurrent: boolean; x: number; y: number; width: number; height: number }>;

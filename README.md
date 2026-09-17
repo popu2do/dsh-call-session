@@ -96,9 +96,22 @@ Create peer sessions. Use when the user requests a new session or peer session. 
 
 Parameters:
 - `title`: string, optional. Title up to 60 characters. Privileged prefixes `[SYSTEM]`, `[CAPTAIN]`, `[ROOT]` are stripped. If omitted, derived from initial message or numbered fallback.
-- `initial_message`: string, optional. Initial task directive delivered immediately to ignite first turn. If omitted, session remains idle.
+- `initial_message`: string, optional. Initial task directive delivered immediately to start execution. If omitted, session remains idle.
 - `context_post_ids`: string[], optional. Blackboard post IDs up to 5 entries, mounted to directive header.
-- `model`: string, optional. Target session model override. Defaults to current session model.
+- `model`: string, optional. Target session model override, supporting `provider/model` or bare `model`. Defaults to inheriting current session model unless specified.
+- `reasoning_effort`: string, optional. Target session reasoning effort override (`low`, `medium`, `high`, or adapter-supported identifier). Defaults to inheriting caller reasoning effort unless specified.
+- `preset`: string, optional. Agent preset identifier or template to compose into target session. Defaults to inheriting caller or global default preset unless specified.
+
+Outputs:
+- `success`: boolean. True when session creation succeeds.
+- `sessionId`: string. Generated peer session ID starting with `session-`.
+- `title`: string. Normalized peer session title.
+- `workspace`: string. Target session workspace root path.
+- `status`: string. Initial status (`running` if `initial_message` was provided, `idle` otherwise).
+- `generation`: number. Derivation depth generation counter.
+- `bootstrapPostId`: string | null, optional. ID of the bootstrap blackboard post if generated.
+- `contextPostIds`: string[]. Cleaned and mounted blackboard post IDs.
+- `error`: string, optional. Machine error code on failure.
 
 Safety guards:
 - Workspace quota: Maximum 10 active root sessions per workspace, rejected with QuotaExceeded.
@@ -109,11 +122,16 @@ Safety guards:
 
 Dispatch a unicast call to target session. Steers target when running, or wakes a new turn via followup when idle.
 
+The transport layer automatically injects an objective metadata header (`[From: <callerSessionId> (<callerTitle>) | CallType: <callType>]`) while retaining message text 100% verbatim without formatting manipulation or nanny instruction pollution.
+
 Parameters:
 - `target_session_id`: string, required. Target session ID or unique prefix of at least 8 chars. Wildcards like `*` or `all` are forbidden.
 - `message`: string, required. Directive or report text up to 4000 characters per call.
-- `call_type`: string, optional. Intent type: `task_dispatch`, `task_report`, or `notice`. Defaults to `task_dispatch`.
-- `context_post_ids`: string[], optional. Referenced blackboard post IDs.
+- `call_type`: string, optional. Semantic intent category. Defaults to `task_dispatch`:
+  - `task_dispatch`: Task suggestion or dispatch; recipient autonomously decides whether to reply with `task_report`.
+  - `task_report`: Work outcome delivery; marks collaboration closure. Caller archives without conversational chatter.
+  - `notice`: One-way status notification; purely informational without reply.
+- `context_post_ids`: string[], optional. Referenced blackboard post IDs. Formatted into `> Context Ref: #post-xxx`.
 
 ### session_query
 
@@ -203,7 +221,7 @@ The DSH Web session view exposes a `Canvas` tab that observes cross-session coll
 - Data source: the host route `GET /plugins/dsh-call-session/telemetry`, guarded by Connection authentication, GET-only, never cached. Call traces live in a bounded in-memory ring buffer, default capacity 200, FIFO eviction, never persisted, resetting on host restart.
 - In a webless profile the plugin stays tool-only: no route is registered and boot is never blocked.
 
-Telemetry is never registered as an LLM tool, so System Prompt stays idempotent and Prompt KV cache is undisturbed.
+Canvas data is never registered as an LLM tool, so System Prompt stays idempotent and Prompt KV cache is undisturbed.
 
 ## Config
 
@@ -222,7 +240,7 @@ Options:
 - `enabled`: boolean, default `true`. Enable or disable plugin tools.
 - `debounceMs`: number, default `300`. Atomic disk write debounce delay in milliseconds.
 - `maxCapacity`: number, default `200`. Maximum entries retained in memory FIFO cache.
-- `telemetryCapacity`: number, default `200`, range 10-2000. Maximum call traces retained in telemetry ring buffer, FIFO eviction.
+- `telemetryCapacity`: number, default `200`, range 10-2000. Maximum call traces retained in canvas data ring buffer, FIFO eviction.
 
 ## Comparison
 
@@ -256,6 +274,11 @@ Key technical decisions are recorded as Architecture Decision Records (ADRs) in 
 | [ADR-0010](./docs/adrs/0010-dynamic-state-mirror-and-peer-session-lifecycle.md) | State mirror & peer sessions | Accepted | Pure-state idempotent injection guarding KV cache, peer quota and rate fuses |
 | [ADR-0011](./docs/adrs/0011-board-list-token-governance-and-exact-retrieval.md) | Board token governance | Accepted | Titles-only digest by default, exact id lookup routing |
 | [ADR-0012](./docs/adrs/0012-visual-collaboration-canvas-and-in-memory-call-telemetry.md) | Canvas & call telemetry | Accepted | Bounded in-memory ring buffer, read-only facade, native canvas view |
+| [ADR-0013](./docs/adrs/0013-human-canvas-global-transparency-vs-agent-workspace-isolation.md) | Human Canvas Transparency vs Agent Isolation | Accepted | Global cross-workspace transparency for human canvas, strict isolation for agent execution tools |
+| [ADR-0014](./docs/adrs/0014-canvas-gutter-routing-and-scoped-theme-parity.md) | Canvas Gutter Routing & Theme Parity | Accepted | Gutter-based obstacle-avoiding bezier curves, focus-dimming lineage, and scoped dark/light theme |
+| [ADR-0015](./docs/adrs/0015-peer-session-model-and-preset-inheritance.md) | Peer Session Model & Preset Inheritance | Accepted | Cascade fallback model resolution and preset inheritance for spawned peer sessions |
+| [ADR-0016](./docs/adrs/0016-unified-parameter-naming-and-session-id-standard.md) | Unified Parameter Naming & Session ID Governance | Accepted | Zero-alias parameter naming, strict sessionId format, clean deprecation of legacy aliases |
+| [ADR-0017](./docs/adrs/0017-peer-session-title-event-persistence-and-host-alignment.md) | Peer Session Title Event Persistence | Accepted | Asynchronous title rename emission, contextPostIds return metadata, host alignment |
 
 ## Testing
 

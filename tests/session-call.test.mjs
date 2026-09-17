@@ -3,7 +3,9 @@ import assert from 'node:assert/strict';
 import {
   executeSessionCall,
   dispatchNativeMessage,
-  CALL_TYPE_INTENTS
+  CALL_TYPE_INTENTS,
+  buildTransportPayload,
+  sanitizePostIds
 } from '../lib/session-call.mjs';
 
 function createMockAgent(id, {
@@ -30,6 +32,8 @@ function createMockAgent(id, {
     received
   };
 }
+
+const HEADER_REGEX = /^\[From: .+? \(.+?\) \| CallType: (task_dispatch|task_report|notice)\](\n> Context Ref: .+?)?\n\n/;
 
 const silentLogger = Object.freeze({
   debug() {},
@@ -118,6 +122,15 @@ test('executeSessionCall: 参数校验测试 (通配符/自呼叫/超长消息/�
   );
   await assert.rejects(
     () => executeSessionCall({ ctx, args: { target_session_id: '', message: 'hi' }, exec }),
+    /必须提供 target_session_id/
+  );
+  // 废除别名防御：传 target_id 或 sessionId 不被识别为合法目标
+  await assert.rejects(
+    () => executeSessionCall({ ctx, args: { target_id: 'target-12345678', message: 'hi' }, exec }),
+    /必须提供 target_session_id/
+  );
+  await assert.rejects(
+    () => executeSessionCall({ ctx, args: { sessionId: 'target-12345678', message: 'hi' }, exec }),
     /必须提供 target_session_id/
   );
   await assert.rejects(
@@ -256,9 +269,13 @@ test('executeSessionCall: 消息投递、Context Post 关联与两态分发', as
   assert.equal(resIdle.callType, 'task_dispatch');
   assert.deepEqual(resIdle.contextPostIds, ['post-998', '#post-999']);
 
-  // 检验接收到的 UserMessage 结构
+  // 检验接收到的 UserMessage 结构 (包含传输层客观报头与无损正文)
   const dispatchedToIdle = idleTarget.received[0].msg;
   assert.equal(dispatchedToIdle.role, 'user');
+  assert.equal(
+    dispatchedToIdle.content[0].text,
+    '[From: caller-agent-12345 (Captain Agent) | CallType: task_dispatch]\n> Context Ref: #post-998, #post-999\n\nPlease review task #42'
+  );
   assert.ok(dispatchedToIdle.content[0].text.includes('> Context Ref: #post-998, #post-999'));
   assert.ok(dispatchedToIdle.content[0].text.includes('Please review task #42'));
   assert.equal(dispatchedToIdle.source.kind, 'plugin');
@@ -282,7 +299,10 @@ test('executeSessionCall: 消息投递、Context Post 关联与两态分发', as
   assert.equal(resRunning.callType, 'notice');
 
   const dispatchedToRunning = runningTarget.received[0].msg;
-  assert.equal(dispatchedToRunning.content[0].text, 'Urgent halt signal');
+  assert.equal(
+    dispatchedToRunning.content[0].text,
+    '[From: caller-agent-12345 (Captain Agent) | CallType: notice]\n\nUrgent halt signal'
+  );
   assert.ok(dispatchedToRunning.source.summary.includes('[Cross-Session NOTICE]'));
 });
 
@@ -338,4 +358,237 @@ test('executeSessionCall: 接入 ctx.logger("dsh-call-session") 并记录 debug 
   assert.equal(loggerScope, 'dsh-call-session');
   assert.ok(captured.some(l => l.level === 'debug' && l.args[0]?.includes('Successfully dispatched')));
   assert.equal(captured.filter(l => l.level !== 'debug').length, 0, '不产生非 debug 级别的控制台日志');
+});
+
+test('buildTransportPayload: 标准参数生成标准客观报头与双换行正文', () => {
+
+  // 1. task_dispatch 场景
+  const payload1 = buildTransportPayload('Dispatch task #1', {
+    callerSessionId: 'session-alpha-12345678',
+    callerTitle: 'Coordinator',
+    callType: 'task_dispatch'
+  });
+  assert.equal(payload1, '[From: session-alpha-12345678 (Coordinator) | CallType: task_dispatch]\n\nDispatch task #1');
+  assert.match(payload1, HEADER_REGEX);
+
+  // 2. task_report 场景
+  const payload2 = buildTransportPayload('Task result delivered', {
+    callerSessionId: 'session-beta-87654321',
+    callerTitle: 'Worker Agent',
+    callType: 'task_report'
+  });
+  assert.equal(payload2, '[From: session-beta-87654321 (Worker Agent) | CallType: task_report]\n\nTask result delivered');
+  assert.match(payload2, HEADER_REGEX);
+
+  // 3. notice 场景
+  const payload3 = buildTransportPayload('System status update', {
+    callerSessionId: 'session-gamma-11223344',
+    callerTitle: 'Monitor',
+    callType: 'notice'
+  });
+  assert.equal(payload3, '[From: session-gamma-11223344 (Monitor) | CallType: notice]\n\nSystem status update');
+  assert.match(payload3, HEADER_REGEX);
+});
+
+test('buildTransportPayload: 带 Context Ref 时换行追加引用且格式化 # 前缀', () => {
+
+  // 带单个与多个 context_post_ids，支持带或不带 # 前缀
+  const payload = buildTransportPayload('Please review findings', {
+    callerSessionId: 'caller-session-99999999',
+    callerTitle: 'Lead Architect',
+    callType: 'task_dispatch',
+    cleanPostIds: ['post-101', '#post-102', '  post-103  ']
+  });
+
+  const expected = '[From: caller-session-99999999 (Lead Architect) | CallType: task_dispatch]\n> Context Ref: #post-101, #post-102, #post-103\n\nPlease review findings';
+  assert.equal(payload, expected);
+  assert.match(payload, HEADER_REGEX);
+});
+
+test('buildTransportPayload: 优雅降级回退机制 (参数缺省、空串、非法类型)', () => {
+  // 1. 无第二个参数或空对象
+  const p1 = buildTransportPayload('Hello fallback');
+  assert.equal(p1, '[From: unknown-caller (Session) | CallType: task_dispatch]\n\nHello fallback');
+
+  const p2 = buildTransportPayload('Hello fallback', {});
+  assert.equal(p2, '[From: unknown-caller (Session) | CallType: task_dispatch]\n\nHello fallback');
+
+  // 2. 空白字符串与非法 callType 回退
+  const p3 = buildTransportPayload('Fallback with spaces', {
+    callerSessionId: '   ',
+    callerTitle: '',
+    callType: 'unsupported_call_type',
+    cleanPostIds: []
+  });
+  assert.equal(p3, '[From: unknown-caller (Session) | CallType: task_dispatch]\n\nFallback with spaces');
+
+  // 3. null / undefined 字段容错
+  const p4 = buildTransportPayload('Fallback with nulls', {
+    callerSessionId: null,
+    callerTitle: null,
+    callType: null,
+    cleanPostIds: null
+  });
+  assert.equal(p4, '[From: unknown-caller (Session) | CallType: task_dispatch]\n\nFallback with nulls');
+});
+
+test('buildTransportPayload: 原始正文 100% 逐字无损与禁止指令污染 (Zero-Envelope & Zero-Preach)', () => {
+  // 验证不被 trim 篡改、多行与特殊控制符无损保留
+  const complexRaw = '  \tLeading space and multi-line\nLine 2 with symbols: !@#$%^&*()_+\n\nLine 4 ending space  ';
+  const payload = buildTransportPayload(complexRaw, {
+    callerSessionId: 'caller-verbatim-test',
+    callerTitle: 'Verbatim Tester',
+    callType: 'notice'
+  });
+
+  const expectedHeader = '[From: caller-verbatim-test (Verbatim Tester) | CallType: notice]\n\n';
+  assert.ok(payload.startsWith(expectedHeader));
+  assert.equal(payload.slice(expectedHeader.length), complexRaw);
+
+  // 严禁指令污染
+  assert.ok(!payload.includes('[SYSTEM DIRECTIVE]'));
+  assert.ok(!payload.includes('[SYSTEM:'));
+  assert.ok(!payload.includes('请立即'));
+  assert.ok(!payload.includes('收到请'));
+});
+
+test('executeSessionCall: 端到端消息格式断言测试 (三大 call_type、Context Ref、优雅降级与全量返回契约)', async () => {
+
+  const caller = createMockAgent('caller-e2e-12345678', { title: 'Captain Master' });
+  const targetIdle = createMockAgent('target-e2e-idle-11111111', { status: 'idle', title: 'Target Worker' });
+  const targetRunning = createMockAgent('target-e2e-running-22222222', { status: 'running', title: 'Target Reviewer' });
+
+  const ctx = createMockCtx({
+    agentsList: [caller, targetIdle, targetRunning]
+  });
+
+  // 1. task_dispatch 端到端调用
+  const dispatchRes = await executeSessionCall({
+    ctx,
+    args: {
+      target_session_id: 'target-e2e-idle-11111111',
+      message: 'Dispatch task #100',
+      call_type: 'task_dispatch',
+      context_post_ids: ['post-abc']
+    },
+    exec: { agent: caller }
+  });
+
+  assert.equal(dispatchRes.success, true);
+  assert.equal(dispatchRes.targetSessionId, 'target-e2e-idle-11111111');
+  assert.equal(dispatchRes.targetTitle, 'Target Worker');
+  assert.equal(dispatchRes.targetStatus, 'idle');
+  assert.equal(dispatchRes.deliveryMode, 'followup');
+  assert.equal(dispatchRes.callType, 'task_dispatch');
+  assert.equal(dispatchRes.callerSessionId, 'caller-e2e-12345678');
+  assert.deepEqual(dispatchRes.contextPostIds, ['post-abc']);
+  assert.ok(dispatchRes.message.includes('task_dispatch'));
+
+  const msg1 = targetIdle.received[targetIdle.received.length - 1].msg;
+  assert.match(msg1.content[0].text, HEADER_REGEX);
+  assert.equal(
+    msg1.content[0].text,
+    '[From: caller-e2e-12345678 (Captain Master) | CallType: task_dispatch]\n> Context Ref: #post-abc\n\nDispatch task #100'
+  );
+  assert.ok(msg1.source.summary.includes('[Cross-Session TASK_DISPATCH]'));
+
+  // 2. task_report 端到端调用
+  const reportRes = await executeSessionCall({
+    ctx,
+    args: {
+      target_session_id: 'target-e2e-running-22222222',
+      message: 'Report result of task #100',
+      call_type: 'task_report'
+    },
+    exec: { agent: caller }
+  });
+
+  assert.equal(reportRes.success, true);
+  assert.equal(reportRes.deliveryMode, 'steer');
+  assert.equal(reportRes.callType, 'task_report');
+  const msg2 = targetRunning.received[targetRunning.received.length - 1].msg;
+  assert.match(msg2.content[0].text, HEADER_REGEX);
+  assert.equal(
+    msg2.content[0].text,
+    '[From: caller-e2e-12345678 (Captain Master) | CallType: task_report]\n\nReport result of task #100'
+  );
+  assert.ok(msg2.source.summary.includes('[Cross-Session TASK_REPORT]'));
+
+  // 3. 无 exec.agent 时的优雅降级调用
+  const fallbackRes = await executeSessionCall({
+    ctx,
+    args: {
+      target_session_id: 'target-e2e-idle-11111111',
+      message: 'Anonymous call message'
+    },
+    exec: {}
+  });
+
+  assert.equal(fallbackRes.success, true);
+  assert.equal(fallbackRes.callerSessionId, 'unknown-caller');
+  assert.equal(fallbackRes.callType, 'task_dispatch');
+  const msg3 = targetIdle.received[targetIdle.received.length - 1].msg;
+  assert.equal(
+    msg3.content[0].text,
+    '[From: unknown-caller (Session) | CallType: task_dispatch]\n\nAnonymous call message'
+  );
+});
+test('executeSessionCall: 端到端全链路正文 100% 逐字无损保留 (带代码缩进与空白)', async () => {
+  const caller = createMockAgent('caller-verbatim-1111');
+  const target = createMockAgent('target-verbatim-2222');
+  const ctx = createMockCtx({ agentsList: [caller, target] });
+
+  const rawWithIndentation = '  \n  function test() {\n    return 42;\n  }\n  ';
+  const res = await executeSessionCall({
+    ctx,
+    args: {
+      target_session_id: 'target-verbatim-2222',
+      message: rawWithIndentation,
+      call_type: 'task_dispatch'
+    },
+    exec: { agent: caller }
+  });
+
+  assert.equal(res.success, true);
+  const dispatched = target.received[0].msg;
+  const expectedHeader = '[From: caller-verbatim-1111 (Test Agent) | CallType: task_dispatch]';
+  assert.equal(dispatched.content[0].text, `${expectedHeader}\n\n${rawWithIndentation}`);
+  assert.ok(dispatched.content[0].text.endsWith(rawWithIndentation), '正文尾随空格与换行 100% 逐字保留');
+  assert.ok(dispatched.content[0].text.includes('\n\n' + rawWithIndentation), '报头与正文严格以双换行隔离');
+});
+
+test('executeSessionCall: 进程内原生分发网络零调用验证 (ADR-0006 §6.1)', async () => {
+  const caller = createMockAgent('caller-nofetch-1111');
+  const target = createMockAgent('target-nofetch-2222');
+  const ctx = createMockCtx({ agentsList: [caller, target] });
+
+  const originalFetch = globalThis.fetch;
+  let fetchCalled = false;
+  globalThis.fetch = async () => {
+    fetchCalled = true;
+    throw new Error('网络调用被严格禁止！');
+  };
+
+  try {
+    const res = await executeSessionCall({
+      ctx,
+      args: {
+        target_session_id: 'target-nofetch-2222',
+        message: 'Pure in-process dispatch'
+      },
+      exec: { agent: caller }
+    });
+    assert.equal(res.success, true);
+    assert.equal(fetchCalled, false, 'session_call 执行过程严禁发起任何外部或回环 HTTP 请求');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('sanitizePostIds: 关联黑板 ID 清洗、去重与边界防爆', () => {
+  assert.deepEqual(sanitizePostIds(null), []);
+  assert.deepEqual(sanitizePostIds(undefined), []);
+  assert.deepEqual(sanitizePostIds('invalid'), []);
+  assert.deepEqual(sanitizePostIds(['post-1', 'post-2', 'post-1', '  post-2  ', '#', '']), ['post-1', 'post-2']);
+  assert.deepEqual(sanitizePostIds(['#post-a', '#post-b', '#post-a']), ['#post-a', '#post-b']);
 });

@@ -31,8 +31,6 @@ export interface SessionQueryArgs {
   query?: string;
   /** 是否仅查询 running 状态的会话，默认 false */
   running_only?: boolean;
-  /** 活跃会话查询别名 */
-  active_only?: boolean | 'running';
   /** 是否跨工作区查询会话，默认 false */
   cross_workspace?: boolean;
   /** 是否仅列出顶层会话，排除子代理与临时会话，默认 true */
@@ -57,8 +55,6 @@ export interface SessionQueryResult {
   idleCount: number;
   /** 本次查询生效的作用域 */
   scope: string;
-  /** 是否跨工作区查询 */
-  crossWorkspace?: boolean;
   /** 匹配的会话明细列表 */
   sessions: SessionInfo[];
   /** 失败错误信息 */

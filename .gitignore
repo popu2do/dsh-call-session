@@ -66,6 +66,7 @@ jspm_packages/
 .reasonix/
 .repowise/
 .codegraph/
+.scratch/
 *.sqlite
 *.sqlite3
 *.db

@@ -22,7 +22,7 @@ Exposing these raw, transient internal states to LLM subagents caused significan
 ### 1.2 Architectural Forces & Constraints
 
 - **Minimalist State Surface**: LLM agents only need to know a binary condition: can this agent accept new tasks right now, or is it currently busy?
-- **Strict English JSON Schema**: Machine-to-machine tool outputs must use clean, standardized, camelCase English keys.
+- **Strict English JSON Schema for Outputs**: Machine-to-machine tool outputs must use clean, standardized, camelCase English keys (ADR-0016: 出参严格使用 camelCase，入参严格使用 snake_case)。
 - **Human Observability**: Humans inspecting the web GUI need rich, formatted Markdown previews without sacrificing raw data fidelity.
 
 ---
@@ -98,8 +98,10 @@ Exposing these raw, transient internal states to LLM subagents caused significan
      return '';
    }
    ```
-3. **Strict English JSON Schema**:
-   - Property keys: `sessionId`, `title`, `status`, `workspace`, `isCurrent`, `totalCount`, `activeCount`, `idleCount`.
+3. **Strict English JSON Schema (Machine Layer Outputs, ADR-0016 Complement)**:
+   - Output property keys: `sessionId`, `title`, `status`, `workspace`, `isCurrent`, `totalCount`, `activeCount`, `idleCount`.
+   - Outputs strictly use `camelCase`. Tool inputs to `session_query` strictly use `snake_case` (`query`, `running_only`, `cross_workspace`, `top_level_only`, `limit`).
+   - The historical alias `active_only` is formally abolished; `running_only` is the single canonical input.
    - Never use localized or multi-lingual keys in data payloads.
 
 ### 4.2 System Architecture & Topology
@@ -141,7 +143,14 @@ Exposing these raw, transient internal states to LLM subagents caused significan
 
 ### 4.3 Interface & Protocol Contracts
 
-#### `session_query` Output Schema (`index.mjs` Line 781-817)
+#### `session_query` Input Parameters (Model Layer, `snake_case`)
+- `query` (`string`): 搜索关键词，匹配 Session ID 或 Title。
+- `running_only` (`boolean`): 仅查询 running 状态会话。彻底废止 `active_only` 别名。
+- `cross_workspace` (`boolean`): 是否跨工作区查询会话。
+- `top_level_only` (`boolean`): 是否仅列出顶层会话。
+- `limit` (`integer`): 返回结果上限。
+
+#### `session_query` Output Schema (Machine Layer, `camelCase`)
 ```json
 {
   "type": "object",

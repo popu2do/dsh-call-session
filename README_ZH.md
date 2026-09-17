@@ -96,9 +96,22 @@ dsh plugin --profile web remove dsh-call-session
 
 核心参数：
 - `title`: string，可选。同级会话标题，最大 60 字符。禁止使用特权前缀 `[SYSTEM]`、`[CAPTAIN]`、`[ROOT]`。未传时由初始消息提取 40 字符摘要，兜底为编号。
-- `initial_message`: string，可选。点火初始任务指令，会话创建后立即自动投递并启动第一轮。未传则保持待命 idle。
+- `initial_message`: string，可选。初始任务指令，会话创建后立即自动投递并启动第一轮。未传则保持待命 idle。
 - `context_post_ids`: string[]，可选。关联的黑板条目 ID 列表，上限 5 条，自动挂载至任务指令首部。
-- `model`: string，可选。目标会话模型 ID 覆写，默认继承当前会话模型。
+- `model`: string，可选。目标会话模型规格覆写，支持 `provider/model` 或纯 `model`。默认继承调用方会话模型，除非手动指定。
+- `reasoning_effort`: string，可选。目标会话推理强度覆写（如 `low`、`medium`、`high`）。默认继承当前会话推理强度，除非手动指定。
+- `preset`: string，可选。目标会话智能体预设标识符。默认继承当前会话或全局默认预设，除非手动指定。
+
+核心出参：
+- `success`: boolean。会话创建是否成功。
+- `sessionId`: string。新建同级会话 ID，以 `session-` 开头。
+- `title`: string。规范化会话标题。
+- `workspace`: string。会话所属工作区绝对路径。
+- `status`: string。初始状态（`running` 或 `idle`）。
+- `generation`: number。会话衍生代际深度。
+- `bootstrapPostId`: string | null，可选。当发布了初始黑板引导条目时的条目 ID。
+- `contextPostIds`: string[]。清洗并挂载的黑板条目 ID 列表。
+- `error`: string，可选。失败时的机器可读错误码。
 
 安全防护：
 - 工作区配额：每个工作区最多保持 10 个活跃根会话，超出拦截为 QuotaExceeded。
@@ -109,11 +122,16 @@ dsh plugin --profile web remove dsh-call-session
 
 向目标会话发起单播调用。目标处于 `running` 状态时通过 `steer` 实时引导，处于 `idle` 状态时通过 `followup` 唤醒新轮次。
 
+传输层自动在正文顶部注入客观元数据报头（`[From: <callerSessionId> (<callerTitle>) | CallType: <callType>]`），原始正文 100% 逐字原样保留，零文本篡改，杜绝任何命令式业务说教。
+
 核心参数：
 - `target_session_id`: string，必填。目标会话 ID 或大于等于 8 位的唯一前缀。禁止使用 `*` 或 `all` 等通配符。
 - `message`: string，必填。指令或汇报文本，单次不超过 4000 字符。
-- `call_type`: string，可选。意图类型，支持 `task_dispatch`、`task_report`、`notice`，默认 `task_dispatch`。
-- `context_post_ids`: string[]，可选。引用的黑板条目 ID 列表。
+- `call_type`: string，可选。调用意图类别，默认为 `task_dispatch`：
+  - `task_dispatch`：任务派发或协作建议，接收方处理后按需通过 `task_report` 单次闭环答复；
+  - `task_report`：成果交付或最终汇报，标志当前任务收口，发起方查阅归档，禁止无实质客套回复；
+  - `notice`：单向状态通报，纯通知属性，阅后即止，无须回复。
+- `context_post_ids`: string[]，可选。引用的黑板条目 ID 列表，自动追加 `> Context Ref: #post-xxx` 引用行。
 
 ### session_query
 
@@ -203,7 +221,7 @@ dsh plugin --profile web remove dsh-call-session
 - 数据来源：宿主注册的只读路由 `GET /plugins/dsh-call-session/telemetry`，经 Connection 认证保护，仅接受 GET，响应不缓存。调用轨迹保存在有界内存环形缓冲区，默认容量 200 条，FIFO 淘汰，不落盘，宿主重启后瞬态连线清空。
 - 无 Web 宿主的组态下插件保持工具态运行，不注册路由，不阻塞启动。
 
-遥测不会注册为大模型工具，System Prompt 保持幂等，Prompt KV Cache 零扰动。
+看板数据不会注册为大模型工具，System Prompt 保持幂等，Prompt KV Cache 零扰动。
 
 ## 配置
 
@@ -222,7 +240,7 @@ dsh plugin --profile web remove dsh-call-session
 - `enabled`: boolean，默认 `true`。是否启用插件。
 - `debounceMs`: number，默认 `300`。黑板落盘防抖延迟，单位毫秒。
 - `maxCapacity`: number，默认 `200`。黑板条目容量上限，超出后先进先出淘汰。
-- `telemetryCapacity`: number，默认 `200`，范围 10 到 2000。调用遥测环形缓冲区容量上限，超出后先进先出淘汰。
+- `telemetryCapacity`: number，默认 `200`，范围 10 到 2000。跨会话调用看板数据环形缓冲区容量上限，超出后先进先出淘汰。
 
 ## 对比
 
@@ -255,7 +273,12 @@ DSH 原生机制与本插件的定位及协作模型对比如下：
 | [ADR-0009](./docs/adrs/0009-restrained-minimalist-docs-and-anti-ai-slop.md) | 克制文档与反AI堆料 | Accepted | 零Emoji、纯净减法与<=4字小标题 |
 | [ADR-0010](./docs/adrs/0010-dynamic-state-mirror-and-peer-session-lifecycle.md) | 动态状态镜像与同级会话 | Accepted | 纯状态幂等注入保护 KV Cache，同级会话配额与限频熔断 |
 | [ADR-0011](./docs/adrs/0011-board-list-token-governance-and-exact-retrieval.md) | 黑板 Token 治理 | Accepted | 默认标题摘要模式，按 id 精确点查智能分流 |
-| [ADR-0012](./docs/adrs/0012-visual-collaboration-canvas-and-in-memory-call-telemetry.md) | 协作看板与调用遥测 | Accepted | 有界内存环形缓冲区、只读遥测门面与原生看板视图 |
+| [ADR-0012](./docs/adrs/0012-visual-collaboration-canvas-and-in-memory-call-telemetry.md) | 协作看板与调用看板数据 | Accepted | 有界内存环形缓冲区、只读数据门面与原生看板视图 |
+| [ADR-0013](./docs/adrs/0013-human-canvas-global-transparency-vs-agent-workspace-isolation.md) | 人类观察者全局透视与 Agent 执行边界隔离 | Accepted | 人类协作看板默认跨工作区全局透视，Agent 执行工具严格保留工作区安全隔离 |
+| [ADR-0014](./docs/adrs/0014-canvas-gutter-routing-and-scoped-theme-parity.md) | 看板通道走线、链路聚焦与作用域主题 | Accepted | 外侧通道避障走线、焦点链路聚焦降噪与无污染深浅主题切换 |
+| [ADR-0015](./docs/adrs/0015-peer-session-model-and-preset-inheritance.md) | 同级会话模型与预设继承 | Accepted | 级联回退模型决策与调用方预设智能继承机制 |
+| [ADR-0016](./docs/adrs/0016-unified-parameter-naming-and-session-id-standard.md) | 统一参数命名与会话标识治理 | Accepted | 纯净零别名反污染规范，规范 sessionId 格式并安全废止历史别名 |
+| [ADR-0017](./docs/adrs/0017-peer-session-title-event-persistence-and-host-alignment.md) | 同级会话标题事件持久化与宿主对齐 | Accepted | 异步持久化 session/title 事件，返回 contextPostIds 上下文元数据 |
 
 ## 测试
 
