@@ -3331,9 +3331,56 @@ test('多会话工作区纵向自适应居中 (PRD §8.2)：11会话工作区底
   );
 });
 
+function createTestCanvasHarness(canvasData, hoveredEntity = null) {
+  let hookCounter = 0;
+  const mockReact = {
+    useState: (initial) => {
+      hookCounter++;
+      // 1: canvasData, 2: selectedEntity, 3: focusedEntity, 4: hoveredEntity
+      if (hookCounter === 1) return [canvasData, () => {}];
+      if (hoveredEntity && hookCounter === 4) return [hoveredEntity, () => {}];
+      return [initial, () => {}];
+    },
+    useRef: (initial) => ({ current: initial }),
+    useEffect: () => {},
+    createElement: (type, props, ...children) => ({ type, props: props || {}, children })
+  };
+
+  const plugin = loadClientBundle((name) => name === 'react' ? mockReact : null);
+  const view = plugin.CanvasView({ sessionId: 's1', t: (k) => k });
+  return { view };
+}
+
+function findVNodesInTree(node, predicate) {
+  const results = [];
+  if (!node || typeof node !== 'object') return results;
+  if (predicate(node)) results.push(node);
+  if (Array.isArray(node.children)) {
+    for (const child of node.children) {
+      results.push(...findVNodesInTree(child, predicate));
+    }
+  }
+  return results;
+}
+
+function parseBezierPath(path) {
+  const m = path.match(/^M\s+([-\d.]+)\s+([-\d.]+)\s+C\s+([-\d.]+)\s+([-\d.]+),\s+([-\d.]+)\s+([-\d.]+),\s+([-\d.]+)\s+([-\d.]+)/);
+  assert.ok(m, '路径必须为有效贝塞尔曲线');
+  return {
+    startX: parseFloat(m[1]),
+    startY: parseFloat(m[2]),
+    c1x: parseFloat(m[3]),
+    c1y: parseFloat(m[4]),
+    c2x: parseFloat(m[5]),
+    c2y: parseFloat(m[6]),
+    endX: parseFloat(m[7]),
+    endY: parseFloat(m[8])
+  };
+}
+
 test('ADR-0019 常态按需显影与历史调用连线抑制测试', () => {
   const now = Date.now();
-  const mockTelemetry = {
+  const mockCanvasData = {
     workspaces: [{ id: '/ws/1', name: 'main', isCurrent: true }],
     sessions: [
       { id: 's1', workspace: '/ws/1', title: 'Agent 1', status: 'idle', state: 'idle' },
@@ -3351,43 +3398,33 @@ test('ADR-0019 常态按需显影与历史调用连线抑制测试', () => {
     metrics: { totalSessions: 2, runningSessions: 0, activeCalls: 1, totalPosts: 0 }
   };
 
-  const mockReact = {
-    useState: (initial) => {
-      if (initial && typeof initial === 'object' && 'sessions' in initial) {
-        return [mockTelemetry, () => {}];
-      }
-      return [initial, () => {}];
-    },
-    useRef: (initial) => ({ current: initial }),
-    useEffect: () => {},
-    createElement: (type, props, ...children) => ({ type, props: props || {}, children })
-  };
+  // 1. 常态下无交互：已结算和历史过期连线完全抑制，仅渲染 1 条活跃新鲜调用
+  const { view: defaultView } = createTestCanvasHarness(mockCanvasData);
+  const defaultEdgesGroup = findVNodesInTree(defaultView, (n) => n && n.props && n.props.id === 'dsh-canvas-call-edges')[0];
+  assert.ok(defaultEdgesGroup, 'dsh-canvas-call-edges 容器必须存在');
 
-  const plugin = loadClientBundle((name) => name === 'react' ? mockReact : null);
-  const view = plugin.CanvasView({ sessionId: 's1', t: (k) => k });
-
-  function findNodeById(node, id) {
-    if (!node || typeof node !== 'object') return null;
-    if (node.props && node.props.id === id) return node;
-    if (Array.isArray(node.children)) {
-      for (const child of node.children) {
-        const found = findNodeById(child, id);
-        if (found) return found;
-      }
-    }
-    return null;
-  }
-
-  const callEdgesGroup = findNodeById(view, 'dsh-canvas-call-edges');
-  assert.ok(callEdgesGroup, 'dsh-canvas-call-edges 容器必须存在');
-
-  const renderedEdges = callEdgesGroup.children.filter(Boolean);
+  const renderedEdges = defaultEdgesGroup.children.filter(Boolean);
   assert.equal(renderedEdges.length, 1, '常态下仅渲染 1 条活跃新鲜调用边');
   assert.equal(renderedEdges[0].props.key, 'call-fresh', '常态下渲染的边必须为活跃新鲜调用');
+
+  // 2. 悬停交互：悬停 s1 节点时，按需显影点亮关联链路，赋予 dsh-pulse-edge 脉冲实线且不透明度为 1.0
+  const hoveredSession = { kind: 'session', id: 's1', entity: mockCanvasData.sessions[0], x: 200, y: 200 };
+  const { view: activeView } = createTestCanvasHarness(mockCanvasData, hoveredSession);
+  const activeEdgesGroup = findVNodesInTree(activeView, (n) => n && n.props && n.props.id === 'dsh-canvas-call-edges')[0];
+  const highlightedEdges = activeEdgesGroup.children.filter(Boolean);
+  assert.equal(highlightedEdges.length, 3, '悬停时所有一度关联调用（含历史与已结算）必须全部显影复苏');
+  assert.ok(highlightedEdges.some((e) => e.props.key === 'call-settled'), '常态抑制的已结算调用在悬停时显影复苏');
+  assert.ok(highlightedEdges.some((e) => e.props.key === 'call-historical'), '常态抑制的历史过期调用在悬停时显影复苏');
+
+  const freshEdge = highlightedEdges.find((e) => e.props.key === 'call-fresh');
+  assert.ok(freshEdge, '活跃调用边存在');
+  const pulsePath = findVNodesInTree(freshEdge, (n) => n && n.props && n.props.className && n.props.className.includes('dsh-pulse-edge'))[0];
+  assert.ok(pulsePath, '高亮关联连线中的可视化路径必须包含 dsh-pulse-edge 脉冲类');
+  assert.equal(pulsePath.props.opacity, 1.0, '高亮关联连线不透明度严格为 1.0');
 });
 
 test('ADR-0019 超轻量单行胶囊 Tooltip 结构与尺寸测试', () => {
-  const mockTelemetry = {
+  const mockCanvasData = {
     workspaces: [{ id: '/ws/1', name: 'main', isCurrent: true }],
     sessions: [
       { id: 's1', workspace: '/ws/1', title: 'Agent Worker', status: 'running', state: 'running' }
@@ -3397,45 +3434,69 @@ test('ADR-0019 超轻量单行胶囊 Tooltip 结构与尺寸测试', () => {
     metrics: { totalSessions: 1, runningSessions: 1, activeCalls: 0, totalPosts: 0 }
   };
 
-  function findVNodes(node, predicate) {
-    const results = [];
-    if (!node || typeof node !== 'object') return results;
-    if (predicate(node)) results.push(node);
-    if (Array.isArray(node.children)) {
-      for (const child of node.children) {
-        results.push(...findVNodes(child, predicate));
-      }
-    }
-    return results;
-  }
+  const hoveredSession = { kind: 'session', id: 's1', entity: mockCanvasData.sessions[0], x: 200, y: 200 };
+  const { view } = createTestCanvasHarness(mockCanvasData, hoveredSession);
 
-  let hookCounter = 0;
-  const mockReact = {
-    useState: (initial) => {
-      hookCounter++;
-      // 1: telemetry, 2: selectedEntity, 3: focusedEntity, 4: hoveredEntity
-      if (hookCounter === 1) return [mockTelemetry, () => {}];
-      if (hookCounter === 4) return [{ kind: 'session', id: 's1', entity: mockTelemetry.sessions[0], x: 200, y: 200 }, () => {}];
-      return [initial, () => {}];
-    },
-    useRef: (initial) => ({ current: initial }),
-    useEffect: () => {},
-    createElement: (type, props, ...children) => ({ type, props: props || {}, children })
-  };
-
-  const plugin = loadClientBundle((name) => name === 'react' ? mockReact : null);
-  const view = plugin.CanvasView({ sessionId: 's1', t: (k) => k });
-
-  const tooltipNode = findVNodes(view, (n) => n && n.props && n.props.className === 'dsh-canvas-tooltip')[0];
+  const tooltipNode = findVNodesInTree(view, (n) => n && n.props && n.props.className === 'dsh-canvas-tooltip')[0];
   assert.ok(tooltipNode, '必须渲染 Session Tooltip');
   assert.equal(tooltipNode.props.style.height, '26px', 'Tooltip 胶囊高度严格为 26px (<= 28px)');
   assert.equal(tooltipNode.props.style.display, 'inline-flex', 'Tooltip 采用 inline-flex 单行布局');
 
-  const dotNode = findVNodes(tooltipNode, (n) => n && n.props && n.props.className === 'dsh-canvas-capsule-dot')[0];
+  // 端口避让几何断言：Tooltip 锚定在卡片下边缘之外 (y >= 200 + 26)，完全避让 y=200 处的左右端口
+  const tipTop = parseFloat(tooltipNode.props.style.top);
+  assert.ok(tipTop >= 200 + 26, 'Tooltip 严格锚定在卡片下边缘之外，完全不遮挡 y=200 处侧向端口');
+
+  const dotNode = findVNodesInTree(tooltipNode, (n) => n && n.props && n.props.className === 'dsh-canvas-capsule-dot')[0];
   assert.ok(dotNode, '胶囊必须包含状态圆点');
   assert.equal(dotNode.props.style.backgroundColor, '#22c55e', '运行中状态圆点颜色为绿色 #22c55e');
 });
 
+test('ADR-0019 通道分流几何同心外扩与端口避让严格几何断言', () => {
+  const plugin = loadClientBundle();
+  const { calculateBezierPath } = plugin;
 
+  // 1. 同列向下调用 (dy > 0)：起点终点在右侧轮廓，右侧通道同心递增且严格 <= 170 + 126
+  // ADR-0014: 首会话纵向基准中心为 240px
+  const hop1Path = calculateBezierPath(170, 240, 170, 312, 0);
+  const hop2Path = calculateBezierPath(170, 240, 170, 384, 0);
+  const hop3Path = calculateBezierPath(170, 240, 170, 456, 0);
 
+  const hop1Bezier = parseBezierPath(hop1Path);
+  const hop2Bezier = parseBezierPath(hop2Path);
+  const hop3Bezier = parseBezierPath(hop3Path);
+
+  // 同心嵌套严格递增：hop1 (106) < hop2 (110) < hop3 (114)
+  assert.ok(hop1Bezier.c1x < hop2Bezier.c1x, '下行2跳外扩半径严格大于1跳');
+  assert.ok(hop2Bezier.c1x < hop3Bezier.c1x, '下行3跳外扩半径严格大于2跳');
+  assert.equal(hop1Bezier.c1x, 170 + 106, '下行1跳控制点精确落在 CHANNEL_MIN_OFFSET (106px)');
+
+  // 下行起点与终点均位于节点右侧轮廓且零横切中轴
+  assert.ok(hop1Bezier.startX >= 170 + 80, '下行起点必须位于节点右侧轮廓');
+  assert.ok(hop1Bezier.endX >= 170 + 80, '下行终点必须位于目标节点右侧轮廓');
+
+  // 极限长跳数与奇数抖动下的通道上限钳位断言 (10跳 + 奇数抖动)：严格受 CHANNEL_MAX_OFFSET (126px) 限制
+  const extremeDownPath = calculateBezierPath(170, 240, 170, 240 + 72 * 10, 1);
+  const extremeDownBezier = parseBezierPath(extremeDownPath);
+  assert.ok(extremeDownBezier.c1x <= 170 + 126, '下行极限跳数与奇数抖动控制点严格在列宽安全边距内 (<= 296)');
+  assert.ok(extremeDownBezier.c2x <= 170 + 126, '下行极限跳数控制点2严格在列宽安全边距内 (<= 296)');
+
+  // 2. 同列向上调用 (dy < 0)：起点终点在左侧轮廓，左侧通道同心递减且严格 >= 170 - 126
+  const upwardHop1Path = calculateBezierPath(170, 312, 170, 240, 0);
+  const upwardHop2Path = calculateBezierPath(170, 384, 170, 240, 0);
+  const upwardHop1Bezier = parseBezierPath(upwardHop1Path);
+  const upwardHop2Bezier = parseBezierPath(upwardHop2Path);
+
+  // 上行起点与终点均位于节点左侧轮廓且零横切中轴
+  assert.ok(upwardHop1Bezier.startX <= 170 - 80, '上行起点必须位于节点左侧轮廓');
+  assert.ok(upwardHop1Bezier.endX <= 170 - 80, '上行终点必须位于目标节点左侧轮廓');
+  assert.ok(upwardHop1Bezier.c1x <= 170 - 106, '上行控制点严格位于左侧通道');
+  assert.ok(upwardHop1Bezier.c1x >= 170 - 126, '上行控制点严格在左侧列宽安全边距内');
+  assert.ok(upwardHop2Bezier.c1x < upwardHop1Bezier.c1x, '上行2跳外扩距离严格大于1跳 (更偏左)');
+
+  // 极限长跳数与奇数抖动下的上行通道下限钳位断言 (10跳 + 奇数抖动)：严格受 CHANNEL_MAX_OFFSET (126px) 限制
+  const extremeUpwardPath = calculateBezierPath(170, 240 + 72 * 10, 170, 240, 1);
+  const extremeUpwardBezier = parseBezierPath(extremeUpwardPath);
+  assert.ok(extremeUpwardBezier.c1x >= 170 - 126, '上行极限跳数与奇数抖动控制点严格在左侧列宽安全边距内 (>= 44)');
+  assert.ok(extremeUpwardBezier.c2x >= 170 - 126, '上行极限跳数控制点2严格在左侧列宽安全边距内 (>= 44)');
+});
 
