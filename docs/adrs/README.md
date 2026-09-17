@@ -44,6 +44,8 @@ ADRs transition through the following states:
 | **ADR-0016** | Unified Parameter Naming, Session Identifier Governance, and Zero-Alias Anti-Pollution Specification | **Accepted** | 2026-09-11 | `index.mjs`, `lib/session-call.mjs`, `lib/session-create.mjs`, `lib/session-query.mjs` | [0016-unified-parameter-naming-and-session-id-standard.md](./0016-unified-parameter-naming-and-session-id-standard.md) |
 | **ADR-0017** | Peer Session Title Event Persistence, Model Parameter Declaration, and Host Alignment Specification | **Accepted** | 2026-09-12 | `index.mjs`, `lib/session-create.mjs`, `types/session-create.d.ts` | [0017-peer-session-title-event-persistence-and-host-alignment.md](./0017-peer-session-title-event-persistence-and-host-alignment.md) |
 | **ADR-0018** | Canvas Motion Token, Geometric Invariant, and Visual Restraint Specification | **Accepted** | 2026-09-17 | `lib/client.js` | [0018-canvas-motion-and-visual-restraint.md](./0018-canvas-motion-and-visual-restraint.md) |
+| **ADR-0019** | Channel-Split Routing, Lineage On-Demand Focus, and Port Non-Interference Geometry | **Accepted** | 2026-09-17 | `lib/client.js` | [0019-channel-split-routing-and-lineage-on-demand-focus.md](./0019-channel-split-routing-and-lineage-on-demand-focus.md) |
+| **ADR-0020** | System Performance Specifications, Resource Budgets, and Deterministic SLA Baselines | **Accepted** | 2026-09-18 | `lib/board-store.mjs`, `lib/call-telemetry.mjs`, `lib/client.js`, `tests/performance-baseline.test.mjs` | [0020-system-performance-specifications-and-resource-budgets.md](./0020-system-performance-specifications-and-resource-budgets.md) |
 
 ---
 
