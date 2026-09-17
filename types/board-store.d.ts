@@ -201,8 +201,8 @@ export declare function normalizeWorkspace(rawPath: string | null | undefined): 
 export declare const RESERVED_TOPIC_PREFIXES: readonly string[];
 
 /**
- * 校验主题是否属于保留主题或遥测域。
- * 遵循 ADR-0001 与 ADR-0012：遥测轨迹严格属于纯内存遥测域，严禁作为持久化黑板条目发布。
+ * 校验主题是否属于保留主题或看板数据域。
+ * 遵循 ADR-0001 与 ADR-0012：调用轨迹严格属于纯内存看板数据域，严禁作为持久化黑板条目发布。
  *
  * @param topic 待校验的主题字符串
  * @returns 是否属于保留主题
@@ -227,6 +227,15 @@ export declare function extractTitle(post: BoardPost | Partial<BoardPost> | null
  * @returns 记名提醒文本，无条目时返回空字符串 ''
  */
 export declare function formatAuthorReminderText(posts?: BoardPost[] | null): string;
+
+/**
+ * 标准化多态执行参数（支持单对象包装形式或按位置传入形式）
+ */
+export declare function normalizeExecParams(
+  argsOrParams?: any,
+  maybeExec?: any,
+  maybeCtx?: any
+): { args: any; exec: any; ctx: any };
 
 /**
  * 公共黑板存储引擎：内存存储、防抖持久化与备份恢复
@@ -325,6 +334,69 @@ export declare class BoardStore {
    * 销毁实例并持久化数据
    */
   close(): Promise<void>;
+
+  /**
+   * 解析调用方 Agent 的会话标识、工作区与会话目录
+   */
+  resolveCallerDirectory(
+    agent?: any,
+    ctx?: any
+  ): { authorSessionId: string; directory: any; callerWorkspace: string };
+
+  /**
+   * 执行 board_post 领域操作：参数校验、保留主题拦截、调用方工作区解析与条目落盘
+   */
+  executePost(
+    argsOrParams?: { args?: BoardPostArgs; exec?: any; ctx?: any } | BoardPostArgs,
+    maybeExec?: any,
+    maybeCtx?: any
+  ): Promise<{
+    success: boolean;
+    postId?: string;
+    topic?: string;
+    authorSessionId?: string;
+    createdAt?: string;
+    expiresAt?: string;
+    scope?: string;
+    message?: string;
+    error?: string;
+  }>;
+
+  /**
+   * 执行 board_list 领域操作：作用域过滤、工作区隔离、摘要截断与结构化响应
+   */
+  executeList(
+    argsOrParams?: { args?: any; exec?: any; ctx?: any } | any,
+    maybeExec?: any,
+    maybeCtx?: any
+  ): Promise<{
+    success: boolean;
+    error?: string;
+    count: number;
+    scope?: string;
+    titlesOnly?: boolean;
+    posts: any[];
+  }>;
+
+  /**
+   * 执行 board_clear 领域操作：条目/主题归档或物理删除与工作区隔离保护
+   */
+  executeClear(
+    argsOrParams?: { args?: any; exec?: any; ctx?: any } | any,
+    maybeExec?: any,
+    maybeCtx?: any
+  ): Promise<{
+    success: boolean;
+    clearedCount: number;
+    action?: string;
+    message?: string;
+    error?: string;
+  }>;
+
+  /**
+   * 获取调用方 Agent 在当前工作区内的有效未清理提醒文本
+   */
+  getAuthorReminder(agent?: any, ctx?: any): string;
 }
 
 export { BoardStore as AtomicBoardStore };

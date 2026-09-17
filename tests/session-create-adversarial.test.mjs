@@ -521,7 +521,7 @@ test('初始消息分发失败与黑板公告降级处理', async () => {
   // 初始消息分发异常不能导致 executeSessionCreate 失败，会话依然创建成功并记录降级告警
   const res = await executeSessionCreate(faultCtx, {
     title: 'Fault Tolerant Worker',
-    initial_message: 'Will fail ignition'
+    initial_message: 'Will fail initial dispatch'
   }, { agent: caller });
 
   assert.equal(res.success, true);
