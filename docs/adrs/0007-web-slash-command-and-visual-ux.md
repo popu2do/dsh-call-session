@@ -15,13 +15,13 @@
 
 ## 1. Context and Problem Statement
 
-### 1.1 Background & Pain Points
+### 1.1 Background & Issues
 在既往设计中，`dsh-call-session` 试图在 npm `package.json` 中声明 `bin: { "dsh-call-session": "bin/dsh-call-session.mjs" }`，提供一个面向操作系统的外部 CLI 命令行工具。
-这种设计带来了显著的产品形态撕裂与工程弊端：
-1. **外部独立进程断链**：CLI 运行于 DSH 主进程外部，无法感知或直接获取宿主内存中的 `ctx.agents` 实例列表，只能再次退化为依赖本地 HTTP 网络端口；
-2. **割裂人类交互体验**：人类用户在 DSH Web GUI 界面交互时，需要额外打开系统终端输入复杂的命令参数才能向 Agent 发消息，严重背离了现代 Web AI IDE 的沉浸式交互范式；
-3. **缺少宿主级命令提示与语法补全**：外部 CLI 无法利用 DSH Web 输入框原生的 Slash Command 智能联想机制；
-4. **视觉侵占与格式错乱**：由于缺乏统一的 UI 展现规范，早期的跨会话交互在 Web 界面被误当做普通用户打字消息，破坏了界面美感与专业性。
+这种设计带来了工程弊端与割裂：
+1. **外部独立进程断链**：CLI 运行于 DSH 主进程外部，无法感知或直接获取宿主内存中的 `ctx.agents` 实例列表，退化为依赖本地 HTTP 网络端口；
+2. **割裂人类交互体验**：人类用户在 DSH Web GUI 界面交互时，需要额外打开系统终端输入参数向 Agent 发送消息，增加了额外的终端操作成本；
+3. **缺少宿主级命令提示与语法补全**：外部 CLI 无法利用 DSH Web 输入框原生的 Slash Command 联想机制；
+4. **视觉侵占与格式错乱**：由于缺乏统一的 UI 展现规范，早期的跨会话交互在 Web 界面被当做普通用户输入消息，影响了界面呈现效果。
 
 ### 1.2 Architectural Forces & Constraints
 - **In-Process Command Boundary**：面向用户的交互命令运行在 DSH 宿主进程内部，由 `ctx.commands` 服务直接驱动；

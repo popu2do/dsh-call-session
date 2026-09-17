@@ -28,7 +28,7 @@ test('ADR-0018 不变量 1: 连线呼吸动画必须拥有独立关键帧且严�
 });
 
 test('ADR-0018 不变量 2: 浅色主题作用域下必须压制深色模式的高强度霓虹发光滤镜', () => {
-  // ADR-0018 §2.2: .dsh-canvas-light 作用域下彻底清空发光滤镜 (filter: none)，杜绝白底晕轮
+  // ADR-0018 §2.2: .dsh-canvas-light 作用域下清空发光滤镜 (filter: none)，避免白底晕轮
   const lightEdgeRule = clientSource.match(/\.dsh-canvas-container\.dsh-canvas-light[^{]*\.dsh-(?:pulse|flow)-edge[^{]*\{([^}]+)\}/);
   assert.ok(
     lightEdgeRule,
@@ -41,7 +41,7 @@ test('ADR-0018 不变量 2: 浅色主题作用域下必须压制深色模式的�
 });
 
 test('ADR-0018 不变量 3: 链路聚焦高亮态必须为实线且与流动虚线样式互斥', () => {
-  // ADR-0018 §2.3: 高亮态连线必须为实线，并独占 dsh-pulse-edge 类名，杜绝流动虚线样式覆盖
+  // ADR-0018 §2.3: 高亮态连线必须为实线，并独占 dsh-pulse-edge 类名，避免流动虚线样式覆盖
   assert.ok(
     clientSource.includes("(isCallHovered || isConnected) ? 'dsh-pulse-edge' : decay.className"),
     '高亮调用边必须严格使用 dsh-pulse-edge 且不可与 decay.className 叠加'
