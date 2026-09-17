@@ -18,7 +18,7 @@
 
 ## 简介
 
-dsh-call-session 是面向 DeepSeek Harness (DSH) 的进程内跨会话通信、同级会话编排与状态共享插件。
+dsh-call-session 是面向 DeepSeek Harness (DSH) 的进程内跨会话通信、同级会话编排与状态共享插件。支持 DSH `>=0.1.1-rc.1`（已在 `0.1.2-rc.1` 与 `0.1.5-rc.1` / `0.1.5-rc.2` 验证通过）及 Cordis `^4.0.2`。
 
 在多 Agent 并发运行时，插件提供以下协作能力：
 - 单播呼叫：在独立运行的会话之间发起 1:1 指令派发与进度汇报，根据目标状态自适应选择运行中引导 steer 或空闲唤醒 followup。
