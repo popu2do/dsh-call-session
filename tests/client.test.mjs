@@ -3500,3 +3500,20 @@ test('ADR-0019 通道分流几何同心外扩与端口避让严格几何断言',
   assert.ok(extremeUpwardBezier.c2x >= 170 - 126, '上行极限跳数控制点2严格在左侧列宽安全边距内 (>= 44)');
 });
 
+test('ADR-0014: 视口宽度手柄自愈隔离（Viewport Width-Handle Suppression）CSS 规约与语法完整性断言', () => {
+  const clientPath = path.join(rootDir, 'lib', 'client.js');
+  const code = fs.readFileSync(clientPath, 'utf8');
+
+  // 1. 提取并拼接实际注入的 CANVAS_CSS 内容
+  const match = code.match(/var CANVAS_CSS = (\[[\s\S]*?\])\.join\('\\n'\);/);
+  assert.ok(match, 'lib/client.js 必须声明 CANVAS_CSS 样式定义');
+  const css = vm.runInNewContext(match[1]).join('\n');
+
+  // 2. 语法完整性：严禁在样式块或规则闭合处产生非法逗号残留（如 },）
+  assert.equal(css.includes('},'), false, 'CANVAS_CSS 严禁包含非法符号 }, 语法畸变');
+
+  // 3. 规范选择器与声明断言
+  const expectedRule = 'body:has(.dsh-canvas-container) [data-width-handle] {\n  display: none !important;\n}';
+  assert.ok(css.includes(expectedRule), 'CANVAS_CSS 必须包含精准的视口宽度手柄自愈规则块');
+});
+
