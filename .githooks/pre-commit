@@ -6,9 +6,9 @@ if [ "$ALLOW_README" != "1" ] && git diff --cached --name-only | grep -qE '^(REA
   exit 1
 fi
 
-bad_docs=$(git diff --cached --name-only --diff-filter=d | grep '^docs/' | grep -vE '^docs/(adrs/|agents/|README\.md$)' || true)
+bad_docs=$(git diff --cached --name-only --diff-filter=d | grep '^docs/' | grep -vE '^docs/(adrs/|agents/|architecture/|README\.md$)' || true)
 if [ -n "$bad_docs" ]; then
-  echo "hook: unauthorized docs path. Allowed: docs/adrs/, docs/agents/, docs/README.md" >&2
+  echo "hook: unauthorized docs path. Allowed: docs/adrs/, docs/agents/, docs/architecture/, docs/README.md" >&2
   exit 1
 fi
 
