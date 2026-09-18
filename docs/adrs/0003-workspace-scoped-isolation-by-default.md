@@ -89,6 +89,8 @@ In naive shared-memory or single-board designs:
    - `board_clear` validates that posts targeted for deletion belong strictly to the caller's workspace unless explicit global authority is verified (`lib/board-store.mjs` Line 232-234).
 4. **Session Discovery Scoping**:
    - `session_query` defaults to `cross_workspace: false`, returning only active/idle agents that share the exact normalized `cwd` (`lib/session-query.mjs` Line 107-110).
+5. **Session Creation Scoping (`session_create`)**:
+   - 遵循默认工作区隔离原则：未显式指定 `workspace` 时，自动继承调用方的 `callerWorkspace` 作为安全基准；显式指定合法已注册的目标工作区时，允许将新建会话附着至目标工程，严格遵循“默认隔离 + 显式接入（Opt-in）”契约，严禁将“默认安全”误解为“绝对禁闭”。
 
 ### 4.2 System Architecture & Topology
 

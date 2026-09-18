@@ -29,7 +29,7 @@
 ### 1.2 Architectural Forces & Constraints
 - **In-Memory Execution**：投影与生命周期拦截在 DSH 进程内内存中完成（< 50μs），避免外部 I/O 阻塞。
 - **Prompt Cache Protection (Pure State Invariant)**：上下文投影保证文本幂等性，避免易逝时间戳，以利用服务端 KV 前缀缓存。
-- **Hermetic Workspace Scoping**：遵循 ADR-0003，状态镜像投影与会话创建以工作区规范化路径为强制边界，防止跨项目逃逸。
+- **Workspace Scoping Discipline**：遵循 ADR-0003（默认工作区隔离与显式选择原则），状态镜像投影与会话创建默认以调用方工作区为安全基准，同时允许显式指定目标工作区。严格区分 ADR-0008 的系统架构零污染（绝对禁止外部副作用）与 ADR-0003 的领域数据隔离（默认隔离 + 显式授权）。
 - **Strict Blast Radius Containment**：平级会话创建具备并发配额、调用限频、代际深度限制与敏感标题过滤，防止资源耗尽。
 - **Zero-External Intrusion**：依托 Cordis 生命周期与 DSH 原生注册表，不修改宿主核心源码。
 
@@ -174,12 +174,20 @@ Active Posts (Memory)   Anti-Snapshot-Storm                      Quota & Rate Ch
       "preset": {
         "type": "string",
         "description": "可选指定挂载的智能体预设 ID。默认继承当前会话或全局默认预设。废止 agentPreset 别名。"
+      },
+      "workspace": {
+        "type": "string",
+        "description": "可选指定目标工作区规范化路径。缺省时回退至调用方工作区（ADR-0003 默认策略）。"
       }
     },
     "required": []
   }
   ```
   > **安全与契约规范 (ADR-0016)**：`session_create` 严禁暴露外部 `sessionId` 入参，会话唯一标识符由引擎内部随机生成，防止外部传入引发标识冲突。
+  >
+  > **工作区隔离与零污染辨析规范**：
+  > 1. **系统架构零污染（ADR-0008）**：属于绝对硬约束。任何工具传参绝不允许破坏宿主全局对象、污染全局样式或在项目目录残留未纳管文件。
+  > 2. **领域工作区隔离（ADR-0003）**：属于安全默认策略。`session_create` 默认作用于当前工作区以防止数据穿扰；当显式传入合法注册的目标 `workspace` 时，允许将新会话附着至目标工程，严格遵循“默认隔离 + 显式选择（Opt-in）”契约，不视为“逃逸”或“污染”。
 
 - **返回值结构（Return Schema, Machine Layer camelCase）**：
   ```json
