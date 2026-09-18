@@ -66,6 +66,7 @@ As `dsh-call-session` evolved into version 0.1.0, the accompanying user document
 3. **Plain Technical Language Invariant**: Forbid metaphorical jargon. Use "单播呼叫" (unicast call) and "共享黑板" (shared board).
 4. **Architectural Separation Invariant**: Detailed state-machine diagrams and lock retry mechanisms belong in `docs/adrs/`, not in the user README.
 5. **Ecosystem Modesty Invariant**: Explicitly inform users to prefer native DSH capabilities (such as built-in `subagent` process-internal delegation) for single-task delegation before introducing cross-session coordination.
+6. **Agent Enforcement Invariant**: Operational output discipline and language constraints for autonomous agents are maintained in `AGENTS.md` as always-loaded context; this record serves as the architectural rationale.
 
 ### 4.2 Documentation Structural Specification
 

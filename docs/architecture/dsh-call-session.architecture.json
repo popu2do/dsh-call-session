@@ -1,0 +1,337 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "dsh-call-session 系统架构",
+    "output": "dsh-call-session-architecture.html",
+    "quality_profile": "showcase",
+    "locale": "zh-CN",
+    "views": [
+      {
+        "id": "overview",
+        "label": "整体全景",
+        "focus": [
+          "client-canvas",
+          "cordis-plugin",
+          "native-tools",
+          "session-call",
+          "board-store",
+          "dsh-host"
+        ],
+        "note": "跨会话协作、单播调度与黑板状态共享端到端全景。"
+      },
+      {
+        "id": "telemetry-path",
+        "label": "前端观测链路",
+        "focus": [
+          "client-canvas",
+          "web-telemetry",
+          "telemetry-buffer"
+        ],
+        "note": "Web 协作看板通过轻量 HTTP 轮询获取会话拓扑与调用连线。"
+      },
+      {
+        "id": "dispatch-path",
+        "label": "单播调度链路",
+        "focus": [
+          "native-tools",
+          "session-call",
+          "session-mgr",
+          "dsh-host"
+        ],
+        "note": "原生工具触发 1 对 1 单播推送，校验并发配额并调度目标会话。"
+      },
+      {
+        "id": "storage-path",
+        "label": "黑板持久化链路",
+        "focus": [
+          "native-tools",
+          "board-store",
+          "disk-storage"
+        ],
+        "note": "公共黑板提供拉取式存储，具备容量感知淘汰与原子防抖落盘。"
+      }
+    ]
+  },
+  "components": [
+    {
+      "id": "client-canvas",
+      "type": "frontend",
+      "label": "协作看板前端",
+      "sublabel": "Visual Canvas",
+      "tag": "lib/client.js",
+      "pos": [
+        40,
+        170
+      ],
+      "size": [
+        160,
+        64
+      ]
+    },
+    {
+      "id": "web-telemetry",
+      "type": "backend",
+      "label": "看板数据路由",
+      "sublabel": "HTTP REST API",
+      "tag": "/api/dsh-call-session",
+      "pos": [
+        280,
+        100
+      ],
+      "size": [
+        160,
+        64
+      ]
+    },
+    {
+      "id": "cordis-plugin",
+      "type": "backend",
+      "label": "Cordis 插件内核",
+      "sublabel": "Plugin Lifecycle",
+      "tag": "index.mjs",
+      "pos": [
+        280,
+        230
+      ],
+      "size": [
+        160,
+        64
+      ]
+    },
+    {
+      "id": "native-tools",
+      "type": "security",
+      "label": "智能体工具层",
+      "sublabel": "Native Tools Facade",
+      "tag": "session_call / board_*",
+      "pos": [
+        280,
+        360
+      ],
+      "size": [
+        160,
+        64
+      ]
+    },
+    {
+      "id": "telemetry-buffer",
+      "type": "database",
+      "label": "调用连线缓存",
+      "sublabel": "RingBuffer",
+      "tag": "200 Records",
+      "pos": [
+        600,
+        100
+      ],
+      "size": [
+        160,
+        64
+      ]
+    },
+    {
+      "id": "session-call",
+      "type": "backend",
+      "label": "单播调度分发",
+      "sublabel": "Call Dispatcher",
+      "tag": "steer / followup",
+      "pos": [
+        600,
+        230
+      ],
+      "size": [
+        160,
+        64
+      ]
+    },
+    {
+      "id": "session-mgr",
+      "type": "backend",
+      "label": "会话目录配额",
+      "sublabel": "Directory & Quota",
+      "tag": "Max 5 Running",
+      "pos": [
+        600,
+        360
+      ],
+      "size": [
+        160,
+        64
+      ]
+    },
+    {
+      "id": "board-store",
+      "type": "database",
+      "label": "公共黑板存储",
+      "sublabel": "Atomic Board Store",
+      "tag": "200 Items Capacity",
+      "pos": [
+        600,
+        490
+      ],
+      "size": [
+        160,
+        64
+      ]
+    },
+    {
+      "id": "dsh-host",
+      "type": "external",
+      "label": "DSH 宿主环境",
+      "sublabel": "Agent Session Kernel",
+      "tag": "ctx.agents",
+      "pos": [
+        920,
+        295
+      ],
+      "size": [
+        160,
+        64
+      ]
+    },
+    {
+      "id": "disk-storage",
+      "type": "database",
+      "label": "磁盘原子存储",
+      "sublabel": "Debounced Storage",
+      "tag": ".dsh/blackboard.json",
+      "pos": [
+        920,
+        490
+      ],
+      "size": [
+        160,
+        64
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "DSH 插件服务核心",
+      "wraps": [
+        "web-telemetry",
+        "cordis-plugin",
+        "native-tools",
+        "telemetry-buffer",
+        "session-call",
+        "session-mgr",
+        "board-store"
+      ]
+    },
+    {
+      "kind": "security-group",
+      "label": "宿主运行与持久化边界",
+      "wraps": [
+        "dsh-host",
+        "disk-storage"
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "client-to-api",
+      "from": "client-canvas",
+      "to": "web-telemetry",
+      "label": "HTTP 轮询"
+    },
+    {
+      "id": "api-to-telemetry",
+      "from": "web-telemetry",
+      "to": "telemetry-buffer",
+      "label": "读取快照"
+    },
+    {
+      "id": "cordis-to-tools",
+      "from": "cordis-plugin",
+      "to": "native-tools",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "label": "注册工具",
+      "labelDy": 24
+    },
+    {
+      "id": "tools-to-call",
+      "from": "native-tools",
+      "to": "session-call",
+      "label": "单播调度"
+    },
+    {
+      "id": "tools-to-mgr",
+      "from": "native-tools",
+      "to": "session-mgr",
+      "label": "查询会话",
+      "labelDx": 35
+    },
+    {
+      "id": "tools-to-store",
+      "from": "native-tools",
+      "to": "board-store",
+      "label": "读写黑板"
+    },
+    {
+      "id": "call-to-telemetry",
+      "from": "session-call",
+      "to": "telemetry-buffer",
+      "label": "记录调用"
+    },
+    {
+      "id": "call-to-mgr",
+      "from": "session-call",
+      "to": "session-mgr",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "label": "并发校验",
+      "labelDy": 24
+    },
+    {
+      "id": "call-to-host",
+      "from": "session-call",
+      "to": "dsh-host",
+      "label": "单播调度",
+      "variant": "emphasis"
+    },
+    {
+      "id": "mgr-to-host",
+      "from": "session-mgr",
+      "to": "dsh-host",
+      "label": "会话同步"
+    },
+    {
+      "id": "store-to-disk",
+      "from": "board-store",
+      "to": "disk-storage",
+      "label": "防抖落盘",
+      "variant": "dashed"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "前端协作看板",
+      "items": [
+        "Web 2D 画布呈现工作区分组列与通道分流走线",
+        "前台激活 1500ms、后台降频 5000ms、隐藏 5 分钟挂起",
+        "链路聚焦与脉冲发光按需呈现"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "单播调度与会话治理",
+      "items": [
+        "严格 1 对 1 单播推送，防范无序广播",
+        "目标状态敏感：运行态引导 steer，空闲态唤醒 followup",
+        "单工作区并发运行配额上限 5"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "公共黑板与存储",
+      "items": [
+        "纯拉取式进程内共享，发布绝不唤醒会话",
+        "容量上限 200 条，依过期、撤销、最旧顺序淘汰",
+        "固定 300ms 时间窗口防抖合并原子落盘与备份同步"
+      ]
+    }
+  ]
+}

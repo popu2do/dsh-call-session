@@ -100,6 +100,7 @@ Desktop.ini
 # =============================================================================
 # Testing & Coverage Artifacts
 # =============================================================================
+docs/architecture/*.visual-check.*
 coverage/
 .nyc_output/
 *.lcov
