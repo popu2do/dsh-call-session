@@ -168,6 +168,7 @@
 | **入参** | `model` | `string` | 否 | 继承 | 可选覆写模型 ID（支持 `provider/model` 格式） |
 | **入参** | `reasoning_effort` | `string` | 否 | 继承 | 可选推理强度。**废除 `reasoningEffort` 别名** |
 | **入参** | `preset` | `string` | 否 | 继承 | 可选智能体预设 ID。**废除 `agentPreset` 别名** |
+| **入参** | `workspace` | `string` | 否 | `callerWorkspace` | 可选目标工作区规范化路径。缺省时继承调用方工作区（ADR-0003 默认安全策略，区别于 ADR-0008 架构零污染硬约束） |
 | *排除* | *(sessionId)* | - | - | - | **从入参定义移除，禁止作为工具参数传参** |
 | **出参** | `success` | `boolean` | 是 | - | 会话创建是否成功 |
 | **出参** | `sessionId` | `string` | 否 | - | 新建平级会话全局唯一 ID（严禁 `session_id`） |
