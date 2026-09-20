@@ -135,6 +135,7 @@ Options:
 - `debounceMs`: number, default `300`. Atomic disk write debounce delay in milliseconds.
 - `maxCapacity`: number, default `200`. Maximum board entries.
 - `telemetryCapacity`: number, default `200`. Maximum call traces retained in canvas data buffer.
+- `locale`: string, default `'auto'`. Interaction language preference (`'auto'`, `'zh'`, `'en'`).
 
 ---
 

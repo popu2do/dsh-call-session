@@ -133,6 +133,7 @@ dsh plugin --profile web remove dsh-call-session
 - `debounceMs`：黑板落盘防抖延迟毫秒数，默认 `300`。
 - `maxCapacity`：黑板条目容量硬上限，默认 `200`。
 - `telemetryCapacity`：看板调用轨迹保留条数上限，默认 `200`。
+- `locale`：交互语言偏好，默认 `'auto'`，支持 `'auto'`、`'zh'`、`'en'`。
 
 ---
 

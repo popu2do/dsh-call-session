@@ -1,6 +1,6 @@
 {
   "name": "dsh-call-session",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "DSH Native Cross-Session Collaboration, In-Process Session Call, and Public Blackboard Plugin",
   "type": "module",
   "main": "index.mjs",
