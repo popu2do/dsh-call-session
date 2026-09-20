@@ -70,12 +70,24 @@ As `dsh-call-session` evolved into version 0.1.0, the accompanying user document
 
 ### 4.2 Documentation Structural Specification
 
-User-facing documentation (`README.md` and `README_ZH.md`) must strictly adhere to a standardized five-section layout:
-1. **Overview / 简介**: Concise definition and scope of the plugin without marketing hyperbole.
-2. **Installation / 安装**: Zero-friction setup via the global profile bundle (`cordis.patch.yml`).
-3. **Usage / 用法**: Minimalist, copy-pasteable examples for tools.
-4. **Comparison / 对比**: Objective distinction between native process-internal `subagent` delegation and cross-session unicast/board coordination.
-5. **Invariants / 规范**: Explicit system boundaries and zero-trace engineering discipline.
+User-facing documentation (`README.md` and `README_ZH.md`) must strictly adhere to a standardized layout separated by horizontal dividers (`---`):
+1. **Hero & Tagline / 标语与横幅**: Centered mascot hero banner (`assets/hero.png`), project tagline, and status badges.
+2. **Overview / 概述**: Concise definition and scope of the plugin without marketing hyperbole.
+3. **Installation / 安装**: Zero-friction setup via profile commands (`dsh plugin --profile web add ...`).
+4. **Scenarios / 场景**: Human-centric natural language prompts driving peer handoffs, blackboard posting, and session creation.
+5. **Canvas / 看板**: Read-only topology showcase with sanitized, authentic UI demonstration (`assets/canvas-demo.png`).
+6. **Tools / 工具**: Compact capability matrix without internal parameter dumps.
+7. **Comparison / 对比**: Objective distinction between native process-internal `subagent` delegation and cross-session coordination.
+8. **Config / 配置**: Minimalist configuration options and overrides.
+9. **Architecture / 架构**: Single-point external links to formal ADRs and offline topology panorama.
+10. **Compatibility / 兼容**: Explicit supported and verified DSH, Cordis, and Node.js versions.
+11. **License / 许可**: Explicit open-source licensing declaration.
+
+### 4.3 Revision 2026-09-20: Human-Centric Scenarios and Visual Cadence
+1. **Human-Centric Scenario Invariant**: User documentation presents capabilities through realistic natural language conversational prompts, deprecating machine-level JSON tool-call schema blocks in primary documentation.
+2. **Ecosystem Visual Parity**: Standardized top hero banner slot (`assets/hero.png`) and verified sanitized light-theme Canvas topology screenshot (`assets/canvas-demo.png`).
+3. **Section Divider Cadence**: Major Level-2 sections (`##`) are separated by horizontal dividers (`---`) to maintain scannability and visual rhythm.
+4. **Audience-Appropriate Terminal Sections**: Deprecates source-level developer test commands (`npm test`, `npm run verify`) in user READMEs in favor of an explicit Compatibility matrix (`## 兼容` / `## Compatibility`) and license declaration (`## 许可` / `## License`).
 
 ---
 

@@ -1,4 +1,8 @@
-# dsh-call-session
+<p align="center">
+  <img src="./assets/hero.png" width="100%" alt="dsh-call-session hero" />
+</p>
+
+<h1 align="center">dsh-call-session</h1>
 
 <p align="center">
   In-process cross-session communication and workspace shared blackboard for DeepSeek Harness (DSH)
@@ -13,17 +17,21 @@
 </p>
 
 <p align="center">
-  <a href="README.md">English</a> | <a href="README_ZH.md">简体中文</a>
+  English | <a href="README_ZH.md">简体中文</a>
 </p>
+
+---
 
 ## Overview
 
-dsh-call-session is a plugin for DeepSeek Harness (DSH) providing in-process cross-session messaging, peer session orchestration, and state sharing. Compatible with DSH `>=0.1.1-rc.1` (verified on `0.1.2-rc.1` and `0.1.5-rc.1` / `0.1.5-rc.2`) and Cordis `^4.0.2`.
+DeepSeek Harness sessions are isolated by default, and child tasks exit upon completion.
 
-When multiple agent sessions run concurrently, the plugin provides three collaboration capabilities:
-- Unicast calls: Send 1:1 directives or status reports between independent sessions. Automatically adapts to target state via running steer or idle followup.
-- Peer session creation: Create peer sessions directly in current workspace via `session_create`, supporting context post mounting and quota controls.
-- Shared blackboard and author reminder: Maintain a workspace-isolated store to post and retrieve milestones or shared state without passive wakeups; and automatically inject pure-state idempotent author reminders into System Prompt Context to protect LLM KV cache.
+`dsh-call-session` adds in-process cross-session communication, peer session creation, and shared blackboard capabilities:
+- Inter-session unicast: send directives or hand off tasks between independent long-running sessions.
+- Shared blackboard: publish bulky artifacts to a shared board for on-demand retrieval, avoiding context bloat.
+- Visual canvas: observe session states, blackboard items, and call trajectories in the DSH Web UI.
+
+---
 
 ## Install
 
@@ -40,192 +48,78 @@ dsh plugin --profile web remove dsh-call-session
 
 > Note: The `--profile` option must follow the `plugin` subcommand, e.g. `dsh plugin --profile web ...`.
 
-## Usage
+---
 
-### Unicast Call
+## Scenarios
 
-Send directives or reports to another session using `session_call`. The plugin resolves target sessions in-process and injects native notifications:
+Instruct the agent using plain natural language in the chat; the agent invokes the tools automatically:
 
-```json
-{
-  "name": "session_call",
-  "arguments": {
-    "target_session_id": "session-be7d7578b0fe",
-    "call_type": "task_dispatch",
-    "message": "Please review export specifications in types/index.d.ts."
-  }
-}
-```
+### Task Handoff
 
-### Shared Board
+User prompt:
+> Hand off this task summary to the "audit-session" session.
 
-Post shared data or milestone results with `board_post` to obtain a unique `postId`. Other sessions query entries on demand via `board_list` without unexpected wakeups:
+The agent calls `session_call` to dispatch a unicast message. If the target session is running, it steers execution; if idle, it wakes a new turn.
 
-```json
-{
-  "name": "board_post",
-  "arguments": {
-    "topic": "task:audit",
-    "content": "Security audit completed. No vulnerabilities found.",
-    "tags": ["audit", "passed"]
-  }
-}
-```
+### Post Results
 
-### Collaboration Mode
+User prompt:
+> Publish the review conclusions to the board and notify relevant sessions to pick up tasks.
 
-For verbose test logs, audit reports, or code changes, use the two-phase collaboration flow:
-1. The sender posts the bulky payload using `board_post` and receives a `postId`.
-2. The sender calls `session_call` with a concise directive, referencing the `postId` in `context_post_ids`.
-3. The recipient receives the directive and retrieves the full content on demand using `board_list`.
+The agent calls `board_post` to store the detailed report on the blackboard and obtain a `postId`. Other sessions retrieve the content on demand via `board_list`, preventing context window explosion.
 
-## Tools
+### Create Session
 
-| Name | Type | Mode | Description |
-| :--- | :--- | :--- | :--- |
-| `session_call` | Tool | Push | 1:1 unicast call adapting to steer or followup |
-| `session_query` | Tool | Read-only | List active and idle sessions in current workspace or cross-workspace |
-| `session_create` | Tool | Native | Create peer sessions running in parallel long-term, unlike temporary subagents |
-| `board_post` | Tool | Pull | Publish announcements or artifacts to board without waking other sessions |
-| `board_list` | Tool | Pull | Query board entries with topic/tag/id filters and titles_only mode |
-| `board_clear` | Tool | Manage | Dismiss archive or purge delete board entries |
+User prompt:
+> Create a new session and hand off tasks.
 
-### session_create
+The agent calls `session_create` to spawn a long-running peer session in the current workspace, automatically inheriting model specifications and presets.
 
-Create peer sessions. Use when the user requests a new session or peer session. Independent sessions run long-term in parallel, unlike temporary subagent tasks.
-
-Parameters:
-- `title`: string, optional. Title up to 60 characters. Privileged prefixes `[SYSTEM]`, `[CAPTAIN]`, `[ROOT]` are stripped. If omitted, derived from initial message or numbered fallback.
-- `initial_message`: string, optional. Initial task directive delivered immediately to start execution. If omitted, session remains idle.
-- `context_post_ids`: string[], optional. Blackboard post IDs up to 5 entries, mounted to directive header.
-- `model`: string, optional. Target session model override, supporting `provider/model` or bare `model`. Defaults to inheriting current session model unless specified.
-- `reasoning_effort`: string, optional. Target session reasoning effort override (`low`, `medium`, `high`, or adapter-supported identifier). Defaults to inheriting caller reasoning effort unless specified.
-- `preset`: string, optional. Agent preset identifier or template to compose into target session. Defaults to inheriting caller or global default preset unless specified.
-
-Outputs:
-- `success`: boolean. True when session creation succeeds.
-- `sessionId`: string. Generated peer session ID starting with `session-`.
-- `title`: string. Normalized peer session title.
-- `workspace`: string. Target session workspace root path.
-- `status`: string. Initial status (`running` if `initial_message` was provided, `idle` otherwise).
-- `generation`: number. Derivation depth generation counter.
-- `bootstrapPostId`: string | null, optional. ID of the bootstrap blackboard post if generated.
-- `contextPostIds`: string[]. Cleaned and mounted blackboard post IDs.
-- `error`: string, optional. Machine error code on failure.
-
-Safety guards:
-- Concurrent running quota: Maximum 5 concurrent running sessions per workspace, rejected with QuotaExceeded. Idle sessions do not count against this quota.
-- Rate limit: Maximum 5 creations per minute per session, rejected with RateLimitExceeded.
-- Generation limit: Peer derivation depth limit 2, rejected with GenerationLimitExceeded.
-
-### session_call
-
-Dispatch a unicast call to target session. Steers target when running, or wakes a new turn via followup when idle.
-
-The transport layer injects an objective metadata header (`[From: <callerSessionId> (<callerTitle>) | CallType: <callType>]`) while retaining message text verbatim without formatting manipulation or prescriptive instructions.
-
-Parameters:
-- `target_session_id`: string, required. Target session ID or unique prefix of at least 8 chars. Wildcards like `*` or `all` are forbidden.
-- `message`: string, required. Directive or report text up to 4000 characters per call.
-- `call_type`: string, optional. Semantic intent category. Defaults to `task_dispatch`:
-  - `task_dispatch`: Task suggestion or dispatch; recipient autonomously decides whether to reply with `task_report`.
-  - `task_report`: Work outcome delivery; marks collaboration closure. Caller archives without additional reply.
-  - `notice`: One-way status notification; purely informational without reply.
-- `context_post_ids`: string[], optional. Referenced blackboard post IDs. Formatted into `> Context Ref: #post-xxx`.
-
-### session_query
-
-Query sessions and runtime status in current host environment.
-
-Parameters:
-- `query`: string, optional. Fuzzy filter by session ID or title.
-- `running_only`: boolean, optional, default `false`. Return running sessions only.
-- `cross_workspace`: boolean, optional, default `false`. Query across workspaces. Defaults to false, current workspace only.
-- `limit`: integer, optional, default `50`. Maximum number of sessions returned.
-
-Returned list contains `sessionId`, `title`, `status` normalized to `running` or `idle`, and `cwd`.
-
-### board_post
-
-Post shared information to public blackboard via pull model without waking other sessions.
-
-Parameters:
-- `topic`: string, required. Topic namespace such as `task:audit` or `build:artifact`.
-- `content`: string, required. Payload text or Markdown up to 64KB.
-- `tags`: string[], optional. Retrieval tags.
-- `ttl`: integer, optional, default `3600`. Time to live in seconds.
-
-Returns unique `postId` and entry metadata.
-
-### board_list
-
-Query active records on blackboard, isolated by workspace by default. Uses `titles_only: true` by default to strip content and protect Prompt KV cache. When exact `id` is specified, `titles_only` routes to `false` to fetch full content.
-
-Parameters:
-- `id`: string, optional. Exact lookup by post ID such as `post-1725300000000-abcd`. Routes `titles_only` to `false` by default.
-- `topic`: string, optional. Exact topic match.
-- `topic_prefix`: string, optional. Topic prefix match.
-- `tag`: string, optional. Filter by tag.
-- `titles_only`: boolean, optional, default `true`. Return titles and metadata only. Defaults to true without id, false with id. Explicit parameter takes precedence.
-- `cross_workspace`: boolean, optional, default `false`. Query across workspaces.
-- `limit`: integer, optional, default `20`. Maximum entries returned.
-
-Examples:
-Catalog query with titles-only digest:
-```json
-{
-  "name": "board_list",
-  "arguments": {
-    "topic": "task:audit"
-  }
-}
-```
-
-Exact lookup by ID with full content:
-```json
-{
-  "name": "board_list",
-  "arguments": {
-    "id": "post-1725300000000-abcd"
-  }
-}
-```
-
-### board_clear
-
-Clear finished or expired blackboard records.
-
-Parameters:
-- `id`: string, optional. Target post ID.
-- `topic`: string, optional. Target topic.
-- `mode`: string, optional, default `dismiss`. `dismiss` for soft archive, `purge` for permanent deletion.
-
-Example:
-```json
-{
-  "name": "board_clear",
-  "arguments": {
-    "topic": "task:audit",
-    "mode": "dismiss"
-  }
-}
-```
+---
 
 ## Canvas
 
-The DSH Web session view exposes a `Canvas` tab that observes cross-session collaboration in current workspace.
+The DSH Web session view exposes a `Canvas` tab to observe multi-agent collaboration across workspaces:
 
-- Content: workspace group columns, session nodes in `running` and `idle` states, board posts with remaining TTL, and cross-session call edges coloured by intent `task_dispatch`, `task_report`, `notice` that decay over time.
-- Interaction: hovering highlights the 1-hop connected subgraph; double-click opens a 420px read-only inspector drawer with field copy and ESC dismissal.
-- Read-only boundary: the canvas offers no edit, delete, or dispatch control. Every state change originates from the agents themselves.
-- Data source: the host route `GET /plugins/dsh-call-session/telemetry`, guarded by Connection authentication, GET-only, never cached. Call traces live in a bounded in-memory ring buffer, default capacity 200, FIFO eviction, never persisted, resetting on host restart.
-- In a webless profile the plugin stays tool-only: no route is registered and boot is never blocked.
+<p align="center">
+  <img src="./assets/canvas-demo.png" width="100%" alt="dsh-call-session canvas" />
+</p>
 
-Canvas data is never registered as an LLM tool, so System Prompt stays idempotent and Prompt KV cache is undisturbed.
+- Topology: workspace columns, running/idle session nodes, blackboard items with TTL countdowns, and directional call traces.
+- Interaction: hovering highlights the 1-hop connected subgraph; double-clicking opens a read-only inspector drawer.
+- Read-only boundary: the canvas offers no control inputs; all state changes originate from the agents themselves.
+
+---
+
+## Tools
+
+| Tool | Type | Mode | Common Use Case |
+| :--- | :--- | :--- | :--- |
+| `session_call` | Tool | Push | 1:1 unicast call for task dispatch, progress reporting, and handoffs |
+| `session_create` | Tool | Native | Create long-running peer sessions for parallel multi-role collaboration |
+| `session_query` | Tool | Read-only | List sessions and check active/idle statuses in or across workspaces |
+| `board_post` | Tool | Pull | Publish blackboard entries for large artifacts and shared milestones |
+| `board_list` | Tool | Pull | Query blackboard records by ID, topic, or digest mode |
+| `board_clear` | Tool | Manage | Dismiss or purge completed and expired blackboard entries |
+
+---
+
+## Comparison
+
+| Mechanism | Type | Model | When to Use |
+| :--- | :--- | :--- | :--- |
+| `subagent` | Built-in | Hierarchical delegation, ephemeral child task, exits on completion | Scoped exploration, code search, one-off script execution. |
+| `dsh-call-session` | Plugin | Peer-to-peer collaboration, in-process unicast messaging and shared board | Directives and status sync between independent top-level sessions, or sharing large outputs. |
+
+Selection guidelines:
+- Prefer built-in: for isolated, scoped tasks, use DSH built-in `subagent` directly.
+- Use on demand: when multiple independent top-level sessions need to coordinate or share large context via a blackboard, use `dsh-call-session`.
+
+---
 
 ## Config
 
-The plugin requires no additional plugins, running with built-in defaults: 300ms disk debounce, 200 posts capacity.
+The plugin runs with built-in defaults out of the box.
 
 To customize, add property overrides to `~/.dsh/profiles/web/cordis.patch.yml`:
 
@@ -239,66 +133,30 @@ To customize, add property overrides to `~/.dsh/profiles/web/cordis.patch.yml`:
 Options:
 - `enabled`: boolean, default `true`. Enable or disable plugin tools.
 - `debounceMs`: number, default `300`. Atomic disk write debounce delay in milliseconds.
-- `maxCapacity`: number, default `200`. Maximum board entries, evicted by state-aware policy (expired -> archived -> oldest active).
-- `telemetryCapacity`: number, default `200`, range 10-2000. Maximum call traces retained in canvas data ring buffer, FIFO eviction.
+- `maxCapacity`: number, default `200`. Maximum board entries.
+- `telemetryCapacity`: number, default `200`. Maximum call traces retained in canvas data buffer.
 
-## Comparison
-
-Comparison of DSH built-in mechanisms and this plugin:
-
-| Mechanism | Type | Model | When to Use |
-| :--- | :--- | :--- | :--- |
-| `subagent` | Built-in | Hierarchical delegation, ephemeral child task, exits on completion | Scoped exploration, code search, one-off script execution. |
-| `dsh-call-session` | Plugin | Peer-to-peer collaboration, in-process unicast messaging and shared board | Directives and status sync between independent top-level sessions, or sharing large outputs. |
-
-### Selection
-
-- Prefer built-in: For isolated scoped tasks, use DSH built-in `subagent` directly without installing plugins.
-- Use on demand: When multiple independent top-level sessions need to exchange messages or share bulky context via a blackboard, use `dsh-call-session`.
+---
 
 ## Architecture
 
-Key technical decisions are recorded as Architecture Decision Records (ADRs) in [docs/adrs/README.md](./docs/adrs/README.md):
+Technical decisions are recorded as Architecture Decision Records (ADRs):
 
-| ADR | Title | Status | Description |
-| :--- | :--- | :--- | :--- |
-| [ADR-0001](./docs/adrs/0001-separation-of-concerns-board-vs-call.md) | Board vs Unicast separation | Accepted | Pull board and 1:1 unicast, avoiding broadcast storms |
-| [ADR-0002](./docs/adrs/0002-builtin-blackboard-store.md) | Built-in board store | Accepted | In-memory cache with local persistence, zero external DB |
-| [ADR-0003](./docs/adrs/0003-workspace-scoped-isolation-by-default.md) | Workspace isolation by default | Accepted | Scoped by workspace root with controlled cross-workspace queries |
-| [ADR-0004](./docs/adrs/0004-atomic-debounced-persistence-and-healing.md) | Atomic debounced persistence | Accepted | 300ms debounce, atomic file swap, and .bak self-healing |
-| [ADR-0005](./docs/adrs/0005-english-metadata-and-two-state-status.md) | Two-state session status | Accepted | Normalizes session states to running and idle |
-| [ADR-0006](./docs/adrs/0006-pure-dsh-native-in-process-context-injection.md) | In-process context injection | Accepted | Direct in-memory instance calls with native notice tags |
-| [ADR-0007](./docs/adrs/0007-web-slash-command-and-visual-ux.md) | Web slash command | Superseded | Native /dsh-call-session command (retired in favor of agent tools & UI actions) |
-| [ADR-0008](./docs/adrs/0008-zero-pollution-global-profile-mounting.md) | Profile patch mounting | Accepted | Declarative bundle patch with safe lifecycle disposal |
-| [ADR-0009](./docs/adrs/0009-restrained-minimalist-docs-and-anti-ai-slop.md) | Restrained docs & anti-slop | Accepted | Zero emoji, radical subtraction, <=4-char headings |
-| [ADR-0010](./docs/adrs/0010-dynamic-state-mirror-and-peer-session-lifecycle.md) | State mirror & peer sessions | Accepted | Pure-state idempotent injection guarding KV cache, peer quota and rate fuses |
-| [ADR-0011](./docs/adrs/0011-board-list-token-governance-and-exact-retrieval.md) | Board token governance | Accepted | Titles-only digest by default, exact id lookup routing |
-| [ADR-0012](./docs/adrs/0012-visual-collaboration-canvas-and-in-memory-call-telemetry.md) | Canvas & call telemetry | Accepted | Bounded in-memory ring buffer, read-only facade, native canvas view |
-| [ADR-0013](./docs/adrs/0013-human-canvas-global-transparency-vs-agent-workspace-isolation.md) | Human Canvas Transparency vs Agent Isolation | Accepted | Global cross-workspace transparency for human canvas, strict isolation for agent execution tools |
-| [ADR-0014](./docs/adrs/0014-canvas-gutter-routing-and-scoped-theme-parity.md) | Canvas Gutter Routing & Theme Parity | Accepted | Gutter-based obstacle-avoiding bezier curves, focus-dimming lineage, and scoped dark/light theme |
-| [ADR-0015](./docs/adrs/0015-peer-session-model-and-preset-inheritance.md) | Peer Session Model & Preset Inheritance | Accepted | Cascade fallback model resolution and preset inheritance for spawned peer sessions |
-| [ADR-0016](./docs/adrs/0016-unified-parameter-naming-and-session-id-standard.md) | Unified Parameter Naming & Session ID Governance | Accepted | Zero-alias parameter naming, strict sessionId format, clean deprecation of legacy aliases |
-| [ADR-0017](./docs/adrs/0017-peer-session-title-event-persistence-and-host-alignment.md) | Peer Session Title Event Persistence | Accepted | Asynchronous title rename emission, contextPostIds return metadata, host alignment |
-| [ADR-0018](./docs/adrs/0018-canvas-motion-and-visual-restraint.md) | Canvas Motion & Visual Restraint | Accepted | Motion noise reduction, low-saturation flow, and bounded glow |
-| [ADR-0019](./docs/adrs/0019-channel-split-routing-and-lineage-on-demand-focus.md) | Channel-Split Routing & Lineage Focus | Accepted | Dual-channel split routing, on-demand lineage focus, conflict-free ports |
-| [ADR-0020](./docs/adrs/0020-system-performance-specifications-and-resource-budgets.md) | Performance Budgets & SLA Baselines | Accepted | Deterministic latency budgets, event-loop protection, baseline tests |
-| [ADR-0021](./docs/adrs/0021-concurrent-running-quota-and-model-inheritance-alignment.md) | Running Quota & Model Inheritance | Accepted | Workspace 5 running-session quota and dispatch model inheritance |
+- Decision catalog: see [docs/adrs/README.md](./docs/adrs/README.md).
+- Architecture topology: see [docs/architecture/](./docs/architecture/).
 
-## Testing
+---
 
-Built on the Node.js native test runner:
+## Compatibility
 
-```bash
-# Run unit tests
-npm test
+| Environment | Supported | Verified |
+| :--- | :--- | :--- |
+| DeepSeek Harness | `>=0.1.1-rc.1` | `0.1.2-rc.1`, `0.1.5-rc.1`, `0.1.5-rc.2` |
+| Cordis | `^4.0.2` | `4.0.2+` |
+| Node.js | `>=20.0.0` | `20.x`, `22.x` |
 
-# Lint code
-npm run lint
-
-# Pre-release verification
-npm run verify
-```
+---
 
 ## License
 
-Licensed under the [MIT License](./LICENSE).
+This project is licensed under the [MIT License](./LICENSE).
