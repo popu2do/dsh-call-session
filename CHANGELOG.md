@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.4] - 2026-09-21
+
+### Summary
+Bilingual localization and standardized English error protocol release. Introduces a comprehensive bilingual (English / Simplified Chinese) architecture (ADR-0023) across native tools, dynamic system prompts, and the Web Collaboration Canvas. Standardizes all runtime exception codes into machine-readable bracketed tags (`[ErrorCode]`), eliminates inline ternary locale branches in Web UI via `ctx.locale.bind('dsh-canvas')`, and enforces strict camelCase schema outputs per ADR-0005 and ADR-0016.
+
+### Added
+- **Bilingual Localization Architecture (ADR-0023)**:
+  - Added modular localization catalogs under `lib/locales/` (`zh.mjs`, `en.mjs`, `index.mjs`, `table.mjs`, `types/locales.d.ts`).
+  - Implemented 3-tier cascade locale resolution: explicit `config.locale` ('zh' | 'en') -> Host Settings Service preference -> Host environment auto-detection (`LANG`, `LC_ALL`, `Intl`).
+  - Added dynamic System Prompt (`usageSectionText`) and blackboard reminder (`formatAuthorReminderText`) re-evaluation on turn boundaries.
+  - Symmetrically aligned domain terminology in `CONTEXT.md` with canonical English identifiers for 10 core concepts.
+- **Standardized English Error Protocol (ADR-0023)**:
+  - Standardized all runtime exception messages across backend tools and services to canonical format: `[ErrorCode] <english explanation>`.
+  - Enforced 12 standard error categories: `[InvalidParameter]`, `[TargetNotFound]`, `[SelfCallForbidden]`, `[AmbiguousPrefix]`, `[WildcardForbidden]`, `[RateLimitExceeded]`, `[GenerationLimitExceeded]`, `[QuotaExceeded]`, `[DuplicateTitle]`, `[ReservedTopic]`, `[StorageError]`, and `[ServiceUnavailable]`.
+- **Peer Session Output Parity**:
+  - Expanded `session_create` output schema with human/agent-readable localized summary `message` (`types/session-create.d.ts`, `lib/session-create.mjs`, `index.mjs`).
+
+### Changed
+- **Web Collaboration Canvas (`lib/client.js`)**:
+  - Bound Web Canvas UI text to `ctx.locale.bind('dsh-canvas')`, eliminating all hardcoded inline ternary locale branches.
+  - Implemented dynamic SVG character width estimation (`measureTextWidth`) for current session indicators and node labels.
+  - Resolved visual overlap between current session badges and call count circle indicators across viewports.
+
+### Fixed
+- Fixed unhandled exception paths in `board_post` and `session_call` to guarantee standardized error code propagation.
+- Fixed table summary formatting in `session_query` to prevent count distortion on truncated results.
+
 ## [0.1.3] - 2026-09-17
 
 ### Summary
