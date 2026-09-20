@@ -175,33 +175,33 @@ test('executeSessionCreate: 参数基本校验（空对象/非法数据类型/�
   // 1. 空参数校验
   await assert.rejects(
     () => executeSessionCreate({ ctx, args: null, exec }),
-    /参数必须为对象/
+    /\[InvalidParameter\]/
   );
 
   // 2. title 类型与长度拦截
   await assert.rejects(
     () => executeSessionCreate({ ctx, args: { title: 12345 }, exec }),
-    /title 必须为字符串/
+    /\[InvalidParameter\]/
   );
   await assert.rejects(
     () => executeSessionCreate({ ctx, args: { title: 'a'.repeat(61) }, exec }),
-    /title 超过最大长度限制/
+    /\[InvalidParameter\]/
   );
 
   // 3. initial_message 类型与长度拦截
   await assert.rejects(
     () => executeSessionCreate({ ctx, args: { initial_message: 999 }, exec }),
-    /initial_message 必须为字符串/
+    /\[InvalidParameter\]/
   );
   await assert.rejects(
     () => executeSessionCreate({ ctx, args: { initial_message: 'x'.repeat(4001) }, exec }),
-    /initial_message 超过最大长度限制/
+    /\[InvalidParameter\]/
   );
 
   // 4. context_post_ids 必须为数组
   await assert.rejects(
     () => executeSessionCreate({ ctx, args: { context_post_ids: 'not-an-array' }, exec }),
-    /context_post_ids 必须为数组/
+    /\[InvalidParameter\]/
   );
 });
 
@@ -632,7 +632,7 @@ test('executeSessionCreate: 参数校验与配额失败不消耗限频配额', a
           exec
         });
       },
-      /session_create: title 必须为字符串/
+      /\[InvalidParameter\]/
     );
   }
 

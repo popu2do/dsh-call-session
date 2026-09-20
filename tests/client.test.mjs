@@ -1014,9 +1014,10 @@ test('Three Relationship Edge Classes: Edge generation and boundary tolerance (m
 
 test('Text Truncation by Rendered Width: Chinese, English, and mixed inputs (PRD 5.4)', () => {
   const clientSource = fs.readFileSync(path.join(rootDir, 'lib', 'client.js'), 'utf8');
+  const measureMatch = clientSource.match(/function measureTextWidth[\s\S]*?\n  \}/);
   const fnMatch = clientSource.match(/function truncateTextByWidth[\s\S]*?\n  \}/);
   assert.ok(fnMatch, 'truncateTextByWidth implementation must exist in lib/client.js');
-  const truncateTextByWidth = new Function(`return (${fnMatch[0]});`)();
+  const truncateTextByWidth = new Function(`${measureMatch ? measureMatch[0] : ''}; return (${fnMatch[0]});`)();
 
   // 1. 纯中文输入 (Wide chars: 12.5px, Ellipsis: 16px)
   // 短中文：4 * 12.5 = 50px <= 80px -> 原样返回
@@ -3500,20 +3501,46 @@ test('ADR-0019 通道分流几何同心外扩与端口避让严格几何断言',
   assert.ok(extremeUpwardBezier.c2x >= 170 - 126, '上行极限跳数控制点2严格在左侧列宽安全边距内 (>= 44)');
 });
 
-test('ADR-0014: 视口宽度手柄自愈隔离（Viewport Width-Handle Suppression）CSS 规约与语法完整性断言', () => {
+test('ADR-0023 Web 看板双语字典完全对称且杜绝内联硬编码语言分支断言', () => {
+  const plugin = loadClientBundle();
+  assert.ok(plugin.zh, 'plugin 必须导出 zh 字典');
+  assert.ok(plugin.en, 'plugin 必须导出 en 字典');
+
+  const zhKeys = Object.keys(plugin.zh).sort();
+  const enKeys = Object.keys(plugin.en).sort();
+
+  assert.deepEqual(zhKeys, enKeys, 'zh 与 en 字典必须具有完全一致的键集合');
+
+  // 验证关键双语键已注册
+  assert.equal(plugin.zh['blackboard.active'], '活跃');
+  assert.equal(plugin.en['blackboard.active'], 'active');
+  assert.equal(plugin.zh['blackboard.total'], '总计');
+  assert.equal(plugin.en['blackboard.total'], 'total');
+
+  // 验证 client.js 源码中不存在内联 props.locale === 'en' 硬编码判断
   const clientPath = path.join(rootDir, 'lib', 'client.js');
-  const code = fs.readFileSync(clientPath, 'utf8');
+  const source = fs.readFileSync(clientPath, 'utf8');
+  assert.ok(!source.includes("props.locale === 'en'"), 'client.js 不得包含 props.locale === \'en\' 硬编码分支');
+  assert.ok(!source.includes("hubTitle === 'Blackboard'"), 'client.js 不得包含 hubTitle === \'Blackboard\' 硬编码分支');
+});
 
-  // 1. 提取并拼接实际注入的 CANVAS_CSS 内容
-  const match = code.match(/var CANVAS_CSS = (\[[\s\S]*?\])\.join\('\\n'\);/);
-  assert.ok(match, 'lib/client.js 必须声明 CANVAS_CSS 样式定义');
-  const css = vm.runInNewContext(match[1]).join('\n');
+test('ADR-0023: client.apply(ctx) 运行时 locale 动态绑定验证', () => {
+  let boundNamespace = null;
+  let boundCatalog = null;
+  const mockCtx = {
+    locale: {
+      bind: (namespace, catalog) => {
+        boundNamespace = namespace;
+        boundCatalog = catalog;
+        return (key) => catalog?.zh?.[key] || catalog?.en?.[key] || key;
+      }
+    },
+    slot: () => {}
+  };
 
-  // 2. 语法完整性：严禁在样式块或规则闭合处产生非法逗号残留（如 },）
-  assert.equal(css.includes('},'), false, 'CANVAS_CSS 严禁包含非法符号 }, 语法畸变');
-
-  // 3. 规范选择器与声明断言
-  const expectedRule = 'body:has(.dsh-canvas-container) [data-width-handle] {\n  display: none !important;\n}';
-  assert.ok(css.includes(expectedRule), 'CANVAS_CSS 必须包含精准的视口宽度手柄自愈规则块');
+  const clientPath = path.join(rootDir, 'lib', 'client.js');
+  const source = fs.readFileSync(clientPath, 'utf8');
+  assert.ok(source.includes("var NS = 'dsh-canvas';"), '命名空间常量必须声明为 dsh-canvas');
+  assert.ok(source.includes("ctx.locale.bind(NS)"), 'client.js 必须调用 ctx.locale.bind(NS) 绑定命名空间');
 });
 

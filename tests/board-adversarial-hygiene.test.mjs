@@ -188,7 +188,7 @@ test('board:remind 上下文注入在连续决策步中的状态幂等性', asyn
 
   const ctx = createMockCordisContext();
   const storagePath = path.join(tmpDir, 'board.json');
-  apply(ctx, { storagePath, debounceMs: 50 });
+  apply(ctx, { storagePath, debounceMs: 50, locale: 'zh' });
 
   const agentAlpha = createMockAgent('agent-alpha-worker', { cwd: 'c:/workspace/proj-alpha' });
   const remindContext = ctx.systemPrompt.getContext('board:remind');
@@ -396,7 +396,7 @@ test('端到端保留主题拒绝与拦截防护：board_post 与 BoardStore.pos
       },
       (err) => {
         assert.ok(err instanceof Error);
-        assert.ok(err.message.includes('保留主题拦截'));
+        assert.ok(err.message.includes('[ReservedTopic]'));
         assert.ok(err.message.includes('ADR-0012') || err.message.includes('CallTelemetryRingBuffer'));
         return true;
       },
@@ -431,7 +431,7 @@ test('端到端保留主题拒绝与拦截防护：board_post 与 BoardStore.pos
     }, { agent });
 
     assert.equal(res.success, false, `board_post 工具必须拦截 ${topic}`);
-    assert.ok(res.message.includes('保留主题拦截'), '必须包含保留主题拦截提示');
+    assert.ok(res.message.includes('[ReservedTopic]'), '必须包含保留主题拦截提示');
     assert.ok(res.message.includes('ADR-0012') || res.message.includes('CallTelemetryRingBuffer'), '错误信息必须引导至 ADR-0012 内存遥测域');
   }
 

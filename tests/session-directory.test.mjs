@@ -169,13 +169,13 @@ test('SessionDirectory: resolveTarget with exact match, prefix match, and guards
   // 通配符拦截保护
   await assert.rejects(
     () => dir.resolveTarget('*'),
-    /不支持通配符/
+    /\[WildcardForbidden\]/
   );
 
   // 自呼叫拦截保护
   await assert.rejects(
     () => dir.resolveTarget('session-12345678-aaaa', { callerSessionId: 'session-12345678-aaaa' }),
-    /不能调用自身/
+    /\[SelfCallForbidden\]/
   );
 
   // 自呼叫前缀拦截忽略同前缀已归档项
@@ -186,7 +186,7 @@ test('SessionDirectory: resolveTarget with exact match, prefix match, and guards
   const dirArchived = new SessionDirectory(ctxWithArchived);
   await assert.rejects(
     () => dirArchived.resolveTarget('session-12345678', { callerSessionId: 'session-12345678-aaaa' }),
-    /不能调用自身/
+    /\[SelfCallForbidden\]/
   );
 
   // 精确匹配
@@ -197,7 +197,7 @@ test('SessionDirectory: resolveTarget with exact match, prefix match, and guards
   // 歧义多重前缀拦截
   await assert.rejects(
     () => dir.resolveTarget('session-12345678', { callerSessionId: 'caller-1' }),
-    /匹配到 2 个活跃会话/
+    /\[AmbiguousPrefix\]/
   );
 
   // 唯一前缀（>= 8 位）安全命中
@@ -207,12 +207,12 @@ test('SessionDirectory: resolveTarget with exact match, prefix match, and guards
   // 短前缀（< 8 位）防御拦截
   await assert.rejects(
     () => dir.resolveTarget('session', { callerSessionId: 'caller-1' }),
-    /长度小于 8 位/
+    /\[InvalidParameter\]/
   );
 
   // 未找到目标会话
   await assert.rejects(
     () => dir.resolveTarget('session-00000000', { callerSessionId: 'caller-1' }),
-    /未找到匹配/
+    /\[TargetNotFound\]/
   );
 });

@@ -431,8 +431,8 @@ test('CallTelemetryRingBuffer: 异常参数处理与 query 过滤组合', () => 
   assert.equal(hugeBuffer.capacity(), 2000, '超大容量钳位至上限 2000');
 
   // 2. 非法 record 输入保护
-  assert.throws(() => buffer.record(null), /entry 必须是对象/);
-  assert.throws(() => buffer.record('string'), /entry 必须是对象/);
+  assert.throws(() => buffer.record(null), /\[InvalidParameter\]/);
+  assert.throws(() => buffer.record('string'), /\[InvalidParameter\]/);
 
   // 3. 字段缺省值容错
   const emptyRec = buffer.record({});

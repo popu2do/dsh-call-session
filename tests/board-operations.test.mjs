@@ -32,7 +32,7 @@ test('BoardStore.executePost: 领域操作封装与保留主题拦截', async ()
     exec
   });
   assert.equal(reservedRes.success, false);
-  assert.ok(reservedRes.error.includes('保留主题'));
+  assert.ok(reservedRes.error.includes('[ReservedTopic]'));
 
   const postRes = await store.executePost({
     args: {
@@ -122,7 +122,7 @@ test('BoardStore.executeClear: 条目与主题清理', async () => {
 
   const failRes = await store.executeClear({ args: {}, exec });
   assert.equal(failRes.success, false);
-  assert.ok(failRes.error.includes('必须指定 id 或 topic'));
+  assert.ok(failRes.error.includes('[InvalidParameter]'));
 
   const clearRes = await store.executeClear({
     args: { id: post.postId, mode: 'dismiss' },
@@ -162,7 +162,7 @@ test('BoardStore.executeClear: 条目与主题清理', async () => {
 test('BoardStore.getAuthorReminder: 活跃条目记名提醒封装', async () => {
   const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'dsh-board-op-'));
   const storagePath = path.join(tmpDir, 'board.json');
-  const store = new BoardStore({ storagePath, debounceMs: 0 });
+  const store = new BoardStore({ storagePath, debounceMs: 0, config: { locale: 'zh' } });
 
   const agent = createMockAgent('agent-remind', { cwd: '/workspaces/alpha' });
   const exec = { agent };
