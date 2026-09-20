@@ -304,7 +304,7 @@ test('特权前缀过滤、超长参数与换行控制符清洗测试', async ()
       args: { title: longTitle, initial_message: 'Test' },
       exec
     }),
-    /title 超过最大长度限制 60 字符/
+    /\[InvalidParameter\]/
   );
 
   // 4. initial_message 边界测试：4000 字符通过，4001 字符拦截
@@ -324,7 +324,7 @@ test('特权前缀过滤、超长参数与换行控制符清洗测试', async ()
       args: { title: 'Boundary 4001 Worker', initial_message: over4000 },
       exec
     }),
-    /initial_message 超过最大长度限制 4000 字符/
+    /\[InvalidParameter\]/
   );
 
   // 5. initial_message 非法类型参数拦截
@@ -336,7 +336,7 @@ test('特权前缀过滤、超长参数与换行控制符清洗测试', async ()
         args: { title: 'Bad Msg Worker', initial_message: badMsg },
         exec
       }),
-      /initial_message 必须为字符串/
+      /\[InvalidParameter\]/
     );
   }
 

@@ -112,6 +112,7 @@ dsh plugin --profile web remove dsh-call-session
 - `bootstrapPostId`: string | null，可选。当发布了初始黑板引导条目时的条目 ID。
 - `contextPostIds`: string[]。清洗并挂载的黑板条目 ID 列表。
 - `error`: string，可选。失败时的机器可读错误码。
+- `message`: string，可选。本地化执行摘要文本。
 
 安全防护：
 - 并发运行配额：单工作区最多保持 5 个并发运行（running）会话，超出拦截为 QuotaExceeded。空闲（idle）会话不计入该配额。
@@ -241,6 +242,7 @@ dsh plugin --profile web remove dsh-call-session
 - `debounceMs`: number，默认 `300`。黑板落盘防抖延迟，单位毫秒。
 - `maxCapacity`: number，默认 `200`。黑板条目容量上限，超出后按状态感知策略淘汰（已过期 -> 已归档 -> 最旧条目）。
 - `telemetryCapacity`: number，默认 `200`，范围 10 到 2000。跨会话调用看板数据环形缓冲区容量上限，超出后先进先出淘汰。
+- `locale`: string，`'auto' | 'zh' | 'en'`，默认 `'auto'`。工具定义与系统提示词的语言交互偏好。
 
 ## 对比
 

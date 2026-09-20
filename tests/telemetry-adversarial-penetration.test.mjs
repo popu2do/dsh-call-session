@@ -331,10 +331,10 @@ test('环形缓冲区 FIFO 淘汰与内存占用测试', () => {
   assert.ok(memoryDeltaMB < 25, `5000 次写入 FIFO 淘汰后堆内存增量受控（当前增量: ${memoryDeltaMB.toFixed(2)} MB）`);
 
   // 4.5 参数容错与类型鲁棒性
-  assert.throws(() => buffer.record(null), /必须是对象/);
-  assert.throws(() => buffer.record(undefined), /必须是对象/);
-  assert.throws(() => buffer.record('invalid-string'), /必须是对象/);
-  assert.throws(() => buffer.record(12345), /必须是对象/);
+  assert.throws(() => buffer.record(null), /\[InvalidParameter\]/);
+  assert.throws(() => buffer.record(undefined), /\[InvalidParameter\]/);
+  assert.throws(() => buffer.record('invalid-string'), /\[InvalidParameter\]/);
+  assert.throws(() => buffer.record(12345), /\[InvalidParameter\]/);
 
   // 允许空对象写入并赋默认值
   const emptyRec = buffer.record({});
