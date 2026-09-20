@@ -108,3 +108,55 @@ test('规范不变量: prefers-reduced-motion 媒体查询选择器必须严格�
     '检测到未限定作用域的 .dsh-pulse-dot 选择器，必须带有 .dsh-canvas-container 前缀以防止全局污染'
   );
 });
+
+test('ADR-0013 & ADR-0018 不变量 8: 落点脉冲必须为无几何形变的透明度呼吸且支持减弱动态效果', () => {
+  // ADR-0013 §2.9 & ADR-0018 §2.1: 落点脉冲仅允许 opacity 呼吸，严禁 transform 几何缩放
+  const locateKeyframes = clientSource.match(/@keyframes\s+dshLocatePulse\s*\{([^}]+)\}/);
+  assert.ok(locateKeyframes, 'CSS 必须声明 @keyframes dshLocatePulse');
+  assert.ok(
+    !locateKeyframes[1].includes('transform'),
+    '@keyframes dshLocatePulse 严禁使用 transform 几何缩放，防止会话节点与调用连线端点脱节'
+  );
+  assert.ok(
+    locateKeyframes[1].includes('opacity'),
+    '@keyframes dshLocatePulse 必须针对 opacity 透明度进行呼吸动画'
+  );
+
+  const locateRule = clientSource.match(/\.dsh-canvas-container\s+\.dsh-canvas-node-locating\s*\{([^}]+)\}/);
+  assert.ok(locateRule, 'CSS 必须定义 .dsh-canvas-node-locating 规则');
+  assert.ok(
+    !locateRule[1].includes('transform'),
+    '.dsh-canvas-node-locating 严禁声明任何 transform 几何变换'
+  );
+
+  // ADR-0018 §2.4: 落点脉冲必须纳入 prefers-reduced-motion 冻结范围，且选择器严格限定在看板容器下
+  const reducedMotionBlock = clientSource.match(/@media\s*\(\s*prefers-reduced-motion:\s*reduce\s*\)\s*\{([\s\S]*?)\n\}/);
+  assert.ok(reducedMotionBlock, '必须定义 prefers-reduced-motion 媒体查询代码块');
+  assert.ok(
+    reducedMotionBlock[1].includes('.dsh-canvas-container .dsh-canvas-node-locating'),
+    'prefers-reduced-motion 必须冻结落点脉冲，且选择器以 .dsh-canvas-container 为前缀'
+  );
+});
+
+
+test('ADR-0013 落点脉冲可见性回归：动画属性严禁被 .dsh-canvas-highlighted 的 opacity: 1 !important 遮蔽', () => {
+  // 分组上的 opacity: 1 !important 会压过无 !important 的 opacity 关键帧，脉冲将恒不可见
+  const groupOpacityRule = clientSource.match(/\.dsh-canvas-highlighted\s*\{([^}]+)\}/);
+  assert.ok(groupOpacityRule, 'CSS 必须定义 .dsh-canvas-highlighted 规则');
+  assert.ok(
+    groupOpacityRule[1].includes('opacity: 1 !important'),
+    '前提：.dsh-canvas-highlighted 以 !important 固化分组不透明度'
+  );
+
+  const locateKeyframes = clientSource.match(/@keyframes\s+dshLocatePulse\s*\{([^}]+)\}/);
+  assert.ok(locateKeyframes, 'CSS 必须声明 @keyframes dshLocatePulse');
+  assert.ok(
+    locateKeyframes[1].includes('stroke-opacity'),
+    '落点脉冲必须动画 stroke-opacity，严禁动画会被分组 !important 遮蔽的 opacity'
+  );
+  assert.ok(
+    !/[^-]opacity\s*:/.test(locateKeyframes[1].replace(/stroke-opacity/g, '')),
+    '落点脉冲关键帧严禁声明裸 opacity 属性'
+  );
+});
+
