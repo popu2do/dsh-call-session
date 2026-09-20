@@ -33,6 +33,8 @@ export interface SessionCreateResult {
   bootstrapPostId?: string | null;
   /** 成功关联挂载的黑板 ID 列表 */
   contextPostIds?: string[];
+  /** 本地化执行摘要文本 */
+  message?: string;
   /** 失败原因描述 */
   error?: string | null;
 }
@@ -41,6 +43,7 @@ export interface PeerSessionFactoryOptions {
   logger?: any;
   boardStore?: any;
   directory?: SessionDirectory;
+  config?: any;
 }
 
 export interface PeerSessionCreateParams {

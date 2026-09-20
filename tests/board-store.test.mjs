@@ -295,7 +295,7 @@ test('BoardStore: clear 清理与归档操作', async (t) => {
   store.post({ id: 'p3', topic: 'task:two', content: 'c3', status: 'active' });
 
   // 1. 无条件调用拒绝
-  assert.throws(() => store.clear({}), /board_clear 必须指定 id 或 topic/);
+  assert.throws(() => store.clear({}), /\[InvalidParameter\]/);
 
   // 2. 按 id 归档 (dismiss)
   const clearIdRes = store.clear({ id: 'p1', action: 'archive' });

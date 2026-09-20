@@ -24,3 +24,5 @@
         debounceMs: 300
         # Maximum posts retained in blackboard memory (default: 200)
         maxCapacity: 200
+        # Language preference ('auto' | 'zh' | 'en', default: auto)
+        locale: auto

@@ -145,6 +145,8 @@ export interface BoardClearOptions {
   mode?: 'dismiss' | 'purge';
   /** 调用方工作区路径 */
   callerWorkspace?: string;
+  /** 上下文对象，用于动态解析语言 */
+  ctx?: any;
 }
 
 /**
@@ -180,6 +182,8 @@ export interface BoardStoreOptions {
     error?(...args: any[]): void;
     debug?(...args: any[]): void;
   } | Console;
+  ctx?: any;
+  config?: any;
 }
 
 /**
@@ -226,7 +230,7 @@ export declare function extractTitle(post: BoardPost | Partial<BoardPost> | null
  * @param posts 活跃条目列表
  * @returns 记名提醒文本，无条目时返回空字符串 ''
  */
-export declare function formatAuthorReminderText(posts?: BoardPost[] | null): string;
+export declare function formatAuthorReminderText(posts?: BoardPost[] | null, locale?: string): string;
 
 /**
  * 标准化多态执行参数（支持单对象包装形式或按位置传入形式）
@@ -396,7 +400,7 @@ export declare class BoardStore {
   /**
    * 获取调用方 Agent 在当前工作区内的有效未清理提醒文本
    */
-  getAuthorReminder(agent?: any, ctx?: any): string;
+  getAuthorReminder(agent?: any, ctx?: any, config?: any): string;
 }
 
 export { BoardStore as AtomicBoardStore };

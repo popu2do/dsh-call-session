@@ -112,6 +112,7 @@ Outputs:
 - `bootstrapPostId`: string | null, optional. ID of the bootstrap blackboard post if generated.
 - `contextPostIds`: string[]. Cleaned and mounted blackboard post IDs.
 - `error`: string, optional. Machine error code on failure.
+- `message`: string, optional. Localized execution summary.
 
 Safety guards:
 - Concurrent running quota: Maximum 5 concurrent running sessions per workspace, rejected with QuotaExceeded. Idle sessions do not count against this quota.
@@ -241,6 +242,7 @@ Options:
 - `debounceMs`: number, default `300`. Atomic disk write debounce delay in milliseconds.
 - `maxCapacity`: number, default `200`. Maximum board entries, evicted by state-aware policy (expired -> archived -> oldest active).
 - `telemetryCapacity`: number, default `200`, range 10-2000. Maximum call traces retained in canvas data ring buffer, FIFO eviction.
+- `locale`: string, `'auto' | 'zh' | 'en'`, default `'auto'`. Interaction language preference for tool schemas and system prompt.
 
 ## Comparison
 

@@ -151,8 +151,8 @@ test('Plugin 基础元数据与配置导出规范', async () => {
 });
 
 test('usageSectionText: 规范 System Prompt 段落结构与说明', () => {
-  const text = usageSectionText();
-  assert.ok(text.includes('## Cross-Session Communication & Collaboration (dsh-call-session)'));
+  const text = usageSectionText(null, { locale: 'zh' });
+  assert.ok(text.includes('## 会话协作') || text.includes('## Cross-Session Communication & Collaboration'));
   assert.ok(text.includes('session_query'));
   assert.ok(text.includes('session_call'));
   assert.ok(text.includes('session_create'));
@@ -160,7 +160,7 @@ test('usageSectionText: 规范 System Prompt 段落结构与说明', () => {
   assert.ok(text.includes('board_list'));
   assert.ok(text.includes('board_clear'));
   assert.equal(text.includes('/dsh-call-session'), false);
-  assert.ok(text.includes('Intent routing (session_create vs subagent):'));
+  assert.ok(text.includes('意图分流规则') || text.includes('Intent routing (session_create vs subagent):'));
   assert.ok(text.includes('创建同级会话'));
   assert.ok(text.includes('新建会话'));
   assert.ok(text.includes('新开 session'));
@@ -181,7 +181,8 @@ test('apply: 插件初始化、工具注册与 System Prompt 挂载', async (t) 
     storagePath,
     debounceMs: 50,
     maxCapacity: 100,
-    promptSectionOrder: 120
+    promptSectionOrder: 120,
+    locale: 'zh'
   });
 
   // 1. 验证 6 大核心工具是否全部成功注册
@@ -216,7 +217,7 @@ test('apply: 插件初始化、工具注册与 System Prompt 挂载', async (t) 
   const promptItem = ctx.systemPrompt.get('dsh-call-session:usage');
   assert.ok(promptItem, '应当挂载 dsh-call-session:usage 提示词段落');
   assert.equal(promptItem.options.order, 120);
-  assert.ok(promptItem.getter().includes('Cross-Session Communication'));
+  assert.ok(promptItem.getter().includes('会话协作') || promptItem.getter().includes('Cross-Session Communication'));
 
   const remindContext = ctx.systemPrompt.getContext('board:remind');
   assert.ok(remindContext, '应当挂载 board:remind 上下文注入');
