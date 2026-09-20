@@ -48,6 +48,11 @@ import {
   resolveCanvasSessionDisplayTitle
 } from './lib/call-telemetry.mjs';
 import {
+  resolveLocale,
+  getCatalog,
+  resolveMessages
+} from './lib/locales/index.mjs';
+import {
   installTelemetryWebSurface,
   authenticatedWebRoutes,
   createTelemetryHandler,
@@ -79,40 +84,28 @@ export const Config = zInstance ? zInstance.object({
   telemetryCapacity: zInstance.natural().min(10).max(2000).default(200).description('跨会话调用看板数据环形缓冲区保留上限，按 FIFO 淘汰'),
   promptSectionOrder: zInstance.natural().default(118).description('注入全局 System Prompt 的排序权重'),
   remindContextOrder: zInstance.natural().default(130).description('记名提醒注入 System Prompt Context 的排序权重'),
+  locale: zInstance.union(['auto', 'zh', 'en']).default('auto').description('插件交互语言偏好')
 }) : Object.freeze({
   enabled: true,
   debounceMs: 300,
   maxCapacity: 200,
   telemetryCapacity: 200,
   promptSectionOrder: 118,
-  remindContextOrder: 130
+  remindContextOrder: 130,
+  locale: 'auto'
 });
 
 /**
  * Returns model-facing cross-session collaboration instructions for System Prompt.
  *
+ * @param {any} [ctx] Cordis context
+ * @param {any} [config] Plugin configuration
  * @returns {string} Usage instructions in Markdown
  */
-export function usageSectionText() {
-  return [
-    '## Cross-Session Communication & Collaboration (dsh-call-session)',
-    '',
-    'Coordinate with other active sessions in real time:',
-    '1. Discover sessions: Use `session_query` to find active sessions (scoped to current workspace by default; use `cross_workspace: true` for cross-workspace discovery).',
-    '2. Unicast call: Use `session_call` to send tasks, reports, or notices to a specific session (`target_session_id`). Wildcards (*, all) are not supported.',
-    '3. Create peer session: Use `session_create` to create a peer session in the current workspace.',
-    '4. Shared blackboard: Use `board_post` to publish milestones, tasks, or shared state. Use `board_list` to query blackboard posts, and `board_clear` to dismiss or purge them.',
-    '',
-    'Call types and convergence rules for `session_call`:',
-    '- `task_dispatch`: 分派任务、提供建议或发起协作请求。接收方处理后，仅在确需回传产物或结论时通过单次 `task_report` 答复；无需返回结果则不回复。',
-    '- `task_report`: 任务结果汇报、交付或答复。表示当前协作单元已收口，接收方知悉归档，无需回复。',
-    '- `notice`: 单向状态通报或客观知悉。纯通知属性，阅后即止，接收方不调用 `session_call` 回复。',
-    '- 通信自主收敛守则：由双方模型根据类别语义与业务上下文自主收敛，严禁无实质内容的客套回复（如单纯回复“收到”、“明白”）。',
-    '',
-    'Intent routing (session_create vs subagent):',
-    '- Use `session_create`: 创建同级会话。用户要求新建会话、新开 session 或平级会话时使用。独立会话可长期并行运行，不同于临时子任务 subagent。默认继承当前会话的模型参数与预设配置，除非手动指定。',
-    '- Use `subagent`: Only for internal parent-child delegation where the parent waits for or collects the child result.'
-  ].join('\n');
+export function usageSectionText(ctx, config) {
+  const currentLocale = resolveLocale(ctx, config);
+  const catalog = getCatalog(currentLocale);
+  return catalog.prompts.usageSection();
 }
 
 export const DISPATCHER_CONSTANTS = Object.freeze({
@@ -176,7 +169,9 @@ export function apply(ctx, config = {}) {
     storagePath: config.storagePath || path.resolve(__dirname, 'board.json'),
     debounceMs: config.debounceMs ?? 300,
     maxPosts: config.maxCapacity ?? 200,
-    logger
+    logger,
+    ctx,
+    config
   });
 
   const callTelemetry = new CallTelemetryRingBuffer(config.telemetryCapacity ?? 200);
@@ -229,8 +224,11 @@ export function apply(ctx, config = {}) {
   // keeps the plugin tool-only instead of blocking boot.
   installTelemetryWebSurface(ctx, { logger });
 
+  const currentLocale = resolveLocale(ctx, config);
+  const catalog = getCatalog(currentLocale);
+
   if (config.enabled !== false && ctx.systemPrompt && typeof ctx.systemPrompt.add === 'function') {
-    ctx.systemPrompt.add('dsh-call-session:usage', usageSectionText, {
+    ctx.systemPrompt.add('dsh-call-session:usage', () => usageSectionText(ctx, config), {
       order: config.promptSectionOrder ?? 118
     });
   }
@@ -239,8 +237,13 @@ export function apply(ctx, config = {}) {
     ctx.systemPrompt.context({
       name: 'board:remind',
       order: config.remindContextOrder ?? 130,
-      text: (context) => boardStore.getAuthorReminder(context?.agent, ctx)
+      text: (context) => boardStore.getAuthorReminder(context?.agent, ctx, config)
     });
+  }
+
+  function renderToolMessage(value, fallbackFn) {
+    if (value?.message) return value.message;
+    return typeof fallbackFn === 'function' ? fallbackFn() : '';
   }
 
   if (ctx.tools && typeof ctx.tools.register === 'function') {
@@ -262,7 +265,7 @@ export function apply(ctx, config = {}) {
 
     registerSafe({
       name: 'board_post',
-      description: '向公共黑板发布共享事实、状态或公告数据。其他会话可通过 board_list 按需读取。若需直接通知目标会话，请在发布后调用 session_call 并附带返回的 postId。',
+      description: catalog.tools.board_post.description,
       isConcurrencySafe: true,
       parameters: {
         type: 'object',
@@ -271,30 +274,30 @@ export function apply(ctx, config = {}) {
             type: 'string',
             minLength: 1,
             maxLength: 128,
-            description: "主题或业务分类，例如 task:audit、spec:api。"
+            description: catalog.tools.board_post.parameters.topic
           },
           content: {
             type: 'string',
             minLength: 1,
             maxLength: 65536,
-            description: '发布的主体内容，支持 Markdown、纯文本或 JSON 字符串，最大 64KB。'
+            description: catalog.tools.board_post.parameters.content
           },
           tags: {
             type: 'array',
             items: { type: 'string', minLength: 1, maxLength: 32 },
             maxItems: 10,
-            description: "标签列表，用于分类与检索。例如 ['p0', 'blocked']。"
+            description: catalog.tools.board_post.parameters.tags
           },
           ttl: {
             type: 'integer',
             minimum: 0,
             maximum: 86400,
             default: 3600,
-            description: '生存时间，单位为秒。默认 3600 秒即 1 小时，最大 86400 秒即 24 小时。设为 0 表示使用默认值。'
+            description: catalog.tools.board_post.parameters.ttl
           },
           metadata: {
             type: 'object',
-            description: '可选结构化元数据键值对，用于存储关联文件路径、版本号等。'
+            description: catalog.tools.board_post.parameters.metadata
           }
         },
         required: ['topic', 'content']
@@ -318,7 +321,7 @@ export function apply(ctx, config = {}) {
         render(_args, value) {
           return [{
             type: 'text',
-            text: value?.message || (value?.success ? `[Board] 已发布条目 (#${value?.postId})` : `[Board] 发布失败: ${value?.error}`)
+            text: renderToolMessage(value, () => value?.success ? resolveMessages(ctx, config).boardPostSuccess(value?.postId) : resolveMessages(ctx, config).boardPostFailure(value?.error))
           }];
         }
       },
@@ -329,48 +332,48 @@ export function apply(ctx, config = {}) {
 
     registerSafe({
       name: 'board_list',
-      description: '查询公共黑板上的有效公告与共享状态。默认仅返回标题与元数据摘要 titles_only: true；支持通过 id 精确查阅单条详情，自动包含正文。默认仅限当前工程工作区。',
+      description: catalog.tools.board_list.description,
       isConcurrencySafe: true,
       parameters: {
         type: 'object',
         properties: {
           id: {
             type: 'string',
-            description: '按条目唯一 ID 精确检索，例如 post-1725300000000-abcd。指定 id 时 titles_only 默认自动分流为 false 以便直取正文。'
+            description: catalog.tools.board_list.parameters.id
           },
           topic: {
             type: 'string',
-            description: '按完整主题过滤，例如 task:audit。'
+            description: catalog.tools.board_list.parameters.topic
           },
           topic_prefix: {
             type: 'string',
-            description: '按主题前缀过滤，例如 task:。'
+            description: catalog.tools.board_list.parameters.topic_prefix
           },
           tag: {
             type: 'string',
-            description: '按单个标签过滤。'
+            description: catalog.tools.board_list.parameters.tag
           },
           active_only: {
             type: 'boolean',
             default: true,
-            description: '是否仅返回未过期且未归档的活跃记录。默认为 true。'
+            description: catalog.tools.board_list.parameters.active_only
           },
           cross_workspace: {
             type: 'boolean',
             default: false,
-            description: '是否查询所有工作区的条目。默认为 false，即仅限当前工作区。'
+            description: catalog.tools.board_list.parameters.cross_workspace
           },
           titles_only: {
             type: 'boolean',
             default: true,
-            description: '是否仅返回标题与元数据摘要，不含 content 正文。未指定 id 时默认为 true，指定 id 时默认为 false。'
+            description: catalog.tools.board_list.parameters.titles_only
           },
           limit: {
             type: 'integer',
             minimum: 1,
             maximum: 100,
             default: 20,
-            description: '返回条数限制。默认 20，最大 100。'
+            description: catalog.tools.board_list.parameters.limit
           }
         }
       },
@@ -420,24 +423,24 @@ export function apply(ctx, config = {}) {
 
     registerSafe({
       name: 'board_clear',
-      description: '清理或归档黑板上的指定条目或主题。',
+      description: catalog.tools.board_clear.description,
       isConcurrencySafe: true,
       parameters: {
         type: 'object',
         properties: {
           id: {
             type: 'string',
-            description: '目标条目 ID，例如 post-1725300000000-abcd。'
+            description: catalog.tools.board_clear.parameters.id
           },
           topic: {
             type: 'string',
-            description: '按主题批量清理，例如 task:audit。未指定 id 时生效。'
+            description: catalog.tools.board_clear.parameters.topic
           },
           mode: {
             type: 'string',
             enum: ['dismiss', 'purge'],
             default: 'dismiss',
-            description: "清理模式：'dismiss' 归档保留记录，或 'purge' 物理删除。默认 'dismiss'。"
+            description: catalog.tools.board_clear.parameters.mode
           }
         }
       },
@@ -456,7 +459,7 @@ export function apply(ctx, config = {}) {
         render(_args, value) {
           return [{
             type: 'text',
-            text: value?.message || `[Board] 已清理 ${value?.clearedCount || 0} 条目`
+            text: renderToolMessage(value, () => value?.success ? resolveMessages(ctx, config).boardClearSuccess(value?.clearedCount, value?.action) : resolveMessages(ctx, config).boardClearFailure(value?.error))
           }];
         }
       },
@@ -467,7 +470,7 @@ export function apply(ctx, config = {}) {
 
     registerSafe({
       name: 'session_call',
-      description: '向指定活跃会话发起单播调用。根据目标状态自动选择 steer 运行中引导或 followup 空闲唤醒。支持呼叫类别（task_dispatch 派发/建议、task_report 汇报/交付、notice 单向通报）与公共黑板条目关联 context_post_ids。',
+      description: catalog.tools.session_call.description,
       isConcurrencySafe: true,
       parameters: {
         type: 'object',
@@ -476,24 +479,24 @@ export function apply(ctx, config = {}) {
             type: 'string',
             minLength: 8,
             maxLength: 128,
-            description: '目标会话 Session ID，支持精确匹配或大于等于 8 位的唯一前缀，不支持通配符。'
+            description: catalog.tools.session_call.parameters.target_session_id
           },
           message: {
             type: 'string',
             minLength: 1,
             maxLength: 4000,
-            description: '任务指令、进度汇报或通知内容，最大 4000 字符。'
+            description: catalog.tools.session_call.parameters.message
           },
           call_type: {
             type: 'string',
             enum: ['task_dispatch', 'task_report', 'notice'],
             default: 'task_dispatch',
-            description: '呼叫类别与收敛语义：task_dispatch（任务派发/协作请求，需结果时单次 task_report 答复）、task_report（结果汇报/收口归档，无需回复）、notice（单向通报，无需回复）。默认 task_dispatch。'
+            description: catalog.tools.session_call.parameters.call_type
           },
           context_post_ids: {
             type: 'array',
             items: { type: 'string' },
-            description: '引用的公共黑板条目 ID 列表。'
+            description: catalog.tools.session_call.parameters.context_post_ids
           }
         },
         required: ['target_session_id', 'message']
@@ -521,47 +524,47 @@ export function apply(ctx, config = {}) {
         render(_args, value) {
           return [{
             type: 'text',
-            text: value?.message || (value?.success ? `成功呼叫目标会话 [${value?.targetSessionId}] (${value?.deliveryMode})` : '呼叫失败')
+            text: renderToolMessage(value, () => value?.success ? resolveMessages(ctx, config).sessionCallSuccess(value?.targetSessionId, value?.deliveryMode, value?.callType) : resolveMessages(ctx, config).sessionCallFailure(value?.error))
           }];
         }
       },
       execute: async (args, exec) => {
-        return executeSessionCall({ ctx, args, exec });
+        return executeSessionCall({ ctx, args, exec, options: { logger, config } });
       }
     });
 
     registerSafe({
       name: 'session_query',
-      description: '查询当前活跃会话。默认仅返回当前工作区的会话；跨工作区查询请设置 cross_workspace: true。状态规范化为 running 或 idle。',
+      description: catalog.tools.session_query.description,
       isConcurrencySafe: true,
       parameters: {
         type: 'object',
         properties: {
           query: {
             type: 'string',
-            description: '搜索关键词，匹配 Session ID 或 Title。'
+            description: catalog.tools.session_query.parameters.query
           },
           running_only: {
             type: 'boolean',
             default: false,
-            description: '是否仅返回处于 running 状态的会话。默认为 false。'
+            description: catalog.tools.session_query.parameters.running_only
           },
           cross_workspace: {
             type: 'boolean',
             default: false,
-            description: '是否查询所有工作区的会话。默认为 false，即仅限当前工作区。'
+            description: catalog.tools.session_query.parameters.cross_workspace
           },
           top_level_only: {
             type: 'boolean',
             default: true,
-            description: '是否仅列出顶层会话，排除子代理与临时会话。默认为 true。'
+            description: catalog.tools.session_query.parameters.top_level_only
           },
           limit: {
             type: 'integer',
             minimum: 1,
             maximum: 100,
             default: 50,
-            description: '返回条数限制。默认 50，最大 100。'
+            description: catalog.tools.session_query.parameters.limit
           }
         }
       },
@@ -599,28 +602,18 @@ export function apply(ctx, config = {}) {
           const active = typeof value?.activeCount === 'number' ? value.activeCount : sessions.filter(s => s.status === 'running').length;
           const idle = typeof value?.idleCount === 'number' ? value.idleCount : sessions.filter(s => s.status === 'idle').length;
 
+          const counts = { total, active, idle };
+          const msg = resolveMessages(ctx, config);
           if (sessions.length === 0) {
             return [{
               type: 'text',
-              text: `### Session Query Overview\n\nNo active sessions found.\n\n**Total:** ${total} | **Active:** ${active} | **Idle:** ${idle}`
+              text: msg.sessionQueryEmpty(counts)
             }];
           }
 
-          const header = '| Session ID | Title | Status | Workspace | Current |\n|:--- |:--- |:--- |:--- |:--- |';
-          const rows = sessions.map(s => {
-            const sid = `\`${s.sessionId}\``;
-            const title = (s.title || 'Untitled').replace(/\|/g, '\\|');
-            const status = s.status === 'running' ? '`running`' : '`idle`';
-            const ws = (s.workspace || s.cwd || '').replace(/\|/g, '\\|');
-            const curr = s.isCurrent ? 'Yes' : 'No';
-            return `| ${sid} | ${title} | ${status} | ${ws} | ${curr} |`;
-          }).join('\n');
-
-          const summary = `\n\n**Total:** ${total} | **Active:** ${active} | **Idle:** ${idle}`;
-
           return [{
             type: 'text',
-            text: `### Session Query Overview\n\n${header}\n${rows}${summary}`
+            text: msg.sessionQueryOverview(sessions, counts)
           }];
         }
       },
@@ -631,7 +624,7 @@ export function apply(ctx, config = {}) {
 
     registerSafe({
       name: 'session_create',
-      description: '创建同级会话。用户要求新建会话、新开 session 或平级会话时使用。独立会话可长期并行运行，不同于临时子任务 subagent。默认继承当前会话的模型参数与预设配置，除非手动指定。',
+      description: catalog.tools.session_create.description,
       isConcurrencySafe: true,
       parameters: {
         type: 'object',
@@ -640,30 +633,30 @@ export function apply(ctx, config = {}) {
             type: 'string',
             minLength: 1,
             maxLength: 60,
-            description: '同级会话标题，不包含特权前缀与换行符。'
+            description: catalog.tools.session_create.parameters.title
           },
           initial_message: {
             type: 'string',
             maxLength: 4000,
-            description: '初始任务指令，会话创建后立即自动投递并启动第一轮。'
+            description: catalog.tools.session_create.parameters.initial_message
           },
           context_post_ids: {
             type: 'array',
             items: { type: 'string' },
             maxItems: 5,
-            description: '可选关联的黑板条目 ID 列表，将自动挂载至初始任务指令首部。'
+            description: catalog.tools.session_create.parameters.context_post_ids
           },
           model: {
             type: 'string',
-            description: '可选覆写目标会话所使用的模型 ID。默认继承当前会话模型，除非手动指定。'
+            description: catalog.tools.session_create.parameters.model
           },
           reasoning_effort: {
             type: 'string',
-            description: '可选覆写目标会话所使用的推理强度 (如 low, medium, high)。默认继承当前会话推理强度，除非手动指定。'
+            description: catalog.tools.session_create.parameters.reasoning_effort
           },
           preset: {
             type: 'string',
-            description: '可选指定挂载的智能体预设 ID。默认继承当前会话或全局默认预设，除非手动指定。'
+            description: catalog.tools.session_create.parameters.preset
           }
         }
       },
@@ -682,22 +675,21 @@ export function apply(ctx, config = {}) {
               type: 'array',
               items: { type: 'string' }
             },
-            error: { type: ['string', 'null'] }
+            error: { type: ['string', 'null'] },
+            message: { type: 'string' }
           },
           additionalProperties: false
         },
         render(_args, value) {
           return [{
             type: 'text',
-            text: value?.success
-              ? `[Session] 成功创建同级会话 [${value?.sessionId}] "${value?.title}" (状态: ${value?.status}, 代际: ${value?.generation})`
-              : `[Session] 创建同级会话失败: ${value?.error}`
+            text: renderToolMessage(value, () => value?.success ? resolveMessages(ctx, config).sessionCreateSuccess(value?.sessionId, value?.title, value?.status, value?.generation) : resolveMessages(ctx, config).sessionCreateFailure(value?.error))
           }];
         }
       },
       execute: async (args, exec) => {
-        const factory = new PeerSessionFactory(ctx, { boardStore });
-        return factory.create({ args, exec });
+        const factory = new PeerSessionFactory(ctx, { boardStore, config });
+        return factory.create({ args, exec, options: { config } });
       }
     });
   }

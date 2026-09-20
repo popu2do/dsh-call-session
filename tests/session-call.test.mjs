@@ -105,8 +105,8 @@ test('dispatchNativeMessage: 状态分发 (steer / followup / send)', () => {
   assert.equal(sendOnlyAgent.received[0].flag, true);
 
   // 4. 非法 agent 抛出明确异常
-  assert.throws(() => dispatchNativeMessage(null, {}), /targetAgent 必须是有效的 Agent 实例/);
-  assert.throws(() => dispatchNativeMessage({}, {}), /未提供有效的原生接收方法/);
+  assert.throws(() => dispatchNativeMessage(null, {}), /\[InvalidParameter\]/);
+  assert.throws(() => dispatchNativeMessage({}, {}), /\[ServiceUnavailable\]/);
 });
 
 test('executeSessionCall: 参数校验测试 (通配符/自呼叫/超长消息/空参数)', async () => {
@@ -118,31 +118,31 @@ test('executeSessionCall: 参数校验测试 (通配符/自呼叫/超长消息/�
   // 1. 空参数或空 target_session_id / message 拦截
   await assert.rejects(
     () => executeSessionCall({ ctx, args: null, exec }),
-    /参数必须为对象/
+    /\[InvalidParameter\]/
   );
   await assert.rejects(
     () => executeSessionCall({ ctx, args: { target_session_id: '', message: 'hi' }, exec }),
-    /必须提供 target_session_id/
+    /\[InvalidParameter\]/
   );
   // 废除别名防御：传 target_id 或 sessionId 不被识别为合法目标
   await assert.rejects(
     () => executeSessionCall({ ctx, args: { target_id: 'target-12345678', message: 'hi' }, exec }),
-    /必须提供 target_session_id/
+    /\[InvalidParameter\]/
   );
   await assert.rejects(
     () => executeSessionCall({ ctx, args: { sessionId: 'target-12345678', message: 'hi' }, exec }),
-    /必须提供 target_session_id/
+    /\[InvalidParameter\]/
   );
   await assert.rejects(
     () => executeSessionCall({ ctx, args: { target_session_id: 'target-12345678', message: '' }, exec }),
-    /必须提供非空的 message/
+    /\[InvalidParameter\]/
   );
 
   // 2. 通配符过滤 (*, all, broadcast)
   for (const wildcard of ['*', 'all', 'broadcast', 'ALL', 'Broadcast']) {
     await assert.rejects(
       () => executeSessionCall({ ctx, args: { target_session_id: wildcard, message: 'ping' }, exec }),
-      /session_call: 不支持通配符/
+      /\[WildcardForbidden\]/
     );
   }
 
@@ -153,7 +153,7 @@ test('executeSessionCall: 参数校验测试 (通配符/自呼叫/超长消息/�
       args: { target_session_id: 'caller-session-12345678', message: 'hello self' },
       exec
     }),
-    /session_call: 不能调用自身 Session ID/
+    /\[SelfCallForbidden\]/
   );
 
   // 4. 超长消息拦截 (> 4000 字符)
@@ -166,7 +166,7 @@ test('executeSessionCall: 参数校验测试 (通配符/自呼叫/超长消息/�
       },
       exec
     }),
-    /message 长度不能超过 4000 字符/
+    /\[InvalidParameter\]/
   );
 });
 
@@ -188,7 +188,7 @@ test('executeSessionCall: 会话前缀解析与多重匹配处理', async () => 
       args: { target_session_id: 'cluster', message: 'ping' },
       exec
     }),
-    /session_call: 前缀 "cluster" 长度小于 8 位/
+    /\[InvalidParameter\]/
   );
 
   // 2. 多重匹配拒绝：前缀 "cluster-worker-node-alpha" 匹配到 alpha-1 和 alpha-2 两个会话
@@ -198,7 +198,7 @@ test('executeSessionCall: 会话前缀解析与多重匹配处理', async () => 
       args: { target_session_id: 'cluster-worker-node-alpha', message: 'ping' },
       exec
     }),
-    /session_call: 目标前缀 "cluster-worker-node-alpha" 匹配到 2 个活跃会话/
+    /\[AmbiguousPrefix\]/
   );
 
   // 3. 唯一前缀 (>= 8 字符) 成功解析
@@ -217,7 +217,7 @@ test('executeSessionCall: 会话前缀解析与多重匹配处理', async () => 
       args: { target_session_id: 'non-existent-session-id', message: 'ping' },
       exec
     }),
-    /session_call: 未找到匹配 "non-existent-session-id" 的活跃会话/
+    /\[TargetNotFound\]/
   );
 });
 
@@ -237,7 +237,7 @@ test('executeSessionCall: 归档会话过滤', async () => {
       args: { target_session_id: 'archived-session-33334444', message: 'ping' },
       exec
     }),
-    /session_call: 未找到匹配 "archived-session-33334444" 的活跃会话/
+    /\[TargetNotFound\]/
   );
 });
 

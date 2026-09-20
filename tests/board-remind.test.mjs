@@ -85,7 +85,7 @@ test('formatAuthorReminderText: 文本生成格式与边界处理', () => {
     topic: 'task:audit',
     status: 'active'
   }];
-  const singleText = formatAuthorReminderText(singlePost);
+  const singleText = formatAuthorReminderText(singlePost, 'zh');
   assert.ok(singleText.includes('1 条尚未清理的有效条目'));
   assert.ok(singleText.includes('#post-001 (task:audit)'));
   assert.ok(singleText.includes('board_clear'));
@@ -95,7 +95,7 @@ test('formatAuthorReminderText: 文本生成格式与边界处理', () => {
     { id: 'post-001', topic: 'task:audit', status: 'active' },
     { id: 'post-002', topic: 'spec:api', status: 'active' }
   ];
-  const twoText = formatAuthorReminderText(twoPosts);
+  const twoText = formatAuthorReminderText(twoPosts, 'zh');
   assert.ok(twoText.includes('2 条尚未清理的有效条目'));
   assert.ok(twoText.includes('#post-001 (task:audit)'));
   assert.ok(twoText.includes('#post-002 (spec:api)'));
@@ -107,7 +107,7 @@ test('formatAuthorReminderText: 文本生成格式与边界处理', () => {
     { id: 'p-3', topic: 't3', status: 'active' },
     { id: 'p-4', topic: 't4', status: 'active' }
   ];
-  const fourText = formatAuthorReminderText(fourPosts);
+  const fourText = formatAuthorReminderText(fourPosts, 'zh');
   assert.ok(fourText.includes('4 条尚未清理的有效条目'));
   assert.ok(fourText.includes('#p-1 (t1)'));
   assert.ok(fourText.includes('#p-2 (t2)'));
@@ -378,7 +378,8 @@ test('apply: 在 systemPrompt.context 中正确注册 board:remind 并实现端�
   apply(ctx, {
     storagePath,
     debounceMs: 50,
-    remindContextOrder: 130
+    remindContextOrder: 130,
+    locale: 'zh'
   });
 
   // 1. 验证 context 注册元数据

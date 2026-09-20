@@ -48,6 +48,7 @@ ADRs transition through the following states:
 | **ADR-0020** | System Performance Specifications, Resource Budgets, and Deterministic SLA Baselines | **Accepted** | 2026-09-18 | `lib/board-store.mjs`, `lib/call-telemetry.mjs`, `lib/client.js`, `tests/performance-baseline.test.mjs` | [0020-system-performance-specifications-and-resource-budgets.md](./0020-system-performance-specifications-and-resource-budgets.md) |
 | **ADR-0021** | Concurrent Running Quota and Model Inheritance Alignment | **Accepted** | 2026-09-20 | `lib/session-directory.mjs`, `lib/session-create.mjs` | [0021-concurrent-running-quota-and-model-inheritance-alignment.md](./0021-concurrent-running-quota-and-model-inheritance-alignment.md) |
 | **ADR-0022** | Verifiable Architecture Topology Artifacts and Agent Discipline Decoupling | **Accepted** | 2026-09-18 | `.githooks/pre-commit`, `AGENTS.md`, `docs/architecture/` | [0022-verifiable-architecture-topology-and-agent-discipline-decoupling.md](./0022-verifiable-architecture-topology-and-agent-discipline-decoupling.md) |
+| **ADR-0023** | Bilingual Localization Architecture and Standardized English Error Protocol | **Accepted** | 2026-09-21 | `lib/locales/index.mjs`, `index.mjs`, `lib/client.js` | [0023-bilingual-localization-and-english-error-standardization.md](./0023-bilingual-localization-and-english-error-standardization.md) |
 
 ---
 

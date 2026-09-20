@@ -144,6 +144,8 @@ export interface CallSessionConfig {
   promptSectionOrder?: number;
   /** 记名提醒注入 System Prompt Context 的排序权重，默认 130 */
   remindContextOrder?: number;
+  /** 插件交互语言偏好，支持 'auto' | 'zh' | 'en'，默认 'auto' */
+  locale?: 'auto' | 'zh' | 'en';
 }
 
 /**
@@ -156,7 +158,7 @@ export declare const Config: z.Schema<CallSessionConfig>;
  *
  * @returns Markdown 格式的模型引导提示词
  */
-export declare function usageSectionText(): string;
+export declare function usageSectionText(ctx?: any, config?: any): string;
 
 /**
  * Cordis 插件激活与核心生命周期装配函数
@@ -209,6 +211,8 @@ export {
   WEB_SERVER_KEYS,
   SessionDirectory
 };
+
+export type * from './locales.js';
 
 export type {
   BoardPost,

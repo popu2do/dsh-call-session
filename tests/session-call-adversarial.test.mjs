@@ -90,7 +90,7 @@ test('自呼叫与变种参数防御检查', async () => {
       }, exec);
     },
     (err) => {
-      assert.match(err.message, /不能调用自身 Session ID/);
+      assert.match(err.message, /\[SelfCallForbidden\]/);
       return true;
     }
   );
@@ -104,7 +104,7 @@ test('自呼叫与变种参数防御检查', async () => {
       }, exec);
     },
     (err) => {
-      assert.match(err.message, /不能调用自身 Session ID/);
+      assert.match(err.message, /\[SelfCallForbidden\]/);
       return true;
     }
   );
@@ -119,7 +119,7 @@ test('自呼叫与变种参数防御检查', async () => {
       }, exec);
     },
     (err) => {
-      assert.match(err.message, /不能调用自身 Session ID/);
+      assert.match(err.message, /\[SelfCallForbidden\]/);
       return true;
     }
   );
@@ -165,7 +165,7 @@ test('通配符目标调用拦截检查', async () => {
         }, exec);
       },
       (err) => {
-        assert.match(err.message, /不支持通配符/);
+        assert.match(err.message, /\[WildcardForbidden\]/);
         return true;
       },
       `通配符目标 [${target}] 必须被严格拒绝`
@@ -205,7 +205,7 @@ test('短前缀与歧义前缀调用处理', async () => {
         }, exec);
       },
       (err) => {
-        assert.match(err.message, /前缀.*长度小于 8 位/);
+        assert.match(err.message, /\[InvalidParameter\]/);
         return true;
       }
     );
@@ -221,7 +221,7 @@ test('短前缀与歧义前缀调用处理', async () => {
       }, exec);
     },
     (err) => {
-      assert.match(err.message, /匹配到 2 个活跃会话/);
+      assert.match(err.message, /\[AmbiguousPrefix\]/);
       assert.ok(err.message.includes('session-conflict-worker-1'));
       assert.ok(err.message.includes('session-conflict-worker-2'));
       return true;
@@ -250,7 +250,7 @@ test('短前缀与歧义前缀调用处理', async () => {
       }, exec);
     },
     (err) => {
-      assert.match(err.message, /未找到匹配.*活跃会话.*已被归档/);
+      assert.match(err.message, /\[TargetNotFound\]/);
       return true;
     }
   );
@@ -312,7 +312,7 @@ test('超长 Payload 与异常输入边界容错', async () => {
       }, exec);
     },
     (err) => {
-      assert.match(err.message, /message 长度不能超过 4000 字符/);
+      assert.match(err.message, /\[InvalidParameter\]/);
       return true;
     }
   );
@@ -326,7 +326,7 @@ test('超长 Payload 与异常输入边界容错', async () => {
       }, exec);
     },
     (err) => {
-      assert.match(err.message, /必须提供非空的 message 参数/);
+      assert.match(err.message, /\[InvalidParameter\]/);
       return true;
     }
   );
@@ -339,7 +339,7 @@ test('超长 Payload 与异常输入边界容错', async () => {
       }, exec);
     },
     (err) => {
-      assert.match(err.message, /必须提供非空的 message 参数/);
+      assert.match(err.message, /\[InvalidParameter\]/);
       return true;
     }
   );

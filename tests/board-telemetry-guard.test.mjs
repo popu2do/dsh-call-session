@@ -148,9 +148,8 @@ test('BoardStore.post: 直接写入保留主题与遥测数据时抛错拦截', 
     },
     (err) => {
       assert.ok(err instanceof Error);
-      assert.ok(err.message.includes('保留主题拦截'));
-      assert.ok(err.message.includes('纯内存遥测域 (ADR-0012)'));
-      assert.ok(err.message.includes('严禁写入持久化黑板'));
+      assert.ok(err.message.includes('[ReservedTopic]'));
+      assert.ok(err.message.includes('ADR-0012'));
       return true;
     }
   );
@@ -168,7 +167,7 @@ test('BoardStore.post: 直接写入保留主题与遥测数据时抛错拦截', 
     (err) => {
       assert.ok(err instanceof Error);
       assert.ok(err.message.includes('task:telemetry'));
-      assert.ok(err.message.includes('纯内存遥测域 (ADR-0012)'));
+      assert.ok(err.message.includes('ADR-0012'));
       return true;
     }
   );
@@ -186,7 +185,7 @@ test('BoardStore.post: 直接写入保留主题与遥测数据时抛错拦截', 
     (err) => {
       assert.ok(err instanceof Error);
       assert.ok(err.message.includes('call:steer'));
-      assert.ok(err.message.includes('纯内存遥测域 (ADR-0012)'));
+      assert.ok(err.message.includes('ADR-0012'));
       return true;
     }
   );
@@ -204,7 +203,7 @@ test('BoardStore.post: 直接写入保留主题与遥测数据时抛错拦截', 
     (err) => {
       assert.ok(err instanceof Error);
       assert.ok(err.message.includes('sys:alert'));
-      assert.ok(err.message.includes('纯内存遥测域 (ADR-0012)'));
+      assert.ok(err.message.includes('ADR-0012'));
       return true;
     }
   );
@@ -343,11 +342,10 @@ test('board_post 工具端到端拦截：保留主题拒绝与错误响应契约
 
   assert.equal(res1.success, false);
   assert.equal(res1.topic, 'telemetry:flow');
-  assert.ok(res1.error.includes('保留主题拦截'));
-  assert.ok(res1.error.includes('纯内存遥测域 (ADR-0012)'));
-  assert.ok(res1.error.includes('严禁写入持久化黑板'));
+  assert.ok(res1.error.includes('[ReservedTopic]'));
+  assert.ok(res1.error.includes('ADR-0012'));
   const rendered1 = boardPost.output.render({}, res1)[0].text;
-  assert.ok(rendered1.includes('[Board] 发布失败: 保留主题拦截'));
+  assert.ok(rendered1.includes('[ReservedTopic]'));
 
   // 2. 尝试发布 task:telemetry 主题
   const res2 = await boardPost.execute({
@@ -357,7 +355,7 @@ test('board_post 工具端到端拦截：保留主题拒绝与错误响应契约
 
   assert.equal(res2.success, false);
   assert.equal(res2.topic, 'task:telemetry');
-  assert.ok(res2.error.includes('保留主题拦截'));
+  assert.ok(res2.error.includes('[ReservedTopic]'));
 
   // 3. 尝试发布 call: 主题
   const res3 = await boardPost.execute({
@@ -367,7 +365,7 @@ test('board_post 工具端到端拦截：保留主题拒绝与错误响应契约
 
   assert.equal(res3.success, false);
   assert.equal(res3.topic, 'call:broadcast');
-  assert.ok(res3.error.includes('保留主题拦截'));
+  assert.ok(res3.error.includes('[ReservedTopic]'));
 
   // 4. 尝试发布 sys: 主题
   const res4 = await boardPost.execute({
@@ -377,7 +375,7 @@ test('board_post 工具端到端拦截：保留主题拒绝与错误响应契约
 
   assert.equal(res4.success, false);
   assert.equal(res4.topic, 'sys:kernel');
-  assert.ok(res4.error.includes('保留主题拦截'));
+  assert.ok(res4.error.includes('[ReservedTopic]'));
 
   // 5. 校验黑板列表：上述 4 次非法尝试均未写入黑板
   const listEmpty = await boardList.execute({}, { agent });

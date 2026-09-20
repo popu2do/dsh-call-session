@@ -175,7 +175,8 @@ test('需求一端到端：跨会话多轮对话状态幂等性 (ADR-0010 Invari
   apply(ctx, {
     enabled: true,
     storagePath: path.join(tmpDir, 'board.json'),
-    debounceMs: 50
+    debounceMs: 50,
+    locale: 'zh'
   });
 
   const remindContext = ctx._contexts.get('board:remind');
@@ -234,7 +235,8 @@ test('需求一端到端：条目清理消除与自然过期 (TTL Expiration)', 
   apply(ctx, {
     enabled: true,
     storagePath: path.join(tmpDir, 'board.json'),
-    debounceMs: 50
+    debounceMs: 50,
+    locale: 'zh'
   });
 
   const remindContext = ctx._contexts.get('board:remind');
@@ -320,7 +322,7 @@ test('需求二端到端：活跃会话达配额上限拦截与配额释放', as
     },
     (err) => {
       assert.ok(err.message.includes('[QuotaExceeded]'), `应抛出 [QuotaExceeded]，实际为: ${err.message}`);
-      assert.ok(err.message.includes('已达上限 5'));
+      assert.ok(err.message.includes('5'));
       return true;
     }
   );
@@ -365,7 +367,7 @@ test('需求二端到端：单会话限频拦截与时间窗口恢复', async ()
     },
     (err) => {
       assert.ok(err.message.includes('[RateLimitExceeded]'), `应抛出 [RateLimitExceeded]，实际为: ${err.message}`);
-      assert.ok(err.message.includes('限制为 5 次/分钟'));
+      assert.ok(err.message.includes('5/min'));
       return true;
     }
   );
@@ -417,7 +419,7 @@ test('需求二端到端：代际深度限制 (Generation <= 2) 与调用元数�
     },
     (err) => {
       assert.ok(err.message.includes('[GenerationLimitExceeded]'), `应拦截 Gen 3 派生: ${err.message}`);
-      assert.ok(err.message.includes('已达上限 2'));
+      assert.ok(err.message.includes('2'));
       return true;
     }
   );
@@ -496,7 +498,8 @@ test('端到端全链路联动：创建同级会话、黑板任务派发、记�
   apply(ctx, {
     enabled: true,
     storagePath: path.join(tmpDir, 'board.json'),
-    debounceMs: 50
+    debounceMs: 50,
+    locale: 'zh'
   });
 
   const remindContext = ctx._contexts.get('board:remind');
