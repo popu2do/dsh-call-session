@@ -3544,3 +3544,536 @@ test('ADR-0023: client.apply(ctx) 运行时 locale 动态绑定验证', () => {
   assert.ok(source.includes("ctx.locale.bind(NS)"), 'client.js 必须调用 ctx.locale.bind(NS) 绑定命名空间');
 });
 
+
+
+test('ADR-0013 视口取景引擎：宏观自适应居中、水平夹紧、垂直边界与缩放区间保护', () => {
+  const plugin = loadClientBundle();
+  const { computeViewportFraming } = plugin;
+  assert.equal(typeof computeViewportFraming, 'function', '必须导出 computeViewportFraming 纯函数');
+
+  const vw = 1200;
+  const vh = 700;
+
+  // 1. 宏观取景：完整框定公共黑板与全部工作区分组列，保留 48px 安全内边距
+  const bounds = { minX: 40, minY: 24, maxX: 1120, maxY: 650 };
+  const macro = computeViewportFraming({ viewportWidth: vw, viewportHeight: vh, bounds });
+  assert.ok(macro.zoom > 0 && macro.zoom <= 1.20, '宏观取景缩放必须落在 [0.30, 1.20] 区间');
+  assert.ok(bounds.minX * macro.zoom + macro.panX >= 48 - 1e-6, '宏观取景必须保留左侧 48px 安全边距');
+  assert.ok(bounds.maxX * macro.zoom + macro.panX <= vw - 48 + 1e-6, '宏观取景必须完整容纳右侧内容');
+  assert.ok(bounds.minY * macro.zoom + macro.panY >= 48 - 1e-6, '宏观取景必须保留顶部 48px 安全边距');
+  assert.ok(bounds.maxY * macro.zoom + macro.panY <= vh - 48 + 1e-6, '宏观取景必须完整容纳底部内容');
+
+  // 2. 内容宽度小于视口时，定位执行整体水平居中
+  const narrow = computeViewportFraming({
+    viewportWidth: vw,
+    viewportHeight: vh,
+    bounds,
+    mode: 'locate',
+    anchor: { x: 170, y: 240 },
+    currentZoom: 1
+  });
+  const narrowContentW = bounds.maxX - bounds.minX;
+  assert.equal(
+    narrow.panX,
+    (vw - narrowContentW * narrow.zoom) / 2 - bounds.minX * narrow.zoom,
+    '内容宽度小于视口时定位必须整体水平居中'
+  );
+
+  // 2b. 内容恰好容纳于视口（含临界宽度）时仍必须整体居中，严禁被推向左侧夹紧
+  const criticalContentW = vw - 1;
+  const criticalBounds = { minX: 40, minY: 24, maxX: 40 + criticalContentW, maxY: 650 };
+  const critical = computeViewportFraming({
+    mode: 'locate',
+    viewportWidth: vw,
+    viewportHeight: vh,
+    bounds: criticalBounds,
+    anchor: { x: 170, y: 240 },
+    currentZoom: 1
+  });
+  assert.equal(
+    critical.panX,
+    (vw - criticalContentW) / 2 - criticalBounds.minX,
+    '内容宽度等于视口宽度时定位必须整体居中'
+  );
+  assert.ok(
+    criticalBounds.maxX * 1 + critical.panX <= vw + 1e-6,
+    '内容容纳于视口时右边缘严禁越界'
+  );
+
+  // 3. 内容宽度超出视口时，首列左边缘严格夹紧在 48px 安全边距，杜绝左侧空白断层
+  const wideBounds = { minX: 40, minY: 24, maxX: 1564, maxY: 630 };
+  const wide = computeViewportFraming({
+    viewportWidth: vw,
+    viewportHeight: vh,
+    bounds: wideBounds,
+    mode: 'locate',
+    anchor: { x: 170, y: 240 },
+    currentZoom: 1
+  });
+  assert.ok(
+    Math.abs(wideBounds.minX * wide.zoom + wide.panX - 48) < 1e-6,
+    '内容宽度超出视口时首列左边缘必须严格夹紧在 48px 安全边距'
+  );
+  assert.ok(
+    wide.panX + 170 * wide.zoom < vw / 2 - 100,
+    '当前会话节点严禁被刚性推向视口水平几何中心'
+  );
+
+  // 4. 垂直边界：目标会话垂直居中为基线，顶部公共黑板与列底不滚出视口
+  const deep = computeViewportFraming({
+    viewportWidth: vw,
+    viewportHeight: vh,
+    bounds,
+    mode: 'locate',
+    anchor: { x: 170, y: 600 },
+    currentZoom: 1
+  });
+  assert.ok(bounds.minY * deep.zoom + deep.panY >= 24 - 1e-6, '顶部公共黑板必须保留在视口可见区');
+  assert.ok(bounds.maxY * deep.zoom + deep.panY <= vh - 24 + 1e-6, '列高适配视口时底部不得溢出');
+
+  // 5. 列高超出视口时以目标会话可见性优先
+  const tallBounds = { minX: 40, minY: 24, maxX: 1120, maxY: 1200 };
+  const tall = computeViewportFraming({
+    viewportWidth: vw,
+    viewportHeight: vh,
+    bounds: tallBounds,
+    mode: 'locate',
+    anchor: { x: 170, y: 1100 },
+    currentZoom: 1
+  });
+  assert.ok(
+    Math.abs(1100 * tall.zoom + tall.panY - vh / 2) < 1e-6,
+    '列高超出视口时目标会话必须垂直居中，严禁被推出屏幕'
+  );
+
+  // 6. 缩放区间保护：维持用户视距，双向夹紧至 [0.8, 1.2]
+  const anchor = { x: 170, y: 240 };
+  const zoomedOut = computeViewportFraming({ mode: 'locate', viewportWidth: vw, viewportHeight: vh, bounds, anchor, currentZoom: 0.4 });
+  assert.equal(zoomedOut.zoom, 0.8, '缩放小于 0.8 时必须抬升至 0.8 保障会话标题可读');
+  const zoomedIn = computeViewportFraming({ mode: 'locate', viewportWidth: vw, viewportHeight: vh, bounds, anchor, currentZoom: 2.4 });
+  assert.equal(zoomedIn.zoom, 1.2, '缩放大于 1.2 时必须回落至 1.2 保留局部拓扑上下文');
+  const inRange = computeViewportFraming({ mode: 'locate', viewportWidth: vw, viewportHeight: vh, bounds, anchor, currentZoom: 1.05 });
+  assert.equal(inRange.zoom, 1.05, '缩放处于 [0.8, 1.2] 区间内必须严格保持不变');
+});
+
+test('ADR-0013 首屏与尺寸变化必须执行全局取景，严禁单点会话居中', () => {
+  const code = fs.readFileSync(path.join(rootDir, 'lib', 'client.js'), 'utf8');
+
+  assert.equal(code.includes("fitViewRef.current(false, 'macro')"), true, '首屏与尺寸变化必须以全局取景初始化视口');
+  assert.equal(code.includes("fitViewRef.current(false, 'locate')"), false, '严禁首屏以当前会话单点居中初始化视口');
+  assert.equal(
+    code.includes('fitPanX = (vw / 2) - currentNode.x * fitZoom'),
+    false,
+    '严禁将当前会话节点刚性推向视口水平几何中心'
+  );
+
+  const plugin = loadClientBundle();
+  const t = (k) => k;
+  const view = plugin.CanvasView({ sessionId: 'session-cur', t });
+  function findVNodes(node, predicate, acc = []) {
+    if (!node || typeof node !== 'object') return acc;
+    if (predicate(node)) acc.push(node);
+    if (Array.isArray(node.children)) node.children.forEach((c) => findVNodes(c, predicate, acc));
+    return acc;
+  }
+  const surface = findVNodes(view, (n) => n && n.props && n.props.className === 'dsh-canvas-surface')[0];
+  assert.ok(surface, '必须渲染 dsh-canvas-surface SVG 节点');
+
+  const vw = typeof window !== 'undefined' && window.innerWidth ? window.innerWidth : 1000;
+  const vh = typeof window !== 'undefined' && window.innerHeight ? Math.max(300, window.innerHeight - 44) : 656;
+  const expected = plugin.computeViewportFraming({
+    viewportWidth: vw,
+    viewportHeight: vh,
+    bounds: { minX: 40, minY: 24, maxX: 1120, maxY: 650 }
+  });
+  assert.equal(
+    surface.props.style.transform,
+    'translate3d(' + Math.round(expected.panX) + 'px, ' + Math.round(expected.panY) + 'px, 0px) scale(' + Number(expected.zoom.toFixed(2)) + ')',
+    '首屏视口必须为公共黑板与全部工作区分组列的全局取景'
+  );
+});
+
+test('ADR-0013 定位当前会话：夹紧取景、缩放保护与落点脉冲运行时契约', () => {
+  const code = fs.readFileSync(path.join(rootDir, 'lib', 'client.js'), 'utf8');
+
+  const pans = [];
+  const zooms = [];
+  const timers = [];
+  const cleanups = [];
+
+  const workspaces = [];
+  const sessions = [];
+  for (let i = 0; i < 5; i++) {
+    workspaces.push({ id: '/ws/w' + i, name: 'w' + i, isCurrent: i === 0, sessionIds: ['session-s' + i] });
+    sessions.push({ id: 'session-s' + i, workspace: '/ws/w' + i, title: 'Agent ' + i, status: i === 0 ? 'running' : 'idle' });
+  }
+  const telemetryData = {
+    timestamp: Date.now(),
+    currentWorkspace: '/ws/w0',
+    workspaces,
+    sessions,
+    calls: [],
+    posts: []
+  };
+
+  function createRuntime(seedPulseId) {
+    let hookCounter = 0;
+    const mockReact = {
+      useState: (initial) => {
+        hookCounter++;
+        if (initial && typeof initial === 'object' && 'sessions' in initial) {
+          return [telemetryData, () => {}];
+        }
+        if (seedPulseId && hookCounter === 9) {
+          return [seedPulseId, () => {}];
+        }
+        let state = initial;
+        const setter = (next) => {
+          if (typeof next === 'function') next = next(state);
+          state = next;
+          if (state && typeof state === 'object' && 'x' in state && 'y' in state) pans.push({ ...state });
+          else if (typeof state === 'number') zooms.push(state);
+        };
+        return [initial, setter];
+      },
+      useRef: (initial) => ({ current: initial }),
+      useEffect: (fn) => {
+        const cleanup = fn();
+        if (typeof cleanup === 'function') cleanups.push(cleanup);
+      },
+      createElement: (type, props, ...children) => ({ type, props: props || {}, children })
+    };
+
+    const runtimeWindow = {
+      innerWidth: 1200,
+      innerHeight: 800,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      requestAnimationFrame: (cb) => 1,
+      cancelAnimationFrame: () => {}
+    };
+    const runtimeDocument = {
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      hidden: false,
+      getElementById: () => null,
+      createElement: () => ({ id: '', textContent: '' }),
+      head: { appendChild: () => {} },
+      querySelector: () => null
+    };
+
+    let registration = null;
+    const sandbox = {
+      window: runtimeWindow,
+      document: runtimeDocument,
+      console,
+      Date,
+      Set,
+      Map,
+      Array,
+      Object,
+      String,
+      Math,
+      JSON,
+      URLSearchParams,
+      setInterval: () => 1,
+      clearInterval: () => {},
+      setTimeout: (fn, ms) => { timers.push({ fn, ms }); return timers.length; },
+      clearTimeout: () => {}
+    };
+    runtimeWindow.__ModuleLoader__ = { load: (payload) => { registration = payload; } };
+
+    vm.createContext(sandbox);
+    vm.runInContext(code, sandbox);
+    const runtimePlugin = registration.factory((name) => name === 'react' ? mockReact : null);
+    return runtimePlugin;
+  }
+
+  function findVNodes(node, predicate, acc = []) {
+    if (!node || typeof node !== 'object') return acc;
+    if (predicate(node)) acc.push(node);
+    if (Array.isArray(node.children)) node.children.forEach((c) => findVNodes(c, predicate, acc));
+    return acc;
+  }
+
+  // 1. 绑定看板数据与当前会话不移动视口（静默）
+  const runtimePlugin = createRuntime(null);
+  const t = (k) => runtimePlugin.zh[k] || k;
+  const view = runtimePlugin.CanvasView({ sessionId: 'session-s0', t });
+  assert.equal(pans.length, 0, '看板数据与当前会话绑定严禁移动视口');
+  assert.equal(zooms.length, 0, '看板数据与当前会话绑定严禁改变缩放');
+
+  // 2. 用户主动点击「定位当前会话」才执行夹紧取景
+  const surface = findVNodes(view, (n) => n && n.props && n.props.className === 'dsh-canvas-surface')[0];
+  assert.ok(surface, '必须渲染 dsh-canvas-surface SVG 节点');
+  const buttons = findVNodes(view, (n) => n && n.type === 'button' && n.props && n.props.className && n.props.className.includes('dsh-canvas-btn'));
+  const locateBtn = buttons.find((b) => b.children && b.children.includes('定位当前会话'));
+  assert.ok(locateBtn, '必须渲染「定位当前会话」按钮');
+
+  locateBtn.props.onClick();
+  assert.ok(pans.length > 0, '定位必须更新视口平移');
+  assert.ok(zooms.length > 0, '定位必须更新缩放');
+
+  const pan = pans[pans.length - 1];
+  const zoom = zooms[zooms.length - 1];
+
+  // 5 个工作区分组列总宽超出视口 → 首列左边缘夹紧在 48px 安全边距
+  const layout = runtimePlugin.computeLayout(workspaces, sessions, [], '/ws/w0', undefined, []);
+  let minX = Infinity;
+  let maxX = -Infinity;
+  layout.workspaceBounds.forEach((ws) => {
+    minX = Math.min(minX, ws.x);
+    maxX = Math.max(maxX, ws.x + ws.width);
+  });
+  const bb = layout.blackboardBound;
+  minX = Math.min(minX, bb.x);
+  maxX = Math.max(maxX, bb.x + bb.width);
+  assert.ok((maxX - minX) * zoom > 1200, '测试拓扑必须真实超出视口宽度');
+  assert.equal(pan.x, Math.round(48 - minX * zoom), '定位后首列左边缘必须夹紧在视口左侧 48px 安全边距');
+  assert.ok(pan.x + 170 * zoom < 600 - 100, '当前会话节点严禁被刚性推向视口水平几何中心');
+  const initialZoom = Number(surface.props.style.transform.match(/scale\(([\d.]+)\)/)[1]);
+  assert.ok(initialZoom >= 0.8 && initialZoom <= 1.2, '测试前提：首屏缩放必须落在定位保护区间内');
+  assert.equal(zoom, initialZoom, '定位必须原样维持用户当前缩放而非重置为 1.0');
+
+  // 3. 落点脉冲：定位到达后注册 1520ms 生命周期计时器并触发目标节点呼吸类名
+  const pulseTimer = timers.find((tm) => tm.ms === 1520);
+  assert.ok(pulseTimer, '定位到达后必须注册 1.2s 双周期落点脉冲计时器（320ms 位移补间后启动）');
+
+  const pulsedView = createRuntime('session-s0').CanvasView({ sessionId: 'session-s0', t });
+  const nodesLayer = findVNodes(pulsedView, (n) => n && n.props && n.props.id === 'dsh-canvas-nodes')[0];
+  assert.ok(nodesLayer, '必须渲染 dsh-canvas-nodes 分组');
+  const pulsedNode = nodesLayer.children.find((c) => c && c.props && c.props.id === 'dsh-canvas-node-session-s0');
+  const peerNode = nodesLayer.children.find((c) => c && c.props && c.props.id === 'dsh-canvas-node-session-s1');
+  const pulsedEllipse = pulsedNode.children.find((c) => c && c.type === 'ellipse');
+  const peerEllipse = peerNode.children.find((c) => c && c.type === 'ellipse');
+  assert.equal(
+    pulsedEllipse.props.className,
+    'dsh-canvas-node-locating',
+    '落点脉冲必须作用于目标会话椭圆，严禁挂在被 opacity: 1 !important 覆盖的分组上'
+  );
+  assert.notEqual(peerEllipse.props.className, 'dsh-canvas-node-locating', '落点脉冲严禁扩散至非目标会话节点');
+
+  cleanups.forEach((c) => c());
+});
+
+
+test('ADR-0013 落点脉冲样式：1.2 秒双周期呼吸，320ms 位移补间后启动', () => {
+  const code = fs.readFileSync(path.join(rootDir, 'lib', 'client.js'), 'utf8');
+  const injected = [];
+
+  const runtimeDocument = {
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    hidden: false,
+    getElementById: () => null,
+    createElement: () => ({ id: '', textContent: '' }),
+    head: { appendChild: (el) => injected.push(el) },
+    querySelector: () => null
+  };
+
+  let registration = null;
+  const sandbox = {
+    window: { innerWidth: 1200, innerHeight: 800, addEventListener: () => {}, removeEventListener: () => {} },
+    document: runtimeDocument,
+    console,
+    Date,
+    Set,
+    Map,
+    Array,
+    Object,
+    String,
+    Math,
+    JSON,
+    URLSearchParams,
+    setInterval: () => 1,
+    clearInterval: () => {},
+    setTimeout: () => 1,
+    clearTimeout: () => {}
+  };
+  sandbox.window.__ModuleLoader__ = { load: (payload) => { registration = payload; } };
+
+  const mockReact = {
+    useState: (initial) => [initial, () => {}],
+    useRef: (initial) => ({ current: initial }),
+    useEffect: (fn) => { fn(); },
+    createElement: (type, props, ...children) => ({ type, props: props || {}, children })
+  };
+
+  vm.createContext(sandbox);
+  vm.runInContext(code, sandbox);
+  const plugin = registration.factory((name) => name === 'react' ? mockReact : null);
+  plugin.CanvasView({ sessionId: 'session-cur', t: (k) => k });
+
+  assert.equal(injected.length, 1, '看板挂载必须注入一次作用域样式表');
+  const css = injected[0].textContent;
+  assert.ok(
+    css.includes('animation: dshLocatePulse 0.6s cubic-bezier(0.4, 0, 0.6, 1) 0.32s 2;'),
+    '落点脉冲必须为 320ms 位移补间后启动的 1.2 秒双周期呼吸'
+  );
+});
+
+
+test('ADR-0013 外部会话切换静默更新：仅迁移高亮，严禁移动视口', () => {
+  const code = fs.readFileSync(path.join(rootDir, 'lib', 'client.js'), 'utf8');
+
+  const pans = [];
+  const zooms = [];
+
+  const telemetryData = {
+    timestamp: Date.now(),
+    currentWorkspace: '/ws/w0',
+    workspaces: [
+      { id: '/ws/w0', name: 'w0', isCurrent: true, sessionIds: ['session-a', 'session-b'] },
+      { id: '/ws/w1', name: 'w1', isCurrent: false, sessionIds: ['session-c'] }
+    ],
+    sessions: [
+      { id: 'session-a', workspace: '/ws/w0', title: 'Agent A', status: 'idle' },
+      { id: 'session-b', workspace: '/ws/w0', title: 'Agent B', status: 'running' },
+      { id: 'session-c', workspace: '/ws/w1', title: 'Agent C', status: 'idle' }
+    ],
+    calls: [],
+    posts: []
+  };
+
+  // 跨渲染持久化的 ref 存储：真实 React 在重渲染间保留 ref，mock 必须对齐
+  const refStore = [];
+  let refCursor = 0;
+  let stateCursor = 0;
+  const stateStore = [];
+  const cleanups = [];
+
+  const mockReact = {
+    useState: (initial) => {
+      const idx = stateCursor++;
+      if (!(idx in stateStore)) {
+        stateStore[idx] = (initial && typeof initial === 'object' && 'sessions' in initial) ? telemetryData : initial;
+      }
+      const setter = (next) => {
+        const prev = stateStore[idx];
+        if (typeof next === 'function') next = next(prev);
+        stateStore[idx] = next;
+        if (next && typeof next === 'object' && 'x' in next && 'y' in next) pans.push({ ...next });
+        else if (typeof next === 'number') zooms.push(next);
+      };
+      return [stateStore[idx], setter];
+    },
+    useRef: (initial) => {
+      const idx = refCursor++;
+      if (!(idx in refStore)) refStore[idx] = { current: initial };
+      return refStore[idx];
+    },
+    useEffect: (fn) => {
+      const cleanup = fn();
+      if (typeof cleanup === 'function') cleanups.push(cleanup);
+    },
+    createElement: (type, props, ...children) => ({ type, props: props || {}, children })
+  };
+
+  const mockContainer = { clientWidth: 1200, clientHeight: 744, querySelector: () => null };
+  const mockViewport = { clientWidth: 1200, clientHeight: 700 };
+  const resizeObservers = [];
+
+  class MockResizeObserver {
+    constructor(callback) { this.callback = callback; resizeObservers.push(this); }
+    observe() {}
+    disconnect() {}
+  }
+
+  const runtimeWindow = {
+    ResizeObserver: MockResizeObserver,
+    innerWidth: 1200,
+    innerHeight: 800,
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    requestAnimationFrame: () => 1,
+    cancelAnimationFrame: () => {}
+  };
+  const runtimeDocument = {
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    hidden: false,
+    getElementById: () => null,
+    createElement: () => ({ id: '', textContent: '' }),
+    head: { appendChild: () => {} },
+    querySelector: (sel) => (sel === '.dsh-canvas-container' ? mockContainer : (sel === '.dsh-canvas-viewport' ? mockViewport : null))
+  };
+
+  let registration = null;
+  const sandbox = {
+    window: runtimeWindow,
+    document: runtimeDocument,
+    ResizeObserver: MockResizeObserver,
+    console, Date, Set, Map, Array, Object, String, Math, JSON, URLSearchParams,
+    setInterval: () => 1,
+    clearInterval: () => {},
+    setTimeout: () => 1,
+    clearTimeout: () => {}
+  };
+  runtimeWindow.__ModuleLoader__ = { load: (payload) => { registration = payload; } };
+
+  vm.createContext(sandbox);
+  vm.runInContext(code, sandbox);
+  const plugin = registration.factory((name) => name === 'react' ? mockReact : null);
+  const t = (k) => plugin.zh[k] || k;
+
+  function findVNodes(node, predicate, acc = []) {
+    if (!node || typeof node !== 'object') return acc;
+    if (predicate(node)) acc.push(node);
+    if (Array.isArray(node.children)) node.children.forEach((c) => findVNodes(c, predicate, acc));
+    return acc;
+  }
+
+  // 模拟一次 React 重渲染：hook 游标归零，ref/state 存储跨渲染保留
+  function render(sid) {
+    refCursor = 0;
+    stateCursor = 0;
+    return plugin.CanvasView({ sessionId: sid, t });
+  }
+
+  // 1. 首屏以全局取景初始化
+  const first = render('session-a');
+  const firstSurface = findVNodes(first, (n) => n && n.props && n.props.className === 'dsh-canvas-surface')[0];
+  assert.ok(firstSurface, '必须渲染 dsh-canvas-surface SVG 节点');
+
+  // 2. 真实浏览器首次 observe 的同步回调：完成首屏取景并记录已观测宽度
+  assert.ok(resizeObservers.length > 0, '必须注册 ResizeObserver');
+  resizeObservers[resizeObservers.length - 1].callback([{ target: mockContainer, contentRect: { width: 1200, height: 744 } }]);
+
+  // 3. 用户主动点击「定位当前会话」，建立非默认视口
+  const locateBtn = findVNodes(first, (n) => n && n.type === 'button' && n.props && n.props.className && n.props.className.includes('dsh-canvas-btn'))
+    .find((b) => b.children && b.children.includes('定位当前会话'));
+  assert.ok(locateBtn, '必须渲染「定位当前会话」按钮');
+  locateBtn.props.onClick();
+
+  const panCountAfterLocate = pans.length;
+  const zoomCountAfterLocate = zooms.length;
+  const locatedZoom = zooms[zooms.length - 1];
+  assert.ok(panCountAfterLocate > 0, '定位必须更新视口平移');
+
+  // 4. 宿主切换会话标识：高亮迁移，视口纹丝不动
+  const second = render('session-b');
+
+  assert.equal(pans.length, panCountAfterLocate, '外部会话切换严禁移动视口平移');
+  assert.equal(zooms.length, zoomCountAfterLocate, '外部会话切换严禁改变视口缩放');
+
+  // 5. 切换后重建的 ResizeObserver 首次回调同样严禁触发自动取景
+  resizeObservers[resizeObservers.length - 1].callback([{ target: mockContainer, contentRect: { width: 1200, height: 744 } }]);
+
+  assert.equal(pans.length, panCountAfterLocate, '会话切换后的 ResizeObserver 回调严禁劫持视口平移');
+  assert.equal(zooms.length, zoomCountAfterLocate, '会话切换后的 ResizeObserver 回调严禁劫持视口缩放');
+
+  // 6. 高亮与缩放保持
+  const nodesLayer = findVNodes(second, (n) => n && n.props && n.props.id === 'dsh-canvas-nodes')[0];
+  assert.ok(nodesLayer, '必须渲染 dsh-canvas-nodes 分组');
+  const highlighted = nodesLayer.children.filter((c) => c && c.props && typeof c.props.className === 'string' && c.props.className.includes('dsh-canvas-node-current'));
+  assert.equal(highlighted.length, 1, '切换后必须且仅有一个当前会话高亮节点');
+  assert.equal(highlighted[0].props.id, 'dsh-canvas-node-session-b', '高亮必须迁移至新的当前会话节点');
+
+  const secondSurface = findVNodes(second, (n) => n && n.props && n.props.className === 'dsh-canvas-surface')[0];
+  assert.ok(
+    secondSurface.props.style.transform.includes('scale(' + locatedZoom + ')'),
+    '外部会话切换后视口必须保持用户定位时的缩放'
+  );
+
+  cleanups.forEach((c) => c());
+});

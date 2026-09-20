@@ -114,6 +114,28 @@ export declare function computeLayout(
 };
 
 /**
+ * 看板视口取景选项
+ */
+export interface ViewportFramingOptions {
+  /** 'macro' 全局自适应取景；'locate' 夹紧定位当前会话 */
+  mode?: 'macro' | 'locate';
+  viewportWidth?: number;
+  viewportHeight?: number;
+  bounds?: { minX: number; minY: number; maxX: number; maxY: number };
+  anchor?: { x: number; y: number } | null;
+  currentZoom?: number;
+}
+
+/**
+ * 计算看板视口取景结果（宏观自适应居中 或 夹紧定位当前会话）
+ */
+export declare function computeViewportFraming(options: ViewportFramingOptions): {
+  zoom: number;
+  panX: number;
+  panY: number;
+};
+
+/**
  * 格式化 TTL 毫秒为紧凑字符串
  */
 export declare function formatTTL(ttlMs?: number): string;
