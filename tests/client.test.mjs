@@ -8,50 +8,7 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, '..');
 
-/**
- * Loads and materializes lib/client.js via the DSH Web ModuleLoader contract
- */
-function loadClientBundle(requireFn = () => null) {
-  const clientPath = path.join(rootDir, 'lib', 'client.js');
-  assert.ok(fs.existsSync(clientPath), 'lib/client.js must exist on disk');
-  const code = fs.readFileSync(clientPath, 'utf8');
-
-  let registration = null;
-  const mockWindow = {
-    __ModuleLoader__: {
-      load: (payload) => {
-        registration = payload;
-      }
-    }
-  };
-
-  const sandbox = {
-    window: mockWindow,
-    console,
-    Date,
-    Set,
-    Map,
-    Array,
-    Object,
-    String,
-    Math,
-    JSON,
-    URLSearchParams,
-    setInterval,
-    clearInterval,
-    setTimeout,
-    clearTimeout
-  };
-
-  vm.createContext(sandbox);
-  vm.runInContext(code, sandbox);
-
-  assert.ok(registration, 'lib/client.js must invoke window.__ModuleLoader__.load');
-  assert.equal(registration.id, 'dsh-call-session', 'ModuleLoader id must match dsh-call-session');
-  assert.equal(typeof registration.factory, 'function', 'registration.factory must be a function');
-
-  return registration.factory(requireFn);
-}
+import { loadClientBundle, findVNodes, createCanvasRuntime, createStatelessMockReact, standardCanvasTelemetry, wideCanvasTelemetry } from './helpers/canvas-harness.mjs';
 
 test('Client Package Configuration: package.json exports and dsh.client specification', () => {
   const pkgPath = path.join(rootDir, 'package.json');
@@ -1587,16 +1544,6 @@ test('协作看板缺陷回归验证：session.offline 端到端消费、抽屉�
     copiedKey: null,
     setCopiedKey: () => {}
   });
-  function findVNodes(node, predicate, acc = []) {
-    if (!node) return acc;
-    if (predicate(node)) acc.push(node);
-    if (Array.isArray(node.children)) {
-      for (const child of node.children) {
-        findVNodes(child, predicate, acc);
-      }
-    }
-    return acc;
-  }
   const fieldRows = findVNodes(hubDrawer, (n) => n && n.props && n.props.className === 'dsh-canvas-drawer-field');
   assert.equal(fieldRows.length, 2, '黑板 Hub 抽屉仅允许渲染 hub 标识与 activeCount 计数字段，严禁包含 totalCount 冗余行');
   const activePostField = fieldRows.find((f) => findVNodes(f, (n) => n && n.children && n.children.includes(t('blackboard.activePosts'))).length > 0);
@@ -1766,14 +1713,6 @@ test('协作看板点击自适应居中、假零值防御、44px 工具栏校正
   // 2. 初始状态自适应居中验证（避免 translate3d(0px, 0px, 0px) scale(1) 贴左截断）
   const t = (k) => k;
   const initialVNode = plugin.CanvasView({ sessionId: 'session-test', t });
-  function findVNodes(node, predicate, acc = []) {
-    if (!node) return acc;
-    if (predicate(node)) acc.push(node);
-    if (Array.isArray(node.children)) {
-      node.children.forEach((c) => findVNodes(c, predicate, acc));
-    }
-    return acc;
-  }
   const svgSurface = findVNodes(initialVNode, (n) => n && n.props && n.props.className === 'dsh-canvas-surface')[0];
   assert.ok(svgSurface, '必须渲染 dsh-canvas-surface SVG 节点');
   const transform = svgSurface.props.style.transform;
@@ -1934,19 +1873,6 @@ test('协作看板黑板标题口径与卡片视觉状态强化（PRD §6.4 与 
   vm.runInContext(code, sandbox);
   assert.ok(registration);
 
-  function createMockReact(telemetryData) {
-    return {
-      useState: (initial) => {
-        if (initial && typeof initial === 'object' && 'sessions' in initial) {
-          return [telemetryData, () => {}];
-        }
-        return [initial, () => {}];
-      },
-      useRef: (initial) => ({ current: initial }),
-      useEffect: () => {},
-      createElement: (type, props, ...children) => ({ type, props: props || {}, children })
-    };
-  }
 
   function findNodeById(node, id) {
     if (!node || typeof node !== 'object') return null;
@@ -1974,7 +1900,7 @@ test('协作看板黑板标题口径与卡片视觉状态强化（PRD §6.4 与 
     calls: []
   };
 
-  const react1 = createMockReact(telemetryWithMixedPosts);
+  const react1 = createStatelessMockReact(telemetryWithMixedPosts);
   const pluginZh = registration.factory((name) => name === 'react' ? react1 : null);
   const tZh = (k) => pluginZh.zh[k] || k;
   const viewZh = pluginZh.CanvasView({ sessionId: 'session-s1', t: tZh, locale: 'zh' });
@@ -2038,7 +1964,7 @@ test('协作看板黑板标题口径与卡片视觉状态强化（PRD §6.4 与 
     calls: []
   };
 
-  const react2 = createMockReact(telemetryAllActive);
+  const react2 = createStatelessMockReact(telemetryAllActive);
   const pluginActive = registration.factory((name) => name === 'react' ? react2 : null);
   const viewActive = pluginActive.CanvasView({ sessionId: 'session-s1', t: tZh, locale: 'zh' });
 
@@ -2064,7 +1990,7 @@ test('协作看板黑板标题口径与卡片视觉状态强化（PRD §6.4 与 
     posts: [],
     calls: []
   };
-  const react3 = createMockReact(telemetryEmpty);
+  const react3 = createStatelessMockReact(telemetryEmpty);
   const pluginEmpty = registration.factory((name) => name === 'react' ? react3 : null);
   const viewEmpty = pluginEmpty.CanvasView({ sessionId: 'session-s1', t: tZh, locale: 'zh' });
   const titleGroupEmpty = findNodeById(viewEmpty, 'dsh-canvas-blackboard-title-group');
@@ -2104,19 +2030,6 @@ test('ADR-0013 看板默认全局透视、首列固定当前工作区、移除�
     calls: []
   };
 
-  function createMockReact(telemetryData) {
-    return {
-      useState: (initial) => {
-        if (initial && typeof initial === 'object' && 'sessions' in initial) {
-          return [telemetryData, () => {}];
-        }
-        return [initial, () => {}];
-      },
-      useRef: (initial) => ({ current: initial }),
-      useEffect: () => {},
-      createElement: (type, props, ...children) => ({ type, props: props || {}, children })
-    };
-  }
 
   function findNodeById(node, id) {
     if (!node || typeof node !== 'object') return null;
@@ -2130,16 +2043,8 @@ test('ADR-0013 看板默认全局透视、首列固定当前工作区、移除�
     return null;
   }
 
-  function findVNodes(node, predicate, acc = []) {
-    if (!node || typeof node !== 'object') return acc;
-    if (predicate(node)) acc.push(node);
-    if (Array.isArray(node.children)) {
-      for (const child of node.children) findVNodes(child, predicate, acc);
-    }
-    return acc;
-  }
 
-  const reactZh = createMockReact(telemetryMultiWs);
+  const reactZh = createStatelessMockReact(telemetryMultiWs);
   const pluginZh = loadClientBundle((name) => name === 'react' ? reactZh : null);
   const tZh = (k) => pluginZh.zh[k] || k;
 
@@ -2268,7 +2173,7 @@ test('ADR-0013 看板默认全局透视、首列固定当前工作区、移除�
   assert.equal(otherBadge, undefined, '非当前会话严禁渲染 [当前] 状态标签');
 
   // 4. 英文环境下状态标签断言
-  const reactEn = createMockReact(telemetryMultiWs);
+  const reactEn = createStatelessMockReact(telemetryMultiWs);
   const pluginEn = loadClientBundle((name) => name === 'react' ? reactEn : null);
   const tEn = (k) => pluginEn.en[k] || k;
   const viewEn = pluginEn.CanvasView({
@@ -2304,7 +2209,7 @@ test('ADR-0013 看板默认全局透视、首列固定当前工作区、移除�
     posts: [],
     calls: []
   };
-  const reactInferred = createMockReact(missingWsTelemetry);
+  const reactInferred = createStatelessMockReact(missingWsTelemetry);
   const pluginInferred = loadClientBundle((name) => name === 'react' ? reactInferred : null);
   const viewInferred = pluginInferred.CanvasView({
     sessionId: 'session-inferred',
@@ -2316,19 +2221,6 @@ test('ADR-0013 看板默认全局透视、首列固定当前工作区、移除�
 });
 
 test('Topology Relationship Edges Contrast & WCAG 2.1 Compliance (PRD §3.1, §4.1 & Task t10)', () => {
-  function createMockReact(telemetryData) {
-    return {
-      useState: (initial) => {
-        if (initial && typeof initial === 'object' && 'sessions' in initial) {
-          return [telemetryData, () => {}];
-        }
-        return [initial, () => {}];
-      },
-      useRef: (initial) => ({ current: initial }),
-      useEffect: () => {},
-      createElement: (type, props, ...children) => ({ type, props: props || {}, children })
-    };
-  }
 
   function findNodeById(node, id) {
     if (!node || typeof node !== 'object') return null;
@@ -2369,7 +2261,7 @@ test('Topology Relationship Edges Contrast & WCAG 2.1 Compliance (PRD §3.1, §4
     ]
   };
 
-  const reactMock = createMockReact(telemetryWithEdges);
+  const reactMock = createStatelessMockReact(telemetryWithEdges);
   const plugin = loadClientBundle((name) => name === 'react' ? reactMock : null);
   const t = (k) => plugin.zh[k] || k;
   const view = plugin.CanvasView({ t: t });
@@ -2517,19 +2409,6 @@ test('Session Node Title Dynamic Space & Word-Boundary Truncation (PRD §5.1 & T
   );
 
   // 3. CanvasView 会话节点 VNode 渲染动态留白与单词边界集成断言
-  function createMockReact(telemetryData) {
-    return {
-      useState: (initial) => {
-        if (initial && typeof initial === 'object' && 'sessions' in initial) {
-          return [telemetryData, () => {}];
-        }
-        return [initial, () => {}];
-      },
-      useRef: (initial) => ({ current: initial }),
-      useEffect: () => {},
-      createElement: (type, props, ...children) => ({ type, props: props || {}, children })
-    };
-  }
 
   function findNodeById(node, id) {
     if (!node || typeof node !== 'object') return null;
@@ -2543,16 +2422,6 @@ test('Session Node Title Dynamic Space & Word-Boundary Truncation (PRD §5.1 & T
     return null;
   }
 
-  function findVNodes(node, predicate, acc = []) {
-    if (!node || typeof node !== 'object') return acc;
-    if (predicate(node)) acc.push(node);
-    if (Array.isArray(node.children)) {
-      for (const child of node.children) {
-        findVNodes(child, predicate, acc);
-      }
-    }
-    return acc;
-  }
 
   const telemetryData = {
     timestamp: Date.now(),
@@ -2584,7 +2453,7 @@ test('Session Node Title Dynamic Space & Word-Boundary Truncation (PRD §5.1 & T
     calls: []
   };
 
-  const reactMock = createMockReact(telemetryData);
+  const reactMock = createStatelessMockReact(telemetryData);
   const clientPlugin = loadClientBundle((name) => name === 'react' ? reactMock : null);
   const view = clientPlugin.CanvasView({
     sessionId: 's-cur',
@@ -2618,19 +2487,6 @@ test('黑板区域在无条目时的平滑压缩与空状态过渡 (PRD §3.1 & 
   const tZh = (k) => plugin.zh[k] || k;
   const tEn = (k) => plugin.en[k] || k;
 
-  function createMockReact(telemetryData) {
-    return {
-      useState: (initial) => {
-        if (initial && typeof initial === 'object' && 'sessions' in initial) {
-          return [telemetryData, () => {}];
-        }
-        return [initial, () => {}];
-      },
-      useRef: (initial) => ({ current: initial }),
-      useEffect: () => {},
-      createElement: (type, props, ...children) => ({ type, props: props || {}, children })
-    };
-  }
 
   function findNodeById(node, id) {
     if (!node || typeof node !== 'object') return null;
@@ -2685,7 +2541,7 @@ test('黑板区域在无条目时的平滑压缩与空状态过渡 (PRD §3.1 & 
     calls: []
   };
 
-  const reactMockZh = createMockReact(telemetryEmpty);
+  const reactMockZh = createStatelessMockReact(telemetryEmpty);
   const pluginZh = loadClientBundle((name) => name === 'react' ? reactMockZh : null);
   const viewZh = pluginZh.CanvasView({ sessionId: 's1', t: tZh, locale: 'zh' });
 
@@ -2710,7 +2566,7 @@ test('黑板区域在无条目时的平滑压缩与空状态过渡 (PRD §3.1 & 
   assert.equal(emptyTextNode.props.textAnchor, 'middle', '文本锚点为 middle');
 
   // 英文空态文案断言
-  const reactMockEn = createMockReact(telemetryEmpty);
+  const reactMockEn = createStatelessMockReact(telemetryEmpty);
   const pluginEn = loadClientBundle((name) => name === 'react' ? reactMockEn : null);
   const viewEn = pluginEn.CanvasView({ sessionId: 's1', t: tEn, locale: 'en' });
   const bbLayerEn = findNodeById(viewEn, 'dsh-canvas-blackboard-layer');
@@ -2975,19 +2831,6 @@ test('ADR-0014 严格插件作用域双色主题与工具栏切换映射', () =>
     calls: []
   };
 
-  function createMockReact(telemetryData) {
-    return {
-      useState: (initial) => {
-        if (initial && typeof initial === 'object' && 'sessions' in initial) {
-          return [telemetryData, () => {}];
-        }
-        return [initial, () => {}];
-      },
-      useRef: (initial) => ({ current: initial }),
-      useEffect: () => {},
-      createElement: (type, props, ...children) => ({ type, props: props || {}, children })
-    };
-  }
 
   function findNodeById(node, id) {
     if (!node || typeof node !== 'object') return null;
@@ -3001,7 +2844,7 @@ test('ADR-0014 严格插件作用域双色主题与工具栏切换映射', () =>
     return null;
   }
 
-  const reactMock = createMockReact(telemetryEmpty);
+  const reactMock = createStatelessMockReact(telemetryEmpty);
   const plugin = loadClientBundle((name) => name === 'react' ? reactMock : null);
   const t = (k) => plugin.zh[k] || k;
 
@@ -3352,17 +3195,6 @@ function createTestCanvasHarness(canvasData, hoveredEntity = null) {
   return { view };
 }
 
-function findVNodesInTree(node, predicate) {
-  const results = [];
-  if (!node || typeof node !== 'object') return results;
-  if (predicate(node)) results.push(node);
-  if (Array.isArray(node.children)) {
-    for (const child of node.children) {
-      results.push(...findVNodesInTree(child, predicate));
-    }
-  }
-  return results;
-}
 
 function parseBezierPath(path) {
   const m = path.match(/^M\s+([-\d.]+)\s+([-\d.]+)\s+C\s+([-\d.]+)\s+([-\d.]+),\s+([-\d.]+)\s+([-\d.]+),\s+([-\d.]+)\s+([-\d.]+)/);
@@ -3401,7 +3233,7 @@ test('ADR-0019 常态按需显影与历史调用连线抑制测试', () => {
 
   // 1. 常态下无交互：已结算和历史过期连线完全抑制，仅渲染 1 条活跃新鲜调用
   const { view: defaultView } = createTestCanvasHarness(mockCanvasData);
-  const defaultEdgesGroup = findVNodesInTree(defaultView, (n) => n && n.props && n.props.id === 'dsh-canvas-call-edges')[0];
+  const defaultEdgesGroup = findVNodes(defaultView, (n) => n && n.props && n.props.id === 'dsh-canvas-call-edges')[0];
   assert.ok(defaultEdgesGroup, 'dsh-canvas-call-edges 容器必须存在');
 
   const renderedEdges = defaultEdgesGroup.children.filter(Boolean);
@@ -3411,7 +3243,7 @@ test('ADR-0019 常态按需显影与历史调用连线抑制测试', () => {
   // 2. 悬停交互：悬停 s1 节点时，按需显影点亮关联链路，赋予 dsh-pulse-edge 脉冲实线且不透明度为 1.0
   const hoveredSession = { kind: 'session', id: 's1', entity: mockCanvasData.sessions[0], x: 200, y: 200 };
   const { view: activeView } = createTestCanvasHarness(mockCanvasData, hoveredSession);
-  const activeEdgesGroup = findVNodesInTree(activeView, (n) => n && n.props && n.props.id === 'dsh-canvas-call-edges')[0];
+  const activeEdgesGroup = findVNodes(activeView, (n) => n && n.props && n.props.id === 'dsh-canvas-call-edges')[0];
   const highlightedEdges = activeEdgesGroup.children.filter(Boolean);
   assert.equal(highlightedEdges.length, 3, '悬停时所有一度关联调用（含历史与已结算）必须全部显影复苏');
   assert.ok(highlightedEdges.some((e) => e.props.key === 'call-settled'), '常态抑制的已结算调用在悬停时显影复苏');
@@ -3419,7 +3251,7 @@ test('ADR-0019 常态按需显影与历史调用连线抑制测试', () => {
 
   const freshEdge = highlightedEdges.find((e) => e.props.key === 'call-fresh');
   assert.ok(freshEdge, '活跃调用边存在');
-  const pulsePath = findVNodesInTree(freshEdge, (n) => n && n.props && n.props.className && n.props.className.includes('dsh-pulse-edge'))[0];
+  const pulsePath = findVNodes(freshEdge, (n) => n && n.props && n.props.className && n.props.className.includes('dsh-pulse-edge'))[0];
   assert.ok(pulsePath, '高亮关联连线中的可视化路径必须包含 dsh-pulse-edge 脉冲类');
   assert.equal(pulsePath.props.opacity, 1.0, '高亮关联连线不透明度严格为 1.0');
 });
@@ -3438,7 +3270,7 @@ test('ADR-0019 超轻量单行胶囊 Tooltip 结构与尺寸测试', () => {
   const hoveredSession = { kind: 'session', id: 's1', entity: mockCanvasData.sessions[0], x: 200, y: 200 };
   const { view } = createTestCanvasHarness(mockCanvasData, hoveredSession);
 
-  const tooltipNode = findVNodesInTree(view, (n) => n && n.props && n.props.className === 'dsh-canvas-tooltip')[0];
+  const tooltipNode = findVNodes(view, (n) => n && n.props && n.props.className === 'dsh-canvas-tooltip')[0];
   assert.ok(tooltipNode, '必须渲染 Session Tooltip');
   assert.equal(tooltipNode.props.style.height, '26px', 'Tooltip 胶囊高度严格为 26px (<= 28px)');
   assert.equal(tooltipNode.props.style.display, 'inline-flex', 'Tooltip 采用 inline-flex 单行布局');
@@ -3447,7 +3279,7 @@ test('ADR-0019 超轻量单行胶囊 Tooltip 结构与尺寸测试', () => {
   const tipTop = parseFloat(tooltipNode.props.style.top);
   assert.ok(tipTop >= 200 + 26, 'Tooltip 严格锚定在卡片下边缘之外，完全不遮挡 y=200 处侧向端口');
 
-  const dotNode = findVNodesInTree(tooltipNode, (n) => n && n.props && n.props.className === 'dsh-canvas-capsule-dot')[0];
+  const dotNode = findVNodes(tooltipNode, (n) => n && n.props && n.props.className === 'dsh-canvas-capsule-dot')[0];
   assert.ok(dotNode, '胶囊必须包含状态圆点');
   assert.equal(dotNode.props.style.backgroundColor, '#22c55e', '运行中状态圆点颜色为绿色 #22c55e');
 });
@@ -3670,12 +3502,6 @@ test('ADR-0013 首屏与尺寸变化必须执行全局取景，严禁单点会�
   const plugin = loadClientBundle();
   const t = (k) => k;
   const view = plugin.CanvasView({ sessionId: 'session-cur', t });
-  function findVNodes(node, predicate, acc = []) {
-    if (!node || typeof node !== 'object') return acc;
-    if (predicate(node)) acc.push(node);
-    if (Array.isArray(node.children)) node.children.forEach((c) => findVNodes(c, predicate, acc));
-    return acc;
-  }
   const surface = findVNodes(view, (n) => n && n.props && n.props.className === 'dsh-canvas-surface')[0];
   assert.ok(surface, '必须渲染 dsh-canvas-surface SVG 节点');
 
@@ -3693,132 +3519,30 @@ test('ADR-0013 首屏与尺寸变化必须执行全局取景，严禁单点会�
   );
 });
 
-test('ADR-0013 定位当前会话：夹紧取景、缩放保护与落点脉冲运行时契约', () => {
-  const code = fs.readFileSync(path.join(rootDir, 'lib', 'client.js'), 'utf8');
+test('ADR-0013 定位当前会话：夹紧取景与缩放区间保护', () => {
+  const telemetry = wideCanvasTelemetry(5);
+  const workspaces = telemetry.workspaces;
+  const sessions = telemetry.sessions;
+  const rt = createCanvasRuntime({ telemetry });
 
-  const pans = [];
-  const zooms = [];
-  const timers = [];
-  const cleanups = [];
-
-  const workspaces = [];
-  const sessions = [];
-  for (let i = 0; i < 5; i++) {
-    workspaces.push({ id: '/ws/w' + i, name: 'w' + i, isCurrent: i === 0, sessionIds: ['session-s' + i] });
-    sessions.push({ id: 'session-s' + i, workspace: '/ws/w' + i, title: 'Agent ' + i, status: i === 0 ? 'running' : 'idle' });
-  }
-  const telemetryData = {
-    timestamp: Date.now(),
-    currentWorkspace: '/ws/w0',
-    workspaces,
-    sessions,
-    calls: [],
-    posts: []
-  };
-
-  function createRuntime(seedPulseId) {
-    let hookCounter = 0;
-    const mockReact = {
-      useState: (initial) => {
-        hookCounter++;
-        if (initial && typeof initial === 'object' && 'sessions' in initial) {
-          return [telemetryData, () => {}];
-        }
-        if (seedPulseId && hookCounter === 9) {
-          return [seedPulseId, () => {}];
-        }
-        let state = initial;
-        const setter = (next) => {
-          if (typeof next === 'function') next = next(state);
-          state = next;
-          if (state && typeof state === 'object' && 'x' in state && 'y' in state) pans.push({ ...state });
-          else if (typeof state === 'number') zooms.push(state);
-        };
-        return [initial, setter];
-      },
-      useRef: (initial) => ({ current: initial }),
-      useEffect: (fn) => {
-        const cleanup = fn();
-        if (typeof cleanup === 'function') cleanups.push(cleanup);
-      },
-      createElement: (type, props, ...children) => ({ type, props: props || {}, children })
-    };
-
-    const runtimeWindow = {
-      innerWidth: 1200,
-      innerHeight: 800,
-      addEventListener: () => {},
-      removeEventListener: () => {},
-      requestAnimationFrame: (cb) => 1,
-      cancelAnimationFrame: () => {}
-    };
-    const runtimeDocument = {
-      addEventListener: () => {},
-      removeEventListener: () => {},
-      hidden: false,
-      getElementById: () => null,
-      createElement: () => ({ id: '', textContent: '' }),
-      head: { appendChild: () => {} },
-      querySelector: () => null
-    };
-
-    let registration = null;
-    const sandbox = {
-      window: runtimeWindow,
-      document: runtimeDocument,
-      console,
-      Date,
-      Set,
-      Map,
-      Array,
-      Object,
-      String,
-      Math,
-      JSON,
-      URLSearchParams,
-      setInterval: () => 1,
-      clearInterval: () => {},
-      setTimeout: (fn, ms) => { timers.push({ fn, ms }); return timers.length; },
-      clearTimeout: () => {}
-    };
-    runtimeWindow.__ModuleLoader__ = { load: (payload) => { registration = payload; } };
-
-    vm.createContext(sandbox);
-    vm.runInContext(code, sandbox);
-    const runtimePlugin = registration.factory((name) => name === 'react' ? mockReact : null);
-    return runtimePlugin;
-  }
-
-  function findVNodes(node, predicate, acc = []) {
-    if (!node || typeof node !== 'object') return acc;
-    if (predicate(node)) acc.push(node);
-    if (Array.isArray(node.children)) node.children.forEach((c) => findVNodes(c, predicate, acc));
-    return acc;
-  }
-
-  // 1. 绑定看板数据与当前会话不移动视口（静默）
-  const runtimePlugin = createRuntime(null);
-  const t = (k) => runtimePlugin.zh[k] || k;
-  const view = runtimePlugin.CanvasView({ sessionId: 'session-s0', t });
-  assert.equal(pans.length, 0, '看板数据与当前会话绑定严禁移动视口');
-  assert.equal(zooms.length, 0, '看板数据与当前会话绑定严禁改变缩放');
+  // 1. 绑定看板数据与当前会话不移动视口
+  const view = rt.render('session-s0');
+  assert.equal(rt.pans.length, 0, '看板数据与当前会话绑定严禁移动视口');
+  assert.equal(rt.zooms.length, 0, '看板数据与当前会话绑定严禁改变缩放');
 
   // 2. 用户主动点击「定位当前会话」才执行夹紧取景
-  const surface = findVNodes(view, (n) => n && n.props && n.props.className === 'dsh-canvas-surface')[0];
-  assert.ok(surface, '必须渲染 dsh-canvas-surface SVG 节点');
-  const buttons = findVNodes(view, (n) => n && n.type === 'button' && n.props && n.props.className && n.props.className.includes('dsh-canvas-btn'));
-  const locateBtn = buttons.find((b) => b.children && b.children.includes('定位当前会话'));
+  const locateBtn = rt.buttonOf(view, '定位当前会话');
   assert.ok(locateBtn, '必须渲染「定位当前会话」按钮');
-
   locateBtn.props.onClick();
-  assert.ok(pans.length > 0, '定位必须更新视口平移');
-  assert.ok(zooms.length > 0, '定位必须更新缩放');
 
-  const pan = pans[pans.length - 1];
-  const zoom = zooms[zooms.length - 1];
+  assert.ok(rt.pans.length > 0, '定位必须更新视口平移');
+  assert.ok(rt.zooms.length > 0, '定位必须更新缩放');
+
+  const pan = rt.pans[rt.pans.length - 1];
+  const zoom = rt.zooms[rt.zooms.length - 1];
 
   // 5 个工作区分组列总宽超出视口 → 首列左边缘夹紧在 48px 安全边距
-  const layout = runtimePlugin.computeLayout(workspaces, sessions, [], '/ws/w0', undefined, []);
+  const layout = rt.plugin.computeLayout(workspaces, sessions, [], '/ws/w0', undefined, []);
   let minX = Infinity;
   let maxX = -Infinity;
   layout.workspaceBounds.forEach((ws) => {
@@ -3828,252 +3552,205 @@ test('ADR-0013 定位当前会话：夹紧取景、缩放保护与落点脉冲�
   const bb = layout.blackboardBound;
   minX = Math.min(minX, bb.x);
   maxX = Math.max(maxX, bb.x + bb.width);
-  assert.ok((maxX - minX) * zoom > 1200, '测试拓扑必须真实超出视口宽度');
+  assert.ok((maxX - minX) * zoom > rt.mockViewport.clientWidth, '测试拓扑必须真实超出视口宽度');
   assert.equal(pan.x, Math.round(48 - minX * zoom), '定位后首列左边缘必须夹紧在视口左侧 48px 安全边距');
-  assert.ok(pan.x + 170 * zoom < 600 - 100, '当前会话节点严禁被刚性推向视口水平几何中心');
-  const initialZoom = Number(surface.props.style.transform.match(/scale\(([\d.]+)\)/)[1]);
+
+  // 3. 定位必须维持用户当前缩放而非重置为 1.0
+  const initialZoom = Number(rt.surfaceOf(view).props.style.transform.match(/scale\(([\d.]+)\)/)[1]);
   assert.ok(initialZoom >= 0.8 && initialZoom <= 1.2, '测试前提：首屏缩放必须落在定位保护区间内');
   assert.equal(zoom, initialZoom, '定位必须原样维持用户当前缩放而非重置为 1.0');
+  assert.notEqual(zoom, 1.0, '定位严禁将用户缩放粗暴重置为 1.0');
 
-  // 3. 落点脉冲：定位到达后注册 1520ms 生命周期计时器并触发目标节点呼吸类名
-  const pulseTimer = timers.find((tm) => tm.ms === 1520);
-  assert.ok(pulseTimer, '定位到达后必须注册 1.2s 双周期落点脉冲计时器（320ms 位移补间后启动）');
-
-  const pulsedView = createRuntime('session-s0').CanvasView({ sessionId: 'session-s0', t });
-  const nodesLayer = findVNodes(pulsedView, (n) => n && n.props && n.props.id === 'dsh-canvas-nodes')[0];
-  assert.ok(nodesLayer, '必须渲染 dsh-canvas-nodes 分组');
-  const pulsedNode = nodesLayer.children.find((c) => c && c.props && c.props.id === 'dsh-canvas-node-session-s0');
-  const peerNode = nodesLayer.children.find((c) => c && c.props && c.props.id === 'dsh-canvas-node-session-s1');
-  const pulsedEllipse = pulsedNode.children.find((c) => c && c.type === 'ellipse');
-  const peerEllipse = peerNode.children.find((c) => c && c.type === 'ellipse');
-  assert.equal(
-    pulsedEllipse.props.className,
-    'dsh-canvas-node-locating',
-    '落点脉冲必须作用于目标会话椭圆，严禁挂在被 opacity: 1 !important 覆盖的分组上'
-  );
-  assert.notEqual(peerEllipse.props.className, 'dsh-canvas-node-locating', '落点脉冲严禁扩散至非目标会话节点');
-
-  cleanups.forEach((c) => c());
+  rt.cleanupAll();
 });
 
+test('ADR-0013 落点脉冲：定位到达后目标会话节点获得脉冲类名，且不扩散至其他节点', () => {
+  const rt = createCanvasRuntime({ telemetry: standardCanvasTelemetry() });
 
-test('ADR-0013 落点脉冲样式：1.2 秒双周期呼吸，320ms 位移补间后启动', () => {
-  const code = fs.readFileSync(path.join(rootDir, 'lib', 'client.js'), 'utf8');
-  const injected = [];
+  // 1. 未定位时任何节点都不得携带脉冲类名
+  const before = rt.render('session-a');
+  assert.notEqual(rt.ellipseOf(before, 'session-a').props.className, 'dsh-canvas-node-locating', '未定位时严禁存在脉冲节点');
 
-  const runtimeDocument = {
-    addEventListener: () => {},
-    removeEventListener: () => {},
-    hidden: false,
-    getElementById: () => null,
-    createElement: () => ({ id: '', textContent: '' }),
-    head: { appendChild: (el) => injected.push(el) },
-    querySelector: () => null
-  };
+  // 2. 用户点击「定位当前会话」，驱动真实脉冲接线
+  rt.buttonOf(before, '定位当前会话').props.onClick();
 
-  let registration = null;
-  const sandbox = {
-    window: { innerWidth: 1200, innerHeight: 800, addEventListener: () => {}, removeEventListener: () => {} },
-    document: runtimeDocument,
-    console,
-    Date,
-    Set,
-    Map,
-    Array,
-    Object,
-    String,
-    Math,
-    JSON,
-    URLSearchParams,
-    setInterval: () => 1,
-    clearInterval: () => {},
-    setTimeout: () => 1,
-    clearTimeout: () => {}
-  };
-  sandbox.window.__ModuleLoader__ = { load: (payload) => { registration = payload; } };
+  // 3. 重渲染读取脉冲状态
+  const after = rt.render('session-a');
+  assert.equal(
+    rt.ellipseOf(after, 'session-a').props.className,
+    'dsh-canvas-node-locating',
+    '定位到达后目标会话椭圆必须获得脉冲类名'
+  );
+  assert.notEqual(
+    rt.ellipseOf(after, 'session-b').props.className,
+    'dsh-canvas-node-locating',
+    '落点脉冲严禁扩散至非目标会话节点'
+  );
+  assert.notEqual(
+    rt.ellipseOf(after, 'session-c').props.className,
+    'dsh-canvas-node-locating',
+    '落点脉冲严禁扩散至其他工作区节点'
+  );
 
-  const mockReact = {
-    useState: (initial) => [initial, () => {}],
-    useRef: (initial) => ({ current: initial }),
-    useEffect: (fn) => { fn(); },
-    createElement: (type, props, ...children) => ({ type, props: props || {}, children })
-  };
+  // 4. 脉冲必须在 320ms 位移补间 + 2×600ms 呼吸后定时清除，而非永久驻留
+  const pulseTotalMs = 320 + 2 * 600;
+  assert.ok(
+    rt.pendingDelays().includes(pulseTotalMs),
+    '定位必须调度 ' + pulseTotalMs + 'ms 后的脉冲清除定时器，当前挂起: ' + rt.pendingDelays().join(',')
+  );
+  rt.fireTimers(pulseTotalMs);
 
-  vm.createContext(sandbox);
-  vm.runInContext(code, sandbox);
-  const plugin = registration.factory((name) => name === 'react' ? mockReact : null);
-  plugin.CanvasView({ sessionId: 'session-cur', t: (k) => k });
+  const cleared = rt.render('session-a');
+  assert.notEqual(
+    rt.ellipseOf(cleared, 'session-a').props.className,
+    'dsh-canvas-node-locating',
+    '脉冲生命周期结束后目标会话椭圆必须清除脉冲类名'
+  );
 
-  assert.equal(injected.length, 1, '看板挂载必须注入一次作用域样式表');
-  const css = injected[0].textContent;
+  rt.cleanupAll();
+});
+
+test('ADR-0013 落点脉冲样式：位移补间后启动的双周期描边透明度呼吸', () => {
+  const rt = createCanvasRuntime({ telemetry: { timestamp: Date.now(), currentWorkspace: '', workspaces: [], sessions: [], calls: [], posts: [] } });
+  rt.render('session-cur');
+
+  assert.equal(rt.injectedStyles.length, 1, '看板挂载必须注入一次作用域样式表');
+  const css = rt.injectedStyles[0];
   assert.ok(
     css.includes('animation: dshLocatePulse 0.6s cubic-bezier(0.4, 0, 0.6, 1) 0.32s 2;'),
-    '落点脉冲必须为 320ms 位移补间后启动的 1.2 秒双周期呼吸'
+    '落点脉冲必须在 320ms 位移补间结束后启动双周期呼吸'
   );
+
+  rt.cleanupAll();
 });
 
-
 test('ADR-0013 外部会话切换静默更新：仅迁移高亮，严禁移动视口', () => {
-  const code = fs.readFileSync(path.join(rootDir, 'lib', 'client.js'), 'utf8');
+  const workspaces = [
+    { id: '/ws/w0', name: 'w0', isCurrent: true, sessionIds: ['session-a', 'session-b'] },
+    { id: '/ws/w1', name: 'w1', isCurrent: false, sessionIds: ['session-c'] }
+  ];
+  const sessions = [
+    { id: 'session-a', workspace: '/ws/w0', title: 'Agent A', status: 'idle' },
+    { id: 'session-b', workspace: '/ws/w0', title: 'Agent B', status: 'running' },
+    { id: 'session-c', workspace: '/ws/w1', title: 'Agent C', status: 'idle' }
+  ];
+  const rt = createCanvasRuntime({
+    telemetry: { timestamp: Date.now(), currentWorkspace: '/ws/w0', workspaces, sessions, calls: [], posts: [] }
+  });
 
-  const pans = [];
-  const zooms = [];
+  // 1. 首屏以全局取景初始化，并完成初始观测
+  const first = rt.render('session-a');
+  assert.ok(rt.surfaceOf(first), '必须渲染 dsh-canvas-surface SVG 节点');
+  rt.resize(1200, 744);
 
-  const telemetryData = {
-    timestamp: Date.now(),
-    currentWorkspace: '/ws/w0',
-    workspaces: [
-      { id: '/ws/w0', name: 'w0', isCurrent: true, sessionIds: ['session-a', 'session-b'] },
-      { id: '/ws/w1', name: 'w1', isCurrent: false, sessionIds: ['session-c'] }
-    ],
-    sessions: [
-      { id: 'session-a', workspace: '/ws/w0', title: 'Agent A', status: 'idle' },
-      { id: 'session-b', workspace: '/ws/w0', title: 'Agent B', status: 'running' },
-      { id: 'session-c', workspace: '/ws/w1', title: 'Agent C', status: 'idle' }
-    ],
-    calls: [],
-    posts: []
-  };
-
-  // 跨渲染持久化的 ref 存储：真实 React 在重渲染间保留 ref，mock 必须对齐
-  const refStore = [];
-  let refCursor = 0;
-  let stateCursor = 0;
-  const stateStore = [];
-  const cleanups = [];
-
-  const mockReact = {
-    useState: (initial) => {
-      const idx = stateCursor++;
-      if (!(idx in stateStore)) {
-        stateStore[idx] = (initial && typeof initial === 'object' && 'sessions' in initial) ? telemetryData : initial;
-      }
-      const setter = (next) => {
-        const prev = stateStore[idx];
-        if (typeof next === 'function') next = next(prev);
-        stateStore[idx] = next;
-        if (next && typeof next === 'object' && 'x' in next && 'y' in next) pans.push({ ...next });
-        else if (typeof next === 'number') zooms.push(next);
-      };
-      return [stateStore[idx], setter];
-    },
-    useRef: (initial) => {
-      const idx = refCursor++;
-      if (!(idx in refStore)) refStore[idx] = { current: initial };
-      return refStore[idx];
-    },
-    useEffect: (fn) => {
-      const cleanup = fn();
-      if (typeof cleanup === 'function') cleanups.push(cleanup);
-    },
-    createElement: (type, props, ...children) => ({ type, props: props || {}, children })
-  };
-
-  const mockContainer = { clientWidth: 1200, clientHeight: 744, querySelector: () => null };
-  const mockViewport = { clientWidth: 1200, clientHeight: 700 };
-  const resizeObservers = [];
-
-  class MockResizeObserver {
-    constructor(callback) { this.callback = callback; resizeObservers.push(this); }
-    observe() {}
-    disconnect() {}
-  }
-
-  const runtimeWindow = {
-    ResizeObserver: MockResizeObserver,
-    innerWidth: 1200,
-    innerHeight: 800,
-    addEventListener: () => {},
-    removeEventListener: () => {},
-    requestAnimationFrame: () => 1,
-    cancelAnimationFrame: () => {}
-  };
-  const runtimeDocument = {
-    addEventListener: () => {},
-    removeEventListener: () => {},
-    hidden: false,
-    getElementById: () => null,
-    createElement: () => ({ id: '', textContent: '' }),
-    head: { appendChild: () => {} },
-    querySelector: (sel) => (sel === '.dsh-canvas-container' ? mockContainer : (sel === '.dsh-canvas-viewport' ? mockViewport : null))
-  };
-
-  let registration = null;
-  const sandbox = {
-    window: runtimeWindow,
-    document: runtimeDocument,
-    ResizeObserver: MockResizeObserver,
-    console, Date, Set, Map, Array, Object, String, Math, JSON, URLSearchParams,
-    setInterval: () => 1,
-    clearInterval: () => {},
-    setTimeout: () => 1,
-    clearTimeout: () => {}
-  };
-  runtimeWindow.__ModuleLoader__ = { load: (payload) => { registration = payload; } };
-
-  vm.createContext(sandbox);
-  vm.runInContext(code, sandbox);
-  const plugin = registration.factory((name) => name === 'react' ? mockReact : null);
-  const t = (k) => plugin.zh[k] || k;
-
-  function findVNodes(node, predicate, acc = []) {
-    if (!node || typeof node !== 'object') return acc;
-    if (predicate(node)) acc.push(node);
-    if (Array.isArray(node.children)) node.children.forEach((c) => findVNodes(c, predicate, acc));
-    return acc;
-  }
-
-  // 模拟一次 React 重渲染：hook 游标归零，ref/state 存储跨渲染保留
-  function render(sid) {
-    refCursor = 0;
-    stateCursor = 0;
-    return plugin.CanvasView({ sessionId: sid, t });
-  }
-
-  // 1. 首屏以全局取景初始化
-  const first = render('session-a');
-  const firstSurface = findVNodes(first, (n) => n && n.props && n.props.className === 'dsh-canvas-surface')[0];
-  assert.ok(firstSurface, '必须渲染 dsh-canvas-surface SVG 节点');
-
-  // 2. 真实浏览器首次 observe 的同步回调：完成首屏取景并记录已观测宽度
-  assert.ok(resizeObservers.length > 0, '必须注册 ResizeObserver');
-  resizeObservers[resizeObservers.length - 1].callback([{ target: mockContainer, contentRect: { width: 1200, height: 744 } }]);
-
-  // 3. 用户主动点击「定位当前会话」，建立非默认视口
-  const locateBtn = findVNodes(first, (n) => n && n.type === 'button' && n.props && n.props.className && n.props.className.includes('dsh-canvas-btn'))
-    .find((b) => b.children && b.children.includes('定位当前会话'));
-  assert.ok(locateBtn, '必须渲染「定位当前会话」按钮');
-  locateBtn.props.onClick();
-
-  const panCountAfterLocate = pans.length;
-  const zoomCountAfterLocate = zooms.length;
-  const locatedZoom = zooms[zooms.length - 1];
+  // 2. 用户主动定位，建立非默认视口
+  rt.buttonOf(first, '定位当前会话').props.onClick();
+  const panCountAfterLocate = rt.pans.length;
+  const zoomCountAfterLocate = rt.zooms.length;
+  const locatedZoom = rt.zooms[rt.zooms.length - 1];
   assert.ok(panCountAfterLocate > 0, '定位必须更新视口平移');
 
-  // 4. 宿主切换会话标识：高亮迁移，视口纹丝不动
-  const second = render('session-b');
+  // 3. 宿主切换会话标识：高亮迁移，视口纹丝不动
+  const second = rt.render('session-b');
+  assert.equal(rt.pans.length, panCountAfterLocate, '外部会话切换严禁移动视口平移');
+  assert.equal(rt.zooms.length, zoomCountAfterLocate, '外部会话切换严禁改变视口缩放');
 
-  assert.equal(pans.length, panCountAfterLocate, '外部会话切换严禁移动视口平移');
-  assert.equal(zooms.length, zoomCountAfterLocate, '外部会话切换严禁改变视口缩放');
+  // 4. 切换后重建观察器的首次观测不是尺寸变化，严禁触发自动取景
+  rt.resize(1200, 744);
+  assert.equal(rt.pans.length, panCountAfterLocate, '会话切换后的初始观测严禁劫持视口平移');
+  assert.equal(rt.zooms.length, zoomCountAfterLocate, '会话切换后的初始观测严禁劫持视口缩放');
 
-  // 5. 切换后重建的 ResizeObserver 首次回调同样严禁触发自动取景
-  resizeObservers[resizeObservers.length - 1].callback([{ target: mockContainer, contentRect: { width: 1200, height: 744 } }]);
-
-  assert.equal(pans.length, panCountAfterLocate, '会话切换后的 ResizeObserver 回调严禁劫持视口平移');
-  assert.equal(zooms.length, zoomCountAfterLocate, '会话切换后的 ResizeObserver 回调严禁劫持视口缩放');
-
-  // 6. 高亮与缩放保持
-  const nodesLayer = findVNodes(second, (n) => n && n.props && n.props.id === 'dsh-canvas-nodes')[0];
+  // 5. 高亮与缩放保持
+  const nodesLayer = rt.nodesLayerOf(second);
   assert.ok(nodesLayer, '必须渲染 dsh-canvas-nodes 分组');
   const highlighted = nodesLayer.children.filter((c) => c && c.props && typeof c.props.className === 'string' && c.props.className.includes('dsh-canvas-node-current'));
   assert.equal(highlighted.length, 1, '切换后必须且仅有一个当前会话高亮节点');
   assert.equal(highlighted[0].props.id, 'dsh-canvas-node-session-b', '高亮必须迁移至新的当前会话节点');
-
-  const secondSurface = findVNodes(second, (n) => n && n.props && n.props.className === 'dsh-canvas-surface')[0];
   assert.ok(
-    secondSurface.props.style.transform.includes('scale(' + locatedZoom + ')'),
+    rt.surfaceOf(second).props.style.transform.includes('scale(' + locatedZoom + ')'),
     '外部会话切换后视口必须保持用户定位时的缩放'
   );
 
-  cleanups.forEach((c) => c());
+  rt.cleanupAll();
 });
+
+test('ADR-0013 尺寸变化复取景：宿主切换会话后，未手动交互时尺寸变化仍执行全局取景', () => {
+  const fixture = standardCanvasTelemetry();
+  const rt = createCanvasRuntime({ telemetry: fixture });
+
+  // 1. 首屏：完成初始观测
+  rt.render('session-a');
+  rt.resize(1200, 744);
+
+  // 2. 宿主切换会话标识，用户始终未手动交互
+  rt.render('session-b');
+  const panCountAfterSwitch = rt.pans.length;
+
+  // 3. 重建观察器的首次观测是初始观测而非尺寸变化，严禁触发复取景
+  rt.resize(1200, 744);
+  assert.equal(rt.pans.length, panCountAfterSwitch, '会话切换后的初始观测严禁触发复取景');
+
+  // 4. 用户未手动交互，真正的尺寸变化仍必须重新执行全局取景
+  rt.resize(900, 520);
+  assert.ok(
+    rt.pans.length > panCountAfterSwitch,
+    '宿主切换会话后，未手动交互时的真实尺寸变化必须重新执行全局取景'
+  );
+
+  // 5. 复取景结果必须等于按实测视口计算的宏观取景
+  const layout = rt.plugin.computeLayout(fixture.workspaces, fixture.sessions, [], '/ws/w0', undefined, []);
+  let bMinX = Infinity, bMinY = Infinity, bMaxX = -Infinity, bMaxY = -Infinity;
+  layout.workspaceBounds.forEach((ws) => {
+    bMinX = Math.min(bMinX, ws.x); bMinY = Math.min(bMinY, ws.y);
+    bMaxX = Math.max(bMaxX, ws.x + ws.width); bMaxY = Math.max(bMaxY, ws.y + ws.height);
+  });
+  Object.keys(layout.nodePositions).forEach((sid) => {
+    const n = layout.nodePositions[sid];
+    bMinX = Math.min(bMinX, n.x - rt.plugin.SESSION_NODE_HALF_WIDTH);
+    bMinY = Math.min(bMinY, n.y - rt.plugin.SESSION_NODE_HALF_HEIGHT);
+    bMaxX = Math.max(bMaxX, n.x + rt.plugin.SESSION_NODE_HALF_WIDTH);
+    bMaxY = Math.max(bMaxY, n.y + rt.plugin.SESSION_NODE_HALF_HEIGHT);
+  });
+  const bb = layout.blackboardBound;
+  bMinX = Math.min(bMinX, bb.x); bMinY = Math.min(bMinY, bb.y);
+  bMaxX = Math.max(bMaxX, bb.x + bb.width); bMaxY = Math.max(bMaxY, bb.y + bb.height);
+
+  const expected = rt.plugin.computeViewportFraming({
+    mode: 'macro',
+    viewportWidth: rt.mockViewport.clientWidth,
+    viewportHeight: rt.mockViewport.clientHeight,
+    bounds: { minX: bMinX, minY: bMinY, maxX: bMaxX, maxY: bMaxY }
+  });
+  assert.equal(rt.pans[rt.pans.length - 1].x, Math.round(expected.panX), '复取景平移必须等于实测视口的宏观取景结果');
+  assert.equal(rt.zooms[rt.zooms.length - 1], expected.zoom, '复取景缩放必须等于实测视口的宏观取景结果');
+
+  rt.cleanupAll();
+});
+
+test('ADR-0013 宏观取景缩放下限：超大拓扑不得低于可读底线', () => {
+  const plugin = loadClientBundle();
+  const { computeViewportFraming } = plugin;
+
+  // 巨型拓扑：内容外接矩形远超视口，理论上需要远小于 0.30 的缩放才能完整容纳
+  const hugeBounds = { minX: 40, minY: 24, maxX: 12040, maxY: 24 + 24 * 630 };
+  const framed = computeViewportFraming({ mode: 'macro', viewportWidth: 1200, viewportHeight: 700, bounds: hugeBounds });
+
+  assert.equal(framed.zoom, 0.30, '宏观取景缩放必须夹紧在 0.30 可读下限，不得继续缩小');
+  assert.ok(framed.zoom >= 0.30, '宏观取景缩放严禁低于 0.30 可读底线');
+
+  // 下限生效时内容溢出属于记录的取舍，且溢出必须左右对称（视口锚定聚合内容中心）
+  const hugeContentW = hugeBounds.maxX - hugeBounds.minX;
+  assert.ok(hugeContentW * framed.zoom > 1200, '触及下限时超大拓扑必然溢出视口，这是 ADR-0013 记录的取舍');
+  assert.equal(
+    framed.panX,
+    (1200 - hugeContentW * framed.zoom) / 2 - hugeBounds.minX * framed.zoom,
+    '触及下限时视口仍须锚定在聚合内容中心，溢出左右对称'
+  );
+
+  // 未触及下限的中等拓扑仍须完整容纳
+  const medium = { minX: 40, minY: 24, maxX: 1120, maxY: 650 };
+  const mediumFramed = computeViewportFraming({ mode: 'macro', viewportWidth: 1200, viewportHeight: 700, bounds: medium });
+  assert.ok(mediumFramed.zoom > 0.30, '中等拓扑不得被下限截断，应完整容纳');
+  assert.ok(medium.maxX * mediumFramed.zoom + mediumFramed.panX <= 1200 - 48 + 1e-6, '中等拓扑必须完整容纳于视口');
+});
+
