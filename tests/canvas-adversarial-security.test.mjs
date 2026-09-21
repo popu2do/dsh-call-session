@@ -1,67 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import fs from 'node:fs';
-import path from 'node:path';
-import vm from 'node:vm';
-import { fileURLToPath } from 'node:url';
-
-const testFileDir = path.dirname(fileURLToPath(import.meta.url));
-const rootDir = path.resolve(testFileDir, '..');
-const clientSourcePath = path.join(rootDir, 'lib', 'client.js');
-
-function loadClientBundle(sandboxExtensions = {}) {
-  const code = fs.readFileSync(clientSourcePath, 'utf8');
-
-  let registration = null;
-  const mockWindow = {
-    __ModuleLoader__: {
-      load: (payload) => {
-        registration = payload;
-      }
-    },
-    requestAnimationFrame: (cb) => cb(),
-    addEventListener: () => {},
-    removeEventListener: () => {}
-  };
-
-  const sandbox = {
-    window: mockWindow,
-    document: {
-      head: { appendChild: () => {} },
-      body: { appendChild: () => {} },
-      getElementById: () => null,
-      createElement: () => ({ setAttribute: () => {}, appendChild: () => {} })
-    },
-    navigator: {
-      clipboard: {
-        writeText: async () => {}
-      }
-    },
-    console,
-    Date,
-    Set,
-    Map,
-    Array,
-    Object,
-    String,
-    Math,
-    JSON,
-    URLSearchParams,
-    setInterval,
-    clearInterval,
-    setTimeout,
-    clearTimeout,
-    ...sandboxExtensions
-  };
-
-  vm.createContext(sandbox);
-  vm.runInContext(code, sandbox);
-  assert.ok(registration, 'lib/client.js must register with window.__ModuleLoader__');
-  return registration.factory(() => null);
-}
+import { loadClientBundle, readClientSource } from './helpers/canvas-harness.mjs';
 
 test('插槽注册唯一性、作用域隔离与无全局路由/DOM悬浮', () => {
-  const clientSource = fs.readFileSync(clientSourcePath, 'utf8');
+  const clientSource = readClientSource();
 
   // 1. 审查插槽注册目标：仅注入 conversation.view
   const injectRegex = /ctx\.slots\.inject\(\s*['"]([^'"]+)['"]/g;
@@ -260,7 +202,7 @@ test('详情抽屉（CanvasDrawer）只读性与无写入 API', () => {
   }
 
   // 5. 源码网络请求排查：无 POST/PUT/DELETE/PATCH 变异请求
-  const clientSource = fs.readFileSync(clientSourcePath, 'utf8');
+  const clientSource = readClientSource();
   assert.equal(
     /method\s*:\s*['"](?:POST|PUT|DELETE|PATCH)['"]/i.test(clientSource),
     false,
@@ -269,7 +211,7 @@ test('详情抽屉（CanvasDrawer）只读性与无写入 API', () => {
 });
 
 test('CSS 样式声明检查：包含 translate3d、will-change 与 contain', () => {
-  const clientSource = fs.readFileSync(clientSourcePath, 'utf8');
+  const clientSource = readClientSource();
 
   // 1. 视口层 CSS 隔离与硬件加速声明
   assert.ok(
@@ -315,7 +257,7 @@ test('CSS 样式声明检查：包含 translate3d、will-change 与 contain', ()
 });
 
 test('Zero-Emoji 与国际化字典内容检查 (ADR-0009)', () => {
-  const clientSource = fs.readFileSync(clientSourcePath, 'utf8');
+  const clientSource = readClientSource();
   const plugin = loadClientBundle();
 
   // 1. 源码全文零 Emoji 断言

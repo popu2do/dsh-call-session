@@ -14,22 +14,46 @@ const TOOLBAR_HEIGHT = 44;
  * Loads and materializes lib/client.js via the DSH Web ModuleLoader contract.
  */
 export function loadClientBundle(requireFn = () => null) {
-  const clientPath = path.join(rootDir, 'lib', 'client.js');
-  assert.ok(fs.existsSync(clientPath), 'lib/client.js must exist on disk');
-  const code = fs.readFileSync(clientPath, 'utf8');
+  return loadClientInSandbox({}, requireFn).plugin;
+}
+
+/**
+ * Reads the raw lib/client.js source, for tests that assert on CSS text or
+ * syntax rather than on rendered output.
+ */
+export function readClientSource() {
+  return fs.readFileSync(path.join(rootDir, 'lib', 'client.js'), 'utf8');
+}
+
+/**
+ * Loads lib/client.js into a Node VM sandbox and returns the materialized plugin.
+ *
+ * The sandbox always exposes the ModuleLoader contract plus the standard globals
+ * client.js expects. Pass overrides to replace any of them: `window` extras are
+ * merged over the ModuleLoader hook, and `document`, `ResizeObserver`,
+ * `navigator` and the four timer functions replace their defaults outright.
+ */
+export function loadClientInSandbox(overrides = {}, requireFn = () => null) {
+  const code = fs.readFileSync(path.join(rootDir, 'lib', 'client.js'), 'utf8');
 
   let registration = null;
-  const mockWindow = {
-    __ModuleLoader__: {
-      load: (payload) => { registration = payload; }
-    }
-  };
+  const windowOverrides = overrides.window || {};
+  const mockWindow = Object.assign({}, windowOverrides, {
+    __ModuleLoader__: { load: (payload) => { registration = payload; } }
+  });
 
-  const sandbox = {
-    window: mockWindow,
+  const sandbox = Object.assign({
+    document: overrides.document,
+    ResizeObserver: overrides.ResizeObserver,
+    navigator: overrides.navigator,
     console, Date, Set, Map, Array, Object, String, Math, JSON, URLSearchParams,
-    setInterval, clearInterval, setTimeout, clearTimeout
-  };
+    setInterval: overrides.setInterval || setInterval,
+    clearInterval: overrides.clearInterval || clearInterval,
+    setTimeout: overrides.setTimeout || setTimeout,
+    clearTimeout: overrides.clearTimeout || clearTimeout
+  }, overrides, {
+    window: mockWindow
+  });
 
   vm.createContext(sandbox);
   vm.runInContext(code, sandbox);
@@ -38,7 +62,7 @@ export function loadClientBundle(requireFn = () => null) {
   assert.equal(registration.id, 'dsh-call-session', 'ModuleLoader id must match dsh-call-session');
   assert.equal(typeof registration.factory, 'function', 'registration.factory must be a function');
 
-  return registration.factory(requireFn);
+  return { plugin: registration.factory(requireFn), registration, sandbox, window: mockWindow };
 }
 
 /**
@@ -92,6 +116,8 @@ export function createStatelessMockReact(telemetryData) {
     },
     useRef: (initial) => ({ current: initial }),
     useEffect: () => {},
+    useCallback: (fn) => fn,
+    useMemo: (fn) => fn(),
     createElement: (type, props, ...children) => ({ type, props: props || {}, children })
   };
 }
@@ -103,6 +129,21 @@ export function findVNodes(node, predicate, acc = []) {
     node.children.forEach((child) => findVNodes(child, predicate, acc));
   }
   return acc;
+}
+
+/**
+ * Traverses a virtual DOM tree looking for a node with matching id or key prop.
+ */
+export function findNodeById(node, id) {
+  if (!node || typeof node !== 'object') return null;
+  if (node.props && (node.props.id === id || node.props.key === id)) return node;
+  if (Array.isArray(node.children)) {
+    for (const child of node.children) {
+      const found = findNodeById(child, id);
+      if (found) return found;
+    }
+  }
+  return null;
 }
 
 /**
@@ -130,11 +171,13 @@ export function createCanvasRuntime(options = {}) {
   const zooms = [];
   const refStore = [];
   const stateStore = [];
+  const effectStore = [];
   const cleanups = [];
   const windowListeners = {};
   const resizeObservers = [];
   let refCursor = 0;
   let stateCursor = 0;
+  let effectCursor = 0;
 
   const mockReact = {
     useState: (initial) => {
@@ -156,9 +199,28 @@ export function createCanvasRuntime(options = {}) {
       if (!(idx in refStore)) refStore[idx] = { current: initial };
       return refStore[idx];
     },
-    useEffect: (fn) => {
-      const cleanup = fn();
-      if (typeof cleanup === 'function') cleanups.push(cleanup);
+    useEffect: (fn, deps) => {
+      const idx = effectCursor++;
+      const prev = effectStore[idx];
+      let shouldRun = false;
+      if (!prev) {
+        shouldRun = true;
+      } else if (!deps || !prev.deps) {
+        shouldRun = true;
+      } else if (deps.length !== prev.deps.length || deps.some((d, i) => !Object.is(d, prev.deps[i]))) {
+        shouldRun = true;
+      }
+
+      if (shouldRun) {
+        if (prev && typeof prev.cleanup === 'function') {
+          prev.cleanup();
+          const ci = cleanups.indexOf(prev.cleanup);
+          if (ci >= 0) cleanups.splice(ci, 1);
+        }
+        const cleanup = fn();
+        effectStore[idx] = { fn, deps: deps ? [...deps] : undefined, cleanup };
+        if (typeof cleanup === 'function') cleanups.push(cleanup);
+      }
     },
     createElement: (type, props, ...children) => {
       const node = { type, props: props || {}, children };
@@ -221,27 +283,21 @@ export function createCanvasRuntime(options = {}) {
     if (idx >= 0) pendingTimers.splice(idx, 1);
   };
 
-  let registration = null;
-  const sandbox = {
+  const { plugin } = loadClientInSandbox({
     window: runtimeWindow,
     document: runtimeDocument,
     ResizeObserver: MockResizeObserver,
-    console, Date, Set, Map, Array, Object, String, Math, JSON, URLSearchParams,
     setInterval: () => 1,
     clearInterval: () => {},
     setTimeout: sandboxSetTimeout,
     clearTimeout: sandboxClearTimeout
-  };
-  runtimeWindow.__ModuleLoader__ = { load: (payload) => { registration = payload; } };
-
-  vm.createContext(sandbox);
-  vm.runInContext(fs.readFileSync(path.join(rootDir, 'lib', 'client.js'), 'utf8'), sandbox);
-  const plugin = registration.factory((name) => (name === 'react' ? mockReact : null));
+  }, (name) => (name === 'react' ? mockReact : null));
   const t = (key) => plugin.zh[key] || key;
 
   function render(sessionId) {
     refCursor = 0;
     stateCursor = 0;
+    effectCursor = 0;
     return plugin.CanvasView({ sessionId, t });
   }
 
@@ -284,7 +340,10 @@ export function createCanvasRuntime(options = {}) {
   }
 
   function cleanupAll() {
-    cleanups.forEach((c) => c());
+    effectStore.forEach((e) => {
+      if (e && typeof e.cleanup === 'function') e.cleanup();
+    });
+    cleanups.length = 0;
   }
 
   function pendingDelays() {
