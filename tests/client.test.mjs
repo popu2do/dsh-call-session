@@ -2,13 +2,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import vm from 'node:vm';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, '..');
 
-import { loadClientBundle, findVNodes, createCanvasRuntime, createStatelessMockReact, standardCanvasTelemetry, wideCanvasTelemetry } from './helpers/canvas-harness.mjs';
+import { loadClientBundle, loadClientInSandbox, readClientSource, findVNodes, findNodeById, createCanvasRuntime, createStatelessMockReact, standardCanvasTelemetry, wideCanvasTelemetry } from './helpers/canvas-harness.mjs';
 
 test('Client Package Configuration: package.json exports and dsh.client specification', () => {
   const pkgPath = path.join(rootDir, 'package.json');
@@ -504,54 +503,18 @@ test('Drawer Mutation Resistance: Element Traversal and Mutation Action Check', 
 });
 
 test('Clipboard Copy Functionality: navigator.clipboard mock verification', async () => {
-  const clientPath = path.join(rootDir, 'lib', 'client.js');
-  const code = fs.readFileSync(clientPath, 'utf8');
-
   let clipboardWritten = null;
   let copiedKeySet = null;
 
-  let registration = null;
-  const mockWindow = {
-    __ModuleLoader__: {
-      load: (payload) => {
-        registration = payload;
-      }
-    },
-    requestAnimationFrame: (cb) => cb()
-  };
-
-  const sandbox = {
-    window: mockWindow,
+  const { plugin } = loadClientInSandbox({
+    window: { requestAnimationFrame: (cb) => cb() },
     navigator: {
       clipboard: {
-        writeText: async (text) => {
-          clipboardWritten = text;
-        }
+        writeText: async (text) => { clipboardWritten = text; }
       }
     },
-    console,
-    Date,
-    Set,
-    Map,
-    Array,
-    Object,
-    String,
-    Math,
-    JSON,
-    URLSearchParams,
-    setInterval,
-    clearInterval,
-    setTimeout: (fn, delay) => {
-      fn();
-      return 1;
-    },
-    clearTimeout
-  };
-
-  vm.createContext(sandbox);
-  vm.runInContext(code, sandbox);
-  assert.ok(registration, 'ModuleLoader registration must be invoked');
-  const plugin = registration.factory(() => null);
+    setTimeout: (fn) => { fn(); return 1; }
+  });
 
   const t = (k) => plugin.zh[k] || k;
   const drawer = plugin.CanvasDrawer({
@@ -778,38 +741,7 @@ test('Topology Visual Layout Engine: Blackboard strip, side-by-side workspace co
 });
 
 test('Three Relationship Edge Classes: Edge generation and boundary tolerance (missing author, empty context, non-existent sessions)', () => {
-  const clientPath = path.join(rootDir, 'lib', 'client.js');
-  const code = fs.readFileSync(clientPath, 'utf8');
-
-  let registration = null;
-  const mockWindow = {
-    __ModuleLoader__: {
-      load: (payload) => { registration = payload; }
-    },
-    requestAnimationFrame: (cb) => cb()
-  };
-
-  const sandbox = {
-    window: mockWindow,
-    console,
-    Date,
-    Set,
-    Map,
-    Array,
-    Object,
-    String,
-    Math,
-    JSON,
-    URLSearchParams,
-    setInterval,
-    clearInterval,
-    setTimeout,
-    clearTimeout
-  };
-
-  vm.createContext(sandbox);
-  vm.runInContext(code, sandbox);
-  assert.ok(registration);
+  const { registration } = loadClientInSandbox({ window: { requestAnimationFrame: (cb) => cb() } });
 
   const mockTelemetry = {
     timestamp: Date.now(),
@@ -882,32 +814,10 @@ test('Three Relationship Edge Classes: Edge generation and boundary tolerance (m
     metrics: { totalSessions: 2, runningSessions: 1, activeCalls: 1, totalPosts: 1 }
   };
 
-  const mockReact = {
-    useState: (initial) => {
-      if (initial && typeof initial === 'object' && 'sessions' in initial) {
-        return [mockTelemetry, () => {}];
-      }
-      return [initial, () => {}];
-    },
-    useRef: (initial) => ({ current: initial }),
-    useEffect: () => {},
-    createElement: (type, props, ...children) => ({ type, props: props || {}, children })
-  };
+  const mockReact = createStatelessMockReact(mockTelemetry);
 
   const plugin = registration.factory((name) => name === 'react' ? mockReact : null);
   const view = plugin.CanvasView({ sessionId: 's1', t: (k) => k });
-
-  function findNodeById(node, id) {
-    if (!node || typeof node !== 'object') return null;
-    if (node.props && node.props.id === id) return node;
-    if (Array.isArray(node.children)) {
-      for (const child of node.children) {
-        const found = findNodeById(child, id);
-        if (found) return found;
-      }
-    }
-    return null;
-  }
 
   // 1. 审查第一类边：发布归属边 (dsh-canvas-author-edges)
   const authorEdgesGroup = findNodeById(view, 'dsh-canvas-author-edges');
@@ -1074,17 +984,7 @@ test('SVG Transform Invariants: Breathing indicator transform-box and transform-
     metrics: { totalSessions: 2, runningSessions: 1, activeCalls: 0, totalPosts: 0 }
   };
 
-  const mockReact = {
-    useState: (initial) => {
-      if (initial && typeof initial === 'object' && 'sessions' in initial) {
-        return [mockTelemetry, () => {}];
-      }
-      return [initial, () => {}];
-    },
-    useRef: (initial) => ({ current: initial }),
-    useEffect: () => {},
-    createElement: (type, props, ...children) => ({ type, props: props || {}, children })
-  };
+  const mockReact = createStatelessMockReact(mockTelemetry);
 
   const plugin = loadClientBundle((name) => name === 'react' ? mockReact : null);
   const view = plugin.CanvasView({ sessionId: 's-run', t: (k) => k });
@@ -1150,38 +1050,8 @@ test('Strict Read-Only Invariants: Zero input controls, zero mutative actions, z
 });
 
 test('协作看板实测缺陷回归：真实标题、黑板空态、抽屉遮罩与加载状态', () => {
-  const clientPath = path.join(rootDir, 'lib', 'client.js');
-  const code = fs.readFileSync(clientPath, 'utf8');
-
-  let registration = null;
-  const mockWindow = {
-    __ModuleLoader__: {
-      load: (payload) => { registration = payload; }
-    },
-    requestAnimationFrame: (cb) => cb()
-  };
-
-  const sandbox = {
-    window: mockWindow,
-    console,
-    Date,
-    Set,
-    Map,
-    Array,
-    Object,
-    String,
-    Math,
-    JSON,
-    URLSearchParams,
-    setInterval,
-    clearInterval,
-    setTimeout,
-    clearTimeout
-  };
-
-  vm.createContext(sandbox);
-  vm.runInContext(code, sandbox);
-  assert.ok(registration);
+  const code = readClientSource();
+  const { registration } = loadClientInSandbox({ window: { requestAnimationFrame: (cb) => cb() } });
 
   const mockTelemetry = {
     timestamp: Date.now(),
@@ -1192,32 +1062,10 @@ test('协作看板实测缺陷回归：真实标题、黑板空态、抽屉遮�
     calls: []
   };
 
-  const mockReact = {
-    useState: (initial) => {
-      if (initial && typeof initial === 'object' && 'sessions' in initial) {
-        return [mockTelemetry, () => {}];
-      }
-      return [initial, () => {}];
-    },
-    useRef: (initial) => ({ current: initial }),
-    useEffect: () => {},
-    createElement: (type, props, ...children) => ({ type, props: props || {}, children })
-  };
+  const mockReact = createStatelessMockReact(mockTelemetry);
 
   const plugin = registration.factory((name) => name === 'react' ? mockReact : null);
   const t = (k) => plugin.zh[k] || k;
-
-  function findNodeById(node, id) {
-    if (!node || typeof node !== 'object') return null;
-    if (node.props && (node.props.id === id || node.props.key === id)) return node;
-    if (Array.isArray(node.children)) {
-      for (const child of node.children) {
-        const found = findNodeById(child, id);
-        if (found) return found;
-      }
-    }
-    return null;
-  }
 
   // 1. 验证黑板条目为 0 时的空态呈现与居中自适应
   const emptyView = plugin.CanvasView({ sessionId: 'session-s1', t });
@@ -1276,20 +1124,7 @@ test('协作看板实测缺陷回归：真实标题、黑板空态、抽屉遮�
   const selectedPlugin = registration.factory((name) => name === 'react' ? mockSelectedReact : null);
   const viewVNode = selectedPlugin.CanvasView({ sessionId: 's1', t: (k) => k });
   
-  // 递归查找 VNode 树中的遮罩层节点
-  function findVNode(node, predicate) {
-    if (!node) return null;
-    if (predicate(node)) return node;
-    if (Array.isArray(node.children)) {
-      for (const child of node.children) {
-        const found = findVNode(child, predicate);
-        if (found) return found;
-      }
-    }
-    return null;
-  }
-
-  const maskNode = findVNode(viewVNode, (n) => n && n.props && n.props.className === 'dsh-canvas-drawer-mask');
+  const maskNode = findVNodes(viewVNode, (n) => n && n.props && n.props.className === 'dsh-canvas-drawer-mask')[0];
   assert.ok(maskNode, '必须真实渲染出 className 为 dsh-canvas-drawer-mask 的遮罩节点 (PRD 7.3)');
   assert.equal(typeof maskNode.props.onClick, 'function', '抽屉遮罩层必须挂载 onClick 关闭回调函数');
   maskNode.props.onClick();
@@ -1325,7 +1160,7 @@ test('全量合规审查：三次贝塞尔外切、无重复节点渲染、工�
   assert.ok(keys.includes('session-gamma'));
 
   // 3. 工作区分组容器头部尺寸规格验证
-  const clientSource = fs.readFileSync(path.join(rootDir, 'lib', 'client.js'), 'utf8');
+  const clientSource = readClientSource();
   assert.ok(clientSource.includes('height: 38,'), '工作区列头部高度必须严格为 38px (PRD 3.1)');
   assert.ok(clientSource.includes("fill: '#94a3b8'"), '工作区列头部文字色值必须为 #94a3b8');
   assert.ok(clientSource.includes("z-index: 100;"), 'L2 Tooltip z-index 必须为 100 置顶');
@@ -1378,7 +1213,7 @@ test('全量合规审查：三次贝塞尔外切、无重复节点渲染、工�
     createElement: (type, props, ...children) => ({ type, props: props || {}, children })
   };
 
-  const runtimeSandbox = {
+  const { plugin: runtimePlugin } = loadClientInSandbox({
     window: mockRuntimeWindow,
     document: mockRuntimeDocument,
     setInterval: (fn, ms) => {
@@ -1389,29 +1224,8 @@ test('全量合规审查：三次贝塞尔外切、无重复节点渲染、工�
       timerClearedCount++;
     },
     setTimeout: (fn) => { fn(); return 1; },
-    clearTimeout: () => {},
-    console,
-    Date,
-    Set,
-    Map,
-    Array,
-    Object,
-    String,
-    Math,
-    JSON,
-    URLSearchParams
-  };
-
-  let runtimeRegistration = null;
-  mockRuntimeWindow.__ModuleLoader__ = {
-    load: (payload) => {
-      runtimeRegistration = payload;
-    }
-  };
-
-  vm.createContext(runtimeSandbox);
-  vm.runInContext(clientSource, runtimeSandbox);
-  const runtimePlugin = runtimeRegistration.factory((name) => name === 'react' ? mockEffectReact : null);
+    clearTimeout: () => {}
+  }, (name) => name === 'react' ? mockEffectReact : null);
 
   // 挂载 CanvasView 触发 useEffect 启动轮询
   runtimePlugin.CanvasView({
@@ -1572,19 +1386,7 @@ test('协作看板缺陷回归验证：session.offline 端到端消费、抽屉�
   assert.ok(offlineTexts.length > 0, '离线会话抽屉必须渲染「会话已离线」(session.offline)');
 
   // 4. L2 Tooltip 防御性断言：session.offline、call 离线端点警告、post tags 展示
-  let registration = null;
-  const mockWindow = {
-    __ModuleLoader__: {
-      load: (payload) => { registration = payload; }
-    }
-  };
-  const sandbox = {
-    window: mockWindow,
-    console, Date, Set, Map, Array, Object, String, Math, JSON, URLSearchParams,
-    setInterval, clearInterval, setTimeout, clearTimeout
-  };
-  vm.createContext(sandbox);
-  vm.runInContext(code, sandbox);
+  const { registration } = loadClientInSandbox();
 
   function createHoverView(hoveredEntity, lang = 'zh') {
     let callIdx = 0;
@@ -1773,6 +1575,16 @@ test('协作看板点击自适应居中、假零值防御、44px 工具栏校正
     cancelAnimationFrame: () => {}
   };
 
+  const viewportMock = {
+    clientWidth: 0,
+    clientHeight: 0
+  };
+  const containerMock = {
+    clientWidth: 0,
+    clientHeight: 0,
+    querySelector: (sel) => (sel === '.dsh-canvas-viewport' ? viewportMock : null)
+  };
+
   const runtimeDocument = {
     addEventListener: () => {},
     removeEventListener: () => {},
@@ -1783,45 +1595,15 @@ test('协作看板点击自适应居中、假零值防御、44px 工具栏校正
     querySelector: (sel) => (sel === '.dsh-canvas-container' ? containerMock : null)
   };
 
-  let loadedReg = null;
-  const runtimeLoader = {
-    load: (payload) => { loadedReg = payload; }
-  };
-
-  const testSandbox = {
+  const { plugin: runtimePlugin } = loadClientInSandbox({
     window: runtimeWindow,
     document: runtimeDocument,
     ResizeObserver: MockResizeObserver,
-    console,
-    Date,
-    Set,
-    Map,
-    Array,
-    Object,
-    String,
-    Math,
-    JSON,
-    URLSearchParams,
     setInterval: () => 1,
     clearInterval: () => {},
     setTimeout: (fn) => { fn(); return 1; },
     clearTimeout: () => {}
-  };
-  runtimeWindow.__ModuleLoader__ = runtimeLoader;
-
-  vm.createContext(testSandbox);
-  vm.runInContext(code, testSandbox);
-  const runtimePlugin = loadedReg.factory((name) => name === 'react' ? mockReact : null);
-
-  const containerMock = {
-    clientWidth: 0,
-    clientHeight: 0,
-    querySelector: (sel) => (sel === '.dsh-canvas-viewport' ? viewportMock : null)
-  };
-  const viewportMock = {
-    clientWidth: 0,
-    clientHeight: 0
-  };
+  }, (name) => name === 'react' ? mockReact : null);
 
   const activeView = runtimePlugin.CanvasView({
     sessionId: 's-ro-test',
@@ -1853,38 +1635,7 @@ test('协作看板点击自适应居中、假零值防御、44px 工具栏校正
 });
 
 test('协作看板黑板标题口径与卡片视觉状态强化（PRD §6.4 与 §11 缺陷2）', () => {
-  const clientPath = path.join(rootDir, 'lib', 'client.js');
-  const code = fs.readFileSync(clientPath, 'utf8');
-
-  let registration = null;
-  const mockWindow = {
-    __ModuleLoader__: {
-      load: (payload) => { registration = payload; }
-    }
-  };
-
-  const sandbox = {
-    window: mockWindow,
-    console, Date, Set, Map, Array, Object, String, Math, JSON, URLSearchParams,
-    setInterval, clearInterval, setTimeout, clearTimeout
-  };
-
-  vm.createContext(sandbox);
-  vm.runInContext(code, sandbox);
-  assert.ok(registration);
-
-
-  function findNodeById(node, id) {
-    if (!node || typeof node !== 'object') return null;
-    if (node.props && (node.props.id === id || node.props.key === id)) return node;
-    if (Array.isArray(node.children)) {
-      for (const child of node.children) {
-        const found = findNodeById(child, id);
-        if (found) return found;
-      }
-    }
-    return null;
-  }
+  const { registration } = loadClientInSandbox();
 
   // 1. 测试场景：存在非 active 条目（0 活跃 / 3 总计：2 撤销 + 1 过期，重现用户截图同屏矛盾）
   const telemetryWithMixedPosts = {
@@ -2029,19 +1780,6 @@ test('ADR-0013 看板默认全局透视、首列固定当前工作区、移除�
     posts: [],
     calls: []
   };
-
-
-  function findNodeById(node, id) {
-    if (!node || typeof node !== 'object') return null;
-    if (node.props && (node.props.id === id || node.props.key === id)) return node;
-    if (Array.isArray(node.children)) {
-      for (const child of node.children) {
-        const found = findNodeById(child, id);
-        if (found) return found;
-      }
-    }
-    return null;
-  }
 
 
   const reactZh = createStatelessMockReact(telemetryMultiWs);
@@ -2222,18 +1960,6 @@ test('ADR-0013 看板默认全局透视、首列固定当前工作区、移除�
 
 test('Topology Relationship Edges Contrast & WCAG 2.1 Compliance (PRD §3.1, §4.1 & Task t10)', () => {
 
-  function findNodeById(node, id) {
-    if (!node || typeof node !== 'object') return null;
-    if (node.props && (node.props.id === id || node.props.key === id)) return node;
-    if (Array.isArray(node.children)) {
-      for (const child of node.children) {
-        const found = findNodeById(child, id);
-        if (found) return found;
-      }
-    }
-    return null;
-  }
-
   const telemetryWithEdges = {
     workspaces: [
       { id: '/path/to/main', name: 'main', isCurrent: true, sessionIds: ['session-auth', 'session-call-src', 'session-call-dst'] }
@@ -2410,18 +2136,6 @@ test('Session Node Title Dynamic Space & Word-Boundary Truncation (PRD §5.1 & T
 
   // 3. CanvasView 会话节点 VNode 渲染动态留白与单词边界集成断言
 
-  function findNodeById(node, id) {
-    if (!node || typeof node !== 'object') return null;
-    if (node.props && (node.props.id === id || node.props.key === id)) return node;
-    if (Array.isArray(node.children)) {
-      for (const child of node.children) {
-        const found = findNodeById(child, id);
-        if (found) return found;
-      }
-    }
-    return null;
-  }
-
 
   const telemetryData = {
     timestamp: Date.now(),
@@ -2486,19 +2200,6 @@ test('黑板区域在无条目时的平滑压缩与空状态过渡 (PRD §3.1 & 
 
   const tZh = (k) => plugin.zh[k] || k;
   const tEn = (k) => plugin.en[k] || k;
-
-
-  function findNodeById(node, id) {
-    if (!node || typeof node !== 'object') return null;
-    if (node.props && (node.props.id === id || node.props.key === id)) return node;
-    if (Array.isArray(node.children)) {
-      for (const child of node.children) {
-        const found = findNodeById(child, id);
-        if (found) return found;
-      }
-    }
-    return null;
-  }
 
   // 1. 无条目场景 (posts.length === 0)：黑板区域平滑收缩为 38px 轻量状态条
   const emptyLayout = computeLayout(
@@ -2831,19 +2532,6 @@ test('ADR-0014 严格插件作用域双色主题与工具栏切换映射', () =>
     calls: []
   };
 
-
-  function findNodeById(node, id) {
-    if (!node || typeof node !== 'object') return null;
-    if (node.props && (node.props.id === id || node.props.key === id)) return node;
-    if (Array.isArray(node.children)) {
-      for (const child of node.children) {
-        const found = findNodeById(child, id);
-        if (found) return found;
-      }
-    }
-    return null;
-  }
-
   const reactMock = createStatelessMockReact(telemetryEmpty);
   const plugin = loadClientBundle((name) => name === 'react' ? reactMock : null);
   const t = (k) => plugin.zh[k] || k;
@@ -2897,31 +2585,7 @@ test('Spec 002 & ADR-0014: 浅色模式黑板卡片文字对比度符合 WCAG 2.
 });
 
 test('Spec 002 & ADR-0014: 宿主主题接口缺失时主题切换严格作用域隔离且不污染外部属性', () => {
-  function createLocalMockReact(telemetryData) {
-    return {
-      useState: (initial) => {
-        if (initial && typeof initial === 'object' && 'sessions' in initial) {
-          return [telemetryData, () => {}];
-        }
-        return [initial, () => {}];
-      },
-      useRef: (initial) => ({ current: initial }),
-      useEffect: () => {},
-      createElement: (type, props, ...children) => ({ type, props: props || {}, children })
-    };
-  }
-  function findLocalNodeById(node, id) {
-    if (!node || typeof node !== 'object') return null;
-    if (node.props && (node.props.id === id || node.props.key === id)) return node;
-    if (Array.isArray(node.children)) {
-      for (const child of node.children) {
-        const found = findLocalNodeById(child, id);
-        if (found) return found;
-      }
-    }
-    return null;
-  }
-  const reactMock = createLocalMockReact({ workspaces: [], sessions: [], posts: [], calls: [] });
+  const reactMock = createStatelessMockReact({ workspaces: [], sessions: [], posts: [], calls: [] });
   let docAttribute = null;
   const mockDoc = {
     body: {
@@ -2932,34 +2596,10 @@ test('Spec 002 & ADR-0014: 宿主主题接口缺失时主题切换严格作用�
     }
   };
 
-  const clientPath = path.join(rootDir, 'lib', 'client.js');
-  const code = fs.readFileSync(clientPath, 'utf8');
-  let registration = null;
-  const sandbox = {
-    window: {
-      __ModuleLoader__: { load: (p) => { registration = p; } },
-      innerWidth: 1000,
-      innerHeight: 700
-    },
-    document: mockDoc,
-    console,
-    Date,
-    Set,
-    Map,
-    Array,
-    Object,
-    String,
-    Math,
-    JSON,
-    URLSearchParams,
-    setInterval,
-    clearInterval,
-    setTimeout,
-    clearTimeout
-  };
-  vm.createContext(sandbox);
-  vm.runInContext(code, sandbox);
-  const clientPlugin = registration.factory((name) => name === 'react' ? reactMock : null);
+  const { plugin: clientPlugin } = loadClientInSandbox({
+    window: { innerWidth: 1000, innerHeight: 700 },
+    document: mockDoc
+  }, (name) => name === 'react' ? reactMock : null);
 
   const view = clientPlugin.CanvasView({
     sessionId: 's1',
@@ -2967,7 +2607,7 @@ test('Spec 002 & ADR-0014: 宿主主题接口缺失时主题切换严格作用�
     t: (k) => clientPlugin.zh[k] || k
   });
 
-  const themeBtn = findLocalNodeById(view, 'dsh-canvas-theme-toggle');
+  const themeBtn = findNodeById(view, 'dsh-canvas-theme-toggle');
   assert.ok(themeBtn, '主题按钮必须存在');
 
   // 点击触发主题切换：验证严格作用域隔离，不向外部 document.body 写入属性
@@ -3066,46 +2706,13 @@ test('通道走线槽位离散 (ADR-0014)：多条黑板连线右侧通道离散
     calls: []
   };
 
-  const mockReact = {
-    useState: (initial) => {
-      if (initial && typeof initial === 'object' && 'sessions' in initial) {
-        return [mockTelemetry, () => {}];
-      }
-      return [initial, () => {}];
-    },
-    useRef: (initial) => ({ current: initial }),
-    useEffect: () => {},
-    useCallback: (fn) => fn,
-    useMemo: (fn) => fn(),
-    createElement: (type, props, ...children) => ({ type, props: props || {}, children })
-  };
+  const mockReact = createStatelessMockReact(mockTelemetry);
 
-  const clientPath = path.join(rootDir, 'lib', 'client.js');
-  const code = fs.readFileSync(clientPath, 'utf8');
-  let registration = null;
-  const sandbox = {
-    window: { __ModuleLoader__: { load: (p) => { registration = p; } } },
-    document: { getElementById: () => null, createElement: () => ({ id: '', textContent: '' }), head: { appendChild: () => {} } },
-    console, Date, Set, Map, Array, Object, String, Math, JSON, URLSearchParams,
-    setInterval, clearInterval, setTimeout, clearTimeout
-  };
-  vm.createContext(sandbox);
-  vm.runInContext(code, sandbox);
-  const plugin = registration.factory((name) => name === 'react' ? mockReact : null);
+  const { plugin } = loadClientInSandbox({
+    document: { getElementById: () => null, createElement: () => ({ id: '', textContent: '' }), head: { appendChild: () => {} } }
+  }, (name) => name === 'react' ? mockReact : null);
 
   const view = plugin.CanvasView({ sessionId: 's1', t: (k) => k });
-
-  function findNodeById(node, id) {
-    if (!node || typeof node !== 'object') return null;
-    if (node.props && node.props.id === id) return node;
-    if (Array.isArray(node.children)) {
-      for (const child of node.children) {
-        const found = findNodeById(child, id);
-        if (found) return found;
-      }
-    }
-    return null;
-  }
 
   const authorEdgesGroup = findNodeById(view, 'dsh-canvas-author-edges');
   assert.ok(authorEdgesGroup, 'authorEdgesGroup 必须存在');
@@ -3489,7 +3096,7 @@ test('ADR-0013 视口取景引擎：宏观自适应居中、水平夹紧、垂�
 });
 
 test('ADR-0013 首屏与尺寸变化必须执行全局取景，严禁单点会话居中', () => {
-  const code = fs.readFileSync(path.join(rootDir, 'lib', 'client.js'), 'utf8');
+  const code = readClientSource();
 
   assert.equal(code.includes("fitViewRef.current(false, 'macro')"), true, '首屏与尺寸变化必须以全局取景初始化视口');
   assert.equal(code.includes("fitViewRef.current(false, 'locate')"), false, '严禁首屏以当前会话单点居中初始化视口');

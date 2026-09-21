@@ -1,10 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import fs from 'node:fs';
-import path from 'node:path';
+import { readClientSource } from './helpers/canvas-harness.mjs';
 
-const rootDir = process.cwd();
-const clientSource = fs.readFileSync(path.join(rootDir, 'lib', 'client.js'), 'utf8');
+const clientSource = readClientSource();
 
 test('ADR-0018 不变量 1: 连线呼吸动画必须拥有独立关键帧且严禁几何缩放 transform: scale', () => {
   // ADR-0018 §2.1: 拓扑连线严禁使用 transform: scale，防止端点以 SVG 原点脱节漂移

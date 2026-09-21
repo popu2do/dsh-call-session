@@ -1,8 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import fs from 'node:fs';
-import path from 'node:path';
-import vm from 'node:vm';
+import { loadClientBundle } from './helpers/canvas-harness.mjs';
 
 const HEADER_OFFSET_Y = 10;
 const HEADER_HEIGHT = 38;
@@ -10,22 +8,6 @@ const NODE_RY = 26;
 const STANDARD_HEADER_GAP = 16;
 const SESSION_SLOT_HEIGHT = 72;
 const DERIVED_OFFSET_FROM_WS_Y = HEADER_OFFSET_Y + HEADER_HEIGHT + STANDARD_HEADER_GAP + NODE_RY;
-
-function loadClientBundle() {
-  const clientPath = path.resolve('lib/client.js');
-  const code = fs.readFileSync(clientPath, 'utf8');
-  const sandbox = {
-    window: {},
-    module: { exports: {} },
-    exports: {},
-    console,
-    setTimeout,
-    clearTimeout
-  };
-  vm.createContext(sandbox);
-  vm.runInContext(code, sandbox);
-  return sandbox.module.exports || sandbox.window.DshCallSessionClient || {};
-}
 
 const plugin = loadClientBundle();
 const { computeLayout } = plugin;
