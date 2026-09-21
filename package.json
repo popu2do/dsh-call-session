@@ -26,7 +26,9 @@
     "README.md",
     "README_ZH.md",
     "CHANGELOG.md",
-    "LICENSE"
+    "LICENSE",
+    "assets",
+    "screenshots.json"
   ],
   "scripts": {
     "test": "node tests/run-all.mjs",
