@@ -3297,11 +3297,19 @@ test('ADR-0013 尺寸变化复取景：宿主切换会话后，未手动交互�
   rt.resize(1200, 744);
   assert.equal(rt.pans.length, panCountAfterSwitch, '会话切换后的初始观测严禁触发复取景');
 
-  // 4. 用户未手动交互，真正的尺寸变化仍必须重新执行全局取景
-  rt.resize(900, 520);
+  // 4. 用户未手动交互，纯高度尺寸变化仍必须重新执行全局取景
+  rt.resize(1200, 600);
   assert.ok(
     rt.pans.length > panCountAfterSwitch,
-    '宿主切换会话后，未手动交互时的真实尺寸变化必须重新执行全局取景'
+    '宿主切换会话后，未手动交互时的纯高度尺寸变化必须重新执行全局取景'
+  );
+  const panCountAfterHeightResize = rt.pans.length;
+
+  // 5. 用户未手动交互，纯宽度尺寸变化亦必须重新执行全局取景
+  rt.resize(900, 600);
+  assert.ok(
+    rt.pans.length > panCountAfterHeightResize,
+    '宿主切换会话后，未手动交互时的纯宽度尺寸变化必须重新执行全局取景'
   );
 
   // 5. 复取景结果必须等于按实测视口计算的宏观取景
