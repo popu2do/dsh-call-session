@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.5] - 2026-09-21
+
+### Summary
+Canvas viewport clamping and landed pulse release. Resolves visual distortion and topological imbalance when locating the current session by replacing rigid geometric centering with clamped viewport framing and bounded vertical centering. Adds non-deforming landed pulse feedback, eliminates auto-framing on external session switches, restores container resize reframing, and unifies client test harness sandboxes and traversal utilities.
+
+### Added
+- **Clamped Viewport Framing Engine (ADR-0013)**:
+  - Extracted pure `computeViewportFraming` engine shared by macro fit view and clamped session locating.
+  - Horizontal boundary clamping: pins column 0 to 48px safety margin when total content width exceeds viewport, centering otherwise.
+  - Vertical bounded centering: centers target node while clamping top blackboard and column base inside visible area when layout fits vertically.
+  - Zoom range preservation: clamps locate zoom to `[0.8, 1.2]`, respecting user zoom within range.
+  - Readability zoom floor: enforces `0.30` lower bound on global macro framing to preserve session title legibility on wide topologies.
+  - Exported canonical `SESSION_NODE_HALF_WIDTH` (96) and `SESSION_NODE_HALF_HEIGHT` (26) constants and named types `CanvasBounds` and `ViewportFraming`.
+- **Landed Pulse Visual Feedback (ADR-0013 & ADR-0018)**:
+  - 1.2s dual-cycle breathing animation on the located session ellipse using `stroke-opacity` (1.0 -> 0.25 -> 1.0) without geometric distortion.
+  - Timed 320ms delay matching `VIEWPORT_TWEEN_MS` transition duration.
+  - Frozen under `@media (prefers-reduced-motion: reduce)`.
+- **Centralized Test Harness (`tests/helpers/canvas-harness.mjs`)**:
+  - Unified VM sandbox execution via `loadClientInSandbox` and `readClientSource`.
+  - Consolidated virtual DOM traversal via `findNodeById` and `findVNodes`.
+  - Added deterministic React mock runtime `createCanvasRuntime` with `useEffect` dependency and cleanup lifecycle support.
+
+### Changed
+- Initial canvas mount and container resize execute global macro fit view framing all workspaces and public blackboard; single-node centering on mount removed.
+- External `sessionId` changes silently migrate node highlight and `[Current]` badge without displacing viewport pan or zoom.
+- `package.json` distribution file list updated to include showcase assets and metadata.
+
+### Fixed
+- Fixed viewport hijacking on session switch caused by ResizeObserver initial observation callbacks.
+- Fixed container resize detection to track both width and height changes.
+- Fixed toolbar button interaction state semantics so manual fit view resets auto-framing while locating pins the view.
+
 ## [0.1.4] - 2026-09-21
 
 ### Summary
