@@ -27,7 +27,11 @@ ADR-0012 建立了可视化协作看板，提出“瞬态调用流动与脉冲�
 1. **绝对禁止几何缩放**：任何表示拓扑连线的 SVG `<path>` 元素，严禁在其 CSS 动画或过渡中施加 `transform: scale(...)`、`transform: translate(...)` 或矩阵变换。
 2. **动效作用域受敛**：连线的所有动态效果严格限定在纯视觉渲染属性：
    - 流动指示：仅允许改变 `stroke-dashoffset`；
-   - 脉冲发光：仅允许改变 `opacity` 或 `stroke-width`（微幅呼吸 `1.0 ~ 1.2` 倍）。
+   - 脉冲发光：仅允许改变 `opacity`、`stroke-opacity` 或 `stroke-width`（微幅呼吸 `1.0 ~ 1.2` 倍）。
+
+### 2.1.1 Revision 2026-09-20: Landed Pulse Attribute Coverage
+
+落点脉冲（ADR-0013 §2.1.4）以描边透明度呼吸呈现。脉冲允许属性枚举据此纳入 `stroke-opacity`，几何不变式与禁止发光投影的约束保持不变。
 
 ### 2.2 浅色主题去发光与 WCAG 对比度（Theme Scoped Restraint）
 1. **浅色模式清晰呈现**：在 `.dsh-canvas-light` 作用域下，边线移除发光阴影（`filter: none`），改以高对比度单色实线或深色低对比虚线呈现，消除浅色底色下的晕轮伪影。

@@ -110,7 +110,7 @@ test('规范不变量: prefers-reduced-motion 媒体查询选择器必须严格�
 });
 
 test('ADR-0013 & ADR-0018 不变量 8: 落点脉冲必须为无几何形变的透明度呼吸且支持减弱动态效果', () => {
-  // ADR-0013 §2.9 & ADR-0018 §2.1: 落点脉冲仅允许 opacity 呼吸，严禁 transform 几何缩放
+  // ADR-0013 §2.1.4 & ADR-0018 §2.1: 落点脉冲仅允许 opacity 呼吸，严禁 transform 几何缩放
   const locateKeyframes = clientSource.match(/@keyframes\s+dshLocatePulse\s*\{([^}]+)\}/);
   assert.ok(locateKeyframes, 'CSS 必须声明 @keyframes dshLocatePulse');
   assert.ok(

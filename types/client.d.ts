@@ -114,6 +114,25 @@ export declare function computeLayout(
 };
 
 /**
+ * 内容外接矩形：公共黑板、全部工作区分组列与会话节点的聚合包围盒
+ */
+export interface CanvasBounds {
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
+}
+
+/**
+ * 看板视口取景结果：缩放与画布表面的平移量
+ */
+export interface ViewportFraming {
+  zoom: number;
+  panX: number;
+  panY: number;
+}
+
+/**
  * 看板视口取景选项
  */
 export interface ViewportFramingOptions {
@@ -121,7 +140,7 @@ export interface ViewportFramingOptions {
   mode?: 'macro' | 'locate';
   viewportWidth?: number;
   viewportHeight?: number;
-  bounds?: { minX: number; minY: number; maxX: number; maxY: number };
+  bounds?: CanvasBounds;
   anchor?: { x: number; y: number } | null;
   currentZoom?: number;
 }
@@ -129,11 +148,13 @@ export interface ViewportFramingOptions {
 /**
  * 计算看板视口取景结果（宏观自适应居中 或 夹紧定位当前会话）
  */
-export declare function computeViewportFraming(options: ViewportFramingOptions): {
-  zoom: number;
-  panX: number;
-  panY: number;
-};
+export declare function computeViewportFraming(options: ViewportFramingOptions): ViewportFraming;
+
+/** 会话节点椭圆的半宽，内容外接矩形与节点渲染共用同一真源 */
+export declare const SESSION_NODE_HALF_WIDTH: number;
+
+/** 会话节点椭圆的半高，内容外接矩形与节点渲染共用同一真源 */
+export declare const SESSION_NODE_HALF_HEIGHT: number;
 
 /**
  * 格式化 TTL 毫秒为紧凑字符串
