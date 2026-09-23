@@ -109,6 +109,9 @@
    - 发布者会话：出参统一为 `authorSessionId`；
    - 独立/本体会话：出参统一为 `sessionId`。
 
+5. **Invariant 5 (DSH Tool JSON Schema Compatibility Invariant)**：
+   所有工具声明的 `output.schema` 必须严格符合 DSH 宿主 `assertSupportedJsonSchema` 规范。`type` 属性必须为单类型标量字符串（如 `'string'`, `'number'`, `'boolean'`, `'object'`, `'array'`, `'null'`），严禁声明为类型数组（如 `type: ['string', 'null']`）；可空或多类型联合必须统一采用标准 `oneOf` 结构（如 `oneOf: [{ type: 'string' }, { type: 'null' }]`），确保工具定义顺利通过宿主编译与模型 SDK 代码生成。
+
 ---
 
 ### 4.2 六大原生工具权威参数契约总表
@@ -176,9 +179,10 @@
 | **出参** | `workspace` | `string` | 否 | - | 规范化工作区绝对路径 |
 | **出参** | `status` | `string` | 否 | - | 会话初始状态（`'running' | 'idle'`） |
 | **出参** | `generation` | `number` | 否 | - | 会话代际深度 |
-| **出参** | `bootstrapPostId` | `string | null` | 否 | - | 就绪公告关联黑板条目 ID |
+| **出参** | `bootstrapPostId` | `string | null` (`oneOf`) | 否 | - | 就绪公告关联黑板条目 ID（Schema 遵循 Invariant 5） |
 | **出参** | `contextPostIds` | `string[]` | 否 | - | 成功关联挂载的黑板 ID 列表 |
-| **出参** | `error` | `string` | 否 | - | 失败错误原因描述 |
+| **出参** | `error` | `string | null` (`oneOf`) | 否 | - | 失败错误原因描述（Schema 遵循 Invariant 5） |
+| **出参** | `message` | `string` | 否 | - | 本地化执行结果摘要（ADR-0023 引入） |
 
 ---
 

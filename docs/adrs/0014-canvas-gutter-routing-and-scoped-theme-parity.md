@@ -5,6 +5,9 @@
 - **Deciders**: Architect, Frontend Lead, Core Maintainers
 - **Informed**: All Web Users, Multi-Session Operators
 
+> **Routing Evolution Notice**:
+> The uniform right-exit left-enter routing geometry for intra-column calls described in Section 2.1 was enhanced and superseded by [ADR-0019](./0019-channel-split-routing-and-lineage-on-demand-focus.md) (Channel-Split Routing). Intra-column downward calls use right-exit right-enter, while upward calls use left-exit left-enter, eliminating central axis and card collisions.
+
 ---
 
 ## 1. Context and Problem Statement

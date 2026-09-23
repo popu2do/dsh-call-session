@@ -1,4 +1,4 @@
-# ADR-0002: Built-in Lightweight Blackboard Store
+# ADR-0002: Built-in Blackboard State Store (Zero External Dep)
 
 - **Status**: Accepted
 - **Date**: 2026-09-03

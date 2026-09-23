@@ -1,4 +1,4 @@
-# ADR-0004: Atomic Debounced Persistence Engine with Windows Lock Retries and Self-Healing
+# ADR-0004: Atomic Debounced Persistence Engine with Windows Lock Retries and Backup Recovery
 
 - **Status**: Accepted
 - **Date**: 2026-09-03

@@ -69,7 +69,7 @@
 #### Invariant 2: 单播调用与同级会话治理不变量 (Session Call & Peer Session Baseline)
 - **单播分发**：`session_call` 进程内事件投递与调度确认，耗时 P99 ≤ 2ms。
 - **目录检索**：`SessionDirectory` 全量会话扫描与过滤，耗时 P99 ≤ 10ms。
-- **配额拦截**：单工作区活跃同级会话达 10 个（或代际深度达 2、频控超 5次/分）时，拦截判定为同步阻断，耗时 ≤ 1ms。
+- **配额拦截**：单工作区并发运行根会话达 5 个（口径与上限修订自 ADR-0021；或代际深度达 2、频控超 5次/分）时，拦截判定为同步阻断，耗时 ≤ 1ms。
 
 #### Invariant 3: Web 看板与遥测聚合不变量 (Web Canvas & Route Baseline)
 - **路由聚合**：GET `/plugins/dsh-call-session/telemetry` 快照聚合与 JSON 序列化，耗时 P99 ≤ 20ms。

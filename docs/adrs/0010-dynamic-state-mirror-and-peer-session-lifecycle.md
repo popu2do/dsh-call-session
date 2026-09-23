@@ -6,6 +6,9 @@
 - **Consulted**: Core Contributors, Multi-Agent Teams Reviewers
 - **Informed**: All Plugin Users, Downstream Agents, DSH Web Interface Users
 
+> **Concurrency Quota Revision Notice**:
+> The active root session quota of 10 in Section 2.2 and Section 5 was revised by [ADR-0021](./0021-concurrent-running-quota-and-model-inheritance-alignment.md). The running quota limit is now 5, counted strictly on `status === 'running'` root sessions (idle sessions do not consume quota).
+
 ---
 
 ## 1. Context and Problem Statement

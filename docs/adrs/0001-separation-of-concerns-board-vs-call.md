@@ -1,6 +1,6 @@
-# ADR-0001: Separation of Concerns - Pull-based Public Board vs Push-based Strict Unicast Call
+# ADR-0001: Separation of Concerns: Pull-based Public Board vs Push-based Strict Unicast Call
 
-- **Status**: Accepted
+- **Status**: Accepted (Transport superseded by ADR-0006)
 - **Date**: 2026-09-03
 - **Deciders**: Architect, Engineering Team, Core Contributors
 - **Consulted**: QA Engineer, Multi-Agent Runtime Ops, Community Users
