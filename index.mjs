@@ -670,12 +670,22 @@ export function apply(ctx, config = {}) {
             workspace: { type: 'string' },
             status: { type: 'string' },
             generation: { type: 'number' },
-            bootstrapPostId: { type: ['string', 'null'] },
+            bootstrapPostId: {
+              oneOf: [
+                { type: 'string' },
+                { type: 'null' }
+              ]
+            },
             contextPostIds: {
               type: 'array',
               items: { type: 'string' }
             },
-            error: { type: ['string', 'null'] },
+            error: {
+              oneOf: [
+                { type: 'string' },
+                { type: 'null' }
+              ]
+            },
             message: { type: 'string' }
           },
           additionalProperties: false

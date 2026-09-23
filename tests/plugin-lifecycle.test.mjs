@@ -21,6 +21,25 @@ function createTempDir() {
   return fs.mkdtemp(path.join(os.tmpdir(), 'dsh-plugin-test-'));
 }
 
+const SUPPORTED_SCHEMA_TYPES = Object.freeze(new Set(['object', 'array', 'string', 'number', 'integer', 'boolean', 'null']));
+
+function assertSupportedSchema(node, schemaPath = 'schema') {
+  if (!node || typeof node !== 'object') return;
+  if (Array.isArray(node.type)) {
+    throw new Error(`[JsonSchemaError] ${schemaPath}.type must be a single type string (type arrays are not supported)`);
+  }
+  if (node.type !== undefined && !SUPPORTED_SCHEMA_TYPES.has(node.type)) {
+    throw new Error(`[JsonSchemaError] ${schemaPath}.type "${node.type}" is not a supported JSON schema scalar type`);
+  }
+  if (node.properties) {
+    for (const [key, value] of Object.entries(node.properties)) {
+      assertSupportedSchema(value, `${schemaPath}.properties.${key}`);
+    }
+  }
+  if (node.items) assertSupportedSchema(node.items, `${schemaPath}.items`);
+  if (node.oneOf) node.oneOf.forEach((sub, index) => assertSupportedSchema(sub, `${schemaPath}.oneOf[${index}]`));
+}
+
 function createMockCordisContext() {
   const tools = new Map();
   const commands = new Map();
@@ -31,6 +50,9 @@ function createMockCordisContext() {
   return {
     tools: {
       register(def) {
+        if (def?.output?.schema) {
+          assertSupportedSchema(def.output.schema, `${def.name}.output.schema`);
+        }
         tools.set(def.name, def);
       },
       get(name) {

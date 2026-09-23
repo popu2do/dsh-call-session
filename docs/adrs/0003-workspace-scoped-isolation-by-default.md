@@ -6,6 +6,9 @@
 - **Consulted**: Security Ops, Multi-Repo Maintainers
 - **Informed**: All Subagents, Multi-Session Operators
 
+> **Human Canvas Transparency Notice**:
+> The strict workspace isolation defined here governs Agent autonomous tools (`board_list`, `session_query`). Per [ADR-0013](./0013-human-canvas-global-transparency-vs-agent-workspace-isolation.md), the human Web collaboration canvas defaults to global multi-workspace transparency.
+
 ---
 
 ## 1. Context and Problem Statement

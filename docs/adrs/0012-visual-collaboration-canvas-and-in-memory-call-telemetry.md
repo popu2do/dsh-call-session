@@ -1,10 +1,14 @@
 # ADR-0012: Visual Collaboration Canvas and In-Memory Call Telemetry Architecture
 
-- **Status**: Accepted
+- **Status**: Accepted (Workspace isolation superseded by ADR-0013)
 - **Date**: 2026-09-09
 - **Deciders**: Architect, Core Engineering Team, QA Automation Lead
 - **Consulted**: Frontend Engineering Team, UX Reviewer, Security Auditor
 - **Informed**: All Plugin Consumers, Downstream Subagents, DSH Web Users
+
+> **Superseded & Terminology Notice**:
+> The workspace isolation mechanism (`crossWorkspace` filter toggle) in Section 4.2 was formally superseded by [ADR-0013](./0013-human-canvas-global-transparency-vs-agent-workspace-isolation.md) (Human Canvas Global Transparency).
+> User-facing and documentation terminology strictly follows `CONTEXT.md`: use **看板数据 / Canvas Data** and **调用轨迹 / Call Trace**, and avoid telemetry jargon.
 
 ---
 
