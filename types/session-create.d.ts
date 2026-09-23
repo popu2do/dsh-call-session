@@ -1,5 +1,15 @@
 import { SessionStatus } from './session-call.js';
 import { SessionDirectory } from './session-directory.js';
+import type { DshHostGateway } from '../lib/dsh-host-gateway.js';
+import type { SessionSafeguard, AdmissionLease } from '../lib/session-safeguard.js';
+import type { PeerBootstrapper } from '../lib/peer-bootstrap.js';
+
+export type {
+  DshHostGateway,
+  SessionSafeguard,
+  AdmissionLease,
+  PeerBootstrapper
+};
 
 export interface SessionCreateArgs {
   /** 同级会话标题，不包含特权前缀与换行符。 */
@@ -43,6 +53,9 @@ export interface PeerSessionFactoryOptions {
   logger?: any;
   boardStore?: any;
   directory?: SessionDirectory;
+  gateway?: DshHostGateway;
+  safeguard?: SessionSafeguard;
+  bootstrapper?: PeerBootstrapper;
   config?: any;
 }
 
@@ -58,6 +71,9 @@ export declare class PeerSessionFactory {
   options: PeerSessionFactoryOptions;
   logger: any;
   directory: SessionDirectory;
+  gateway: DshHostGateway;
+  safeguard: SessionSafeguard;
+  bootstrapper: PeerBootstrapper;
 
   constructor(ctx: any, options?: PeerSessionFactoryOptions);
 
