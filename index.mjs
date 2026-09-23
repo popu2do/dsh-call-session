@@ -38,11 +38,7 @@ import {
 import {
   PeerSessionFactory,
   executeSessionCreate,
-  PEER_SESSION_CONSTANTS,
-  DshHostGateway,
-  SessionSafeguard,
-  AdmissionLease,
-  PeerBootstrapper
+  PEER_SESSION_CONSTANTS
 } from './lib/session-create.mjs';
 import {
   CallTelemetryRingBuffer,
@@ -143,10 +139,6 @@ export {
   PeerSessionFactory,
   executeSessionCreate,
   PEER_SESSION_CONSTANTS,
-  DshHostGateway,
-  SessionSafeguard,
-  AdmissionLease,
-  PeerBootstrapper,
   CallTelemetryRingBuffer,
   getCanvasTelemetry,
   getCallTelemetry,

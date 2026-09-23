@@ -44,6 +44,18 @@ function createMockBoardStore({ shouldFail = false } = {}) {
       const item = { ...payload, id: payload.id || 'mock-post-1' };
       posts.push(item);
       return item;
+    },
+    clear({ id, topic } = {}) {
+      if (id) {
+        const idx = posts.findIndex(p => p.id === id);
+        if (idx !== -1) posts.splice(idx, 1);
+      } else if (topic) {
+        let i = posts.length;
+        while (i--) {
+          if (posts[i].topic === topic) posts.splice(i, 1);
+        }
+      }
+      return { success: true };
     }
   };
 }
@@ -343,4 +355,31 @@ test('PeerBootstrapper class: supports instance and static methods', () => {
   });
   assert.equal(staticRes.status, 'running');
   assert.ok(staticRes.bootstrapPostId);
+});
+
+test('ADR-0025 不变量 4 (Zero-Trace Blackboard Hygiene): 会话就绪公告具有 1 小时确定性 TTL 且支持级联清理零残留', () => {
+  const store = createMockBoardStore();
+  const agent = createMockAgent();
+
+  const res = bootstrapPeerSession({
+    targetAgent: agent,
+    boardStore: store,
+    callerSessionId: 'caller-hygiene',
+    callerTitle: 'HygieneCaller',
+    callerWorkspace: 'c:/workspace/hygiene',
+    targetGeneration: 1,
+    finalTitle: 'HygienePeer'
+  });
+
+  assert.ok(res.bootstrapPostId);
+  assert.equal(store.posts.length, 1);
+
+  const post = store.posts[0];
+  assert.equal(post.topic, 'session:bootstrap');
+  assert.equal(post.expiresAtMs - post.createdAtMs, 3600 * 1000, '必须严格设定 1 小时确定性 TTL');
+
+  // 模拟生命周期清理联动：通过 boardStore.clear({ id }) 级联清理就绪公告
+  const clearRes = store.clear({ id: res.bootstrapPostId });
+  assert.equal(clearRes.success, true);
+  assert.equal(store.posts.length, 0, '清理后必须保持零残留');
 });
