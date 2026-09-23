@@ -73,7 +73,7 @@ session_create 作为多智能体进程内协作的核心原语，负责根据�
 - 交付单元测试：tests/session-safeguard.test.mjs。
 
 #### 支柱 3：PeerBootstrapper 平级会话启动协同器 (lib/peer-bootstrap.mjs)
-- 封装初始消息装配：formatInitialMessage（清洗换行符、首行提取、上下文引用 > Context Ref: #post-xxx 注入、120 字符摘要生成及标准 UserMessage 装配）。
+- 封装初始消息装配：formatInitialMessage（换行与连续空白归一化折叠、上下文引用 > Context Ref: #post-xxx 注入、120 字符摘要生成及标准 UserMessage 装配）。
 - 封装消息派发：dispatchInitialMessage（安全调用 dispatchNativeMessage 并确定运行态）。
 - 封装引导公告：publishBootstrapNotice（向公共黑板安全发布 session:bootstrap，设定 1 小时 TTL 与溯源元数据）。
 - 交付单元测试：tests/peer-bootstrap.test.mjs。
