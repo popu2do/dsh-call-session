@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { SessionDirectory } from '../lib/session-directory.mjs';
+import { SessionDirectory, executeSessionQuery } from '../lib/session-directory.mjs';
+import { normalizeWorkspace } from '../lib/board-store.mjs';
 
 function createMockCordis(liveAgents = [], archivedIds = []) {
   const archivedSet = new Set(archivedIds);
@@ -215,4 +216,65 @@ test('SessionDirectory: resolveTarget with exact match, prefix match, and guards
     () => dir.resolveTarget('session-00000000', { callerSessionId: 'caller-1' }),
     /\[TargetNotFound\]/
   );
+});
+
+test('SessionDirectory.prototype.query: 完整状态统计与元数据汇总契约', () => {
+  const wsA = 'c:/workspace/proj-a';
+  const wsB = 'c:/workspace/proj-b';
+
+  const a1 = createMockAgent({ id: 's-running-1', status: 'running', cwd: wsA });
+  const a2 = createMockAgent({ id: 's-running-2', status: 'running', cwd: wsA });
+  const a3 = createMockAgent({ id: 's-idle-1', status: 'idle', cwd: wsA });
+  const a4 = createMockAgent({ id: 's-other-ws', status: 'running', cwd: wsB });
+
+  const ctx = createMockCordis([a1, a2, a3, a4]);
+  const dir = new SessionDirectory(ctx);
+
+  const callerAgent = createMockAgent({ id: 's-caller', cwd: wsA });
+  const res = dir.query({}, { agent: callerAgent });
+
+  assert.equal(res.success, true);
+  assert.equal(res.count, 3);
+  assert.equal(res.totalCount, 3);
+  assert.equal(res.activeCount, 2);
+  assert.equal(res.idleCount, 1);
+  assert.equal(res.scope, normalizeWorkspace(wsA));
+  assert.equal(res.sessions.length, 3);
+
+  // 跨工作区查询
+  const globalRes = dir.query({ cross_workspace: true }, { agent: callerAgent });
+  assert.equal(globalRes.count, 4);
+  assert.equal(globalRes.totalCount, 4);
+  assert.equal(globalRes.activeCount, 3);
+  assert.equal(globalRes.idleCount, 1);
+  assert.equal(globalRes.scope, 'global');
+
+  // 未提供 callerAgent 时回退到 normalizeWorkspace(process.cwd())
+  const fallbackRes = dir.query({}, {});
+  assert.equal(fallbackRes.scope, normalizeWorkspace(process.cwd()));
+});
+
+test('executeSessionQuery 模块函数导出: 兼容对象参数与位置参数重载', () => {
+  const ws = 'c:/workspace/proj-a';
+  const a1 = createMockAgent({ id: 's-fn-1', status: 'running', cwd: ws });
+  const a2 = createMockAgent({ id: 's-fn-2', status: 'idle', cwd: ws });
+
+  const ctx = createMockCordis([a1, a2]);
+  const caller = createMockAgent({ id: 's-caller', cwd: ws });
+
+  // 1. 对象包装形式
+  const objRes = executeSessionQuery({
+    ctx,
+    args: { running_only: true },
+    exec: { agent: caller }
+  });
+  assert.equal(objRes.count, 1);
+  assert.equal(objRes.activeCount, 1);
+  assert.equal(objRes.idleCount, 0);
+
+  // 2. 位置参数形式
+  const posRes = executeSessionQuery(ctx, {}, { agent: caller });
+  assert.equal(posRes.count, 2);
+  assert.equal(posRes.activeCount, 1);
+  assert.equal(posRes.idleCount, 1);
 });

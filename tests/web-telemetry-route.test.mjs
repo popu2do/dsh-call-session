@@ -8,7 +8,11 @@ import {
   authenticatedWebRoutes,
   createTelemetryHandler,
   TELEMETRY_ROUTE_PATH,
-  WEB_SERVER_KEYS
+  WEB_SERVER_KEYS,
+  getCanvasTelemetry,
+  computeSessionShortId,
+  isHumanReadableTitle,
+  resolveCanvasSessionDisplayTitle
 } from '../lib/web-telemetry-route.mjs';
 import { CallTelemetryRingBuffer } from '../lib/call-telemetry.mjs';
 import { apply } from '../index.mjs';
@@ -465,4 +469,46 @@ test('Web Telemetry Route: apply 挂载遥测路由且不唤醒 Agent', async ()
   for (const leftover of [tmpBoard, `${tmpBoard}.bak`]) {
     if (fs.existsSync(leftover)) fs.rmSync(leftover, { force: true });
   }
+});
+
+test('Web Telemetry Route: 快照聚合器独立性与全景数据协同验证', async () => {
+  // 1. 验证 getCanvasTelemetry 及其辅助纯函数从 lib/web-telemetry-route.mjs 独立导出
+  assert.equal(typeof getCanvasTelemetry, 'function', 'getCanvasTelemetry 必须在 web-telemetry-route 中原生导出');
+  assert.equal(typeof computeSessionShortId, 'function', 'computeSessionShortId 必须在 web-telemetry-route 中原生导出');
+  assert.equal(typeof isHumanReadableTitle, 'function', 'isHumanReadableTitle 必须在 web-telemetry-route 中原生导出');
+  assert.equal(typeof resolveCanvasSessionDisplayTitle, 'function', 'resolveCanvasSessionDisplayTitle 必须在 web-telemetry-route 中原生导出');
+
+  // 2. 验证聚合器直接协同 SessionDirectory 与 CallTelemetryRingBuffer
+  const ringBuffer = new CallTelemetryRingBuffer(20);
+  ringBuffer.record({
+    callerSessionId: 'agent-standalone-1',
+    targetSessionId: 'agent-standalone-2',
+    callerWorkspace: 'c:/workspace/app',
+    targetWorkspace: 'c:/workspace/app',
+    messagePayload: 'standalone aggregator test'
+  });
+
+  const mockCtx = {
+    callTelemetry: ringBuffer,
+    agents: {
+      list: () => [
+        { id: 'agent-standalone-1', status: 'running', session: { id: 'agent-standalone-1', title: 'Standalone-1', cwd: 'c:/workspace/app' } },
+        { id: 'agent-standalone-2', status: 'idle', session: { id: 'agent-standalone-2', title: 'Standalone-2', cwd: 'c:/workspace/app' } }
+      ],
+      get: (id) => (id === 'agent-standalone-1'
+        ? { id: 'agent-standalone-1', status: 'running', session: { id: 'agent-standalone-1', title: 'Standalone-1', cwd: 'c:/workspace/app' } }
+        : { id: 'agent-standalone-2', status: 'idle', session: { id: 'agent-standalone-2', title: 'Standalone-2', cwd: 'c:/workspace/app' } })
+    },
+    get(key) {
+      if (key === 'callTelemetry') return ringBuffer;
+      return undefined;
+    }
+  };
+
+  const snapshot = await getCanvasTelemetry(mockCtx, { workspace: 'c:/workspace/app', crossWorkspace: true });
+  assert.ok(typeof snapshot.timestamp === 'number');
+  assert.equal(snapshot.sessions.length, 2);
+  assert.equal(snapshot.calls.length, 1);
+  assert.equal(snapshot.metrics.totalSessions, 2);
+  assert.equal(snapshot.metrics.activeCalls, 1);
 });

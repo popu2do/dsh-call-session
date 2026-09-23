@@ -396,3 +396,15 @@ test('session_query Dual-Layer Render: 符合 ADR-0005 标准 Markdown 结构化
   assert.ok(emptyRendered[0].text.includes('No active sessions found.') || emptyRendered[0].text.includes('未找到匹配的会话'));
   assert.ok(emptyRendered[0].text.includes('0'));
 });
+
+test('session-query.mjs Facade: 纯重导出与 session-directory.mjs 引用一致性', async () => {
+  const dirModule = await import('../lib/session-directory.mjs');
+  const queryModule = await import('../lib/session-query.mjs');
+
+  assert.equal(queryModule.SessionDirectory, dirModule.SessionDirectory);
+  assert.equal(queryModule.getArchivedSessionIds, dirModule.getArchivedSessionIds);
+  assert.equal(queryModule.resolveSessionCwd, dirModule.resolveSessionCwd);
+  assert.equal(queryModule.resolveSessionTitle, dirModule.resolveSessionTitle);
+  assert.equal(queryModule.resolveAgentsService, dirModule.resolveAgentsService);
+  assert.equal(queryModule.executeSessionQuery, dirModule.executeSessionQuery);
+});

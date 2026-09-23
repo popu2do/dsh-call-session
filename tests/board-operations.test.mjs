@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import path from 'node:path';
 import os from 'node:os';
 import fs from 'node:fs/promises';
-import { BoardStore, normalizeExecParams } from '../lib/board-store.mjs';
+import { BoardStore, BoardToolsAdapter, normalizeExecParams } from '../lib/board-store.mjs';
 
 function createMockAgent(id, {
   title = 'Test Agent',
@@ -225,4 +225,161 @@ test('BoardStore.executeList: 异常分支返回值严格符合 ADR-0016 §4.2 �
   const failGlobal = await badStore.executeList({ args: { cross_workspace: true } });
   assert.equal(failGlobal.scope, 'global');
   assert.equal(failGlobal.titlesOnly, true);
+});
+
+test('BoardToolsAdapter: 独立实例化与门面完整契约 (executePost / executeList / executeClear / getAuthorReminder)', async () => {
+  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'dsh-board-adapter-'));
+  const storagePath = path.join(tmpDir, 'board.json');
+  const store = new BoardStore({ storagePath, debounceMs: 0 });
+  const adapter = new BoardToolsAdapter(store, { config: { locale: 'zh' } });
+
+  // 1. 验证 store._adapter 默认为 BoardToolsAdapter 实例
+  assert.ok(store._adapter instanceof BoardToolsAdapter);
+  assert.equal(store._adapter.store, store);
+
+  const agentAlpha = createMockAgent('agent-alpha', { title: 'Alpha Worker', cwd: '/workspaces/proj-a' });
+  const agentBeta = createMockAgent('agent-beta', { title: 'Beta Worker', cwd: '/workspaces/proj-b' });
+
+  // 2. adapter.executePost 发布条目并验证返回值结构与消息双语渲染
+  const postRes = await adapter.executePost({
+    args: {
+      topic: 'task:compile',
+      content: 'Compile source files',
+      tags: ['compile', 'p1'],
+      ttl: 600
+    },
+    exec: { agent: agentAlpha }
+  });
+  assert.equal(postRes.success, true);
+  assert.ok(postRes.postId.startsWith('post-'));
+  assert.equal(postRes.topic, 'task:compile');
+  assert.equal(postRes.authorSessionId, 'agent-alpha');
+  assert.equal(postRes.scope, '/workspaces/proj-a');
+  assert.ok(postRes.message.includes('已发布条目'));
+
+  // 验证底层纯存储已包含该条目
+  const rawPost = store.get(postRes.postId);
+  assert.ok(rawPost);
+  assert.equal(rawPost.content, 'Compile source files');
+
+  // 3. adapter.executeList 验证工作区过滤与 crossWorkspace
+  const listAlpha = await adapter.executeList({
+    args: {},
+    exec: { agent: agentAlpha }
+  });
+  assert.equal(listAlpha.success, true);
+  assert.equal(listAlpha.count, 1);
+  assert.equal(listAlpha.scope, '/workspaces/proj-a');
+
+  const listBeta = await adapter.executeList({
+    args: {},
+    exec: { agent: agentBeta }
+  });
+  assert.equal(listBeta.count, 0);
+
+  const listCross = await adapter.executeList({
+    args: { cross_workspace: true },
+    exec: { agent: agentBeta }
+  });
+  assert.equal(listCross.count, 1);
+
+  // 4. adapter.getAuthorReminder 验证作者提醒生成
+  const reminder = adapter.getAuthorReminder(agentAlpha);
+  assert.ok(reminder.includes('你在公共黑板上有 1 条尚未清理的有效条目'));
+  assert.ok(reminder.includes('task:compile'));
+
+  // 5. adapter.executeClear 验证条目归档清理
+  const clearRes = await adapter.executeClear({
+    args: { id: postRes.postId, mode: 'dismiss' },
+    exec: { agent: agentAlpha }
+  });
+  assert.equal(clearRes.success, true);
+  assert.equal(clearRes.clearedCount, 1);
+  assert.equal(clearRes.action, 'archive');
+  assert.ok(clearRes.message.includes('已归档 1 条'));
+  assert.equal(store.get(postRes.postId)?.status, 'archived');
+
+  // 6. 清理后提醒为空
+  assert.equal(adapter.getAuthorReminder(agentAlpha), '');
+
+  await store.close();
+  await fs.rm(tmpDir, { recursive: true, force: true });
+});
+
+test('BoardToolsAdapter: 保留主题拦截与入参防御', async () => {
+  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'dsh-board-adapter-err-'));
+  const storagePath = path.join(tmpDir, 'board.json');
+  const store = new BoardStore({ storagePath, debounceMs: 0 });
+  const adapter = new BoardToolsAdapter(store);
+  const agent = createMockAgent('agent-err', { cwd: '/workspaces/err' });
+
+  // 1. 保留主题拦截
+  const resReserved = await adapter.executePost({
+    args: { topic: 'telemetry:metrics', content: 'telemetry data' },
+    exec: { agent }
+  });
+  assert.equal(resReserved.success, false);
+  assert.ok(resReserved.error.includes('[ReservedTopic]'));
+
+  // 2. 清理缺少 id 与 topic 报错拦截
+  const resClearInvalid = await adapter.executeClear({
+    args: {},
+    exec: { agent }
+  });
+  assert.equal(resClearInvalid.success, false);
+  assert.ok(resClearInvalid.error.includes('[InvalidParameter]'));
+
+  // 3. store.clear 异常容灾
+  const faultyStore = Object.create(BoardStore.prototype);
+  faultyStore.clear = () => { throw new Error('底层存储异常'); };
+  faultyStore.resolveCallerContext = () => ({ callerWorkspace: '/workspaces/faulty' });
+  const faultyAdapter = new BoardToolsAdapter(faultyStore);
+  const resFaultyClear = await faultyAdapter.executeClear({
+    args: { id: 'some-id' },
+    exec: { agent }
+  });
+  assert.equal(resFaultyClear.success, false);
+  assert.equal(resFaultyClear.clearedCount, 0);
+  assert.ok(resFaultyClear.error.includes('底层存储异常'));
+
+  await store.close();
+  await fs.rm(tmpDir, { recursive: true, force: true });
+});
+
+test('BoardToolsAdapter: 主题校验收口与 BoardStore 纯存储分离', async () => {
+  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'dsh-board-pure-store-'));
+  const storagePath = path.join(tmpDir, 'board.json');
+  const store = new BoardStore({ storagePath, debounceMs: 0 });
+  const adapter = new BoardToolsAdapter(store);
+
+  // 1. 底层纯存储 rawPost 不包含主题保留逻辑，纯粹作为 Map 与持久化存储
+  const rawRecord = { id: 'post-raw-1', topic: 'telemetry:internal', content: 'raw internal metrics', status: 'active' };
+  const saved = store.rawPost(rawRecord);
+  assert.equal(saved.id, 'post-raw-1');
+  assert.equal(store.get('post-raw-1')?.topic, 'telemetry:internal');
+
+  // 2. adapter.validateTopic 独立校验能力
+  assert.throws(() => adapter.validateTopic('telemetry:call'), /\[ReservedTopic\]/);
+  assert.throws(() => adapter.validateTopic('task:telemetry'), /\[ReservedTopic\]/);
+  assert.doesNotThrow(() => adapter.validateTopic('task:deploy'));
+
+  // 3. adapter.post 拦截保留主题并委托正常条目
+  assert.throws(() => adapter.post({ id: 'p-bad', topic: 'call:steer', content: 'bad' }), /\[ReservedTopic\]/);
+  const legalPost = adapter.post({ id: 'p-legal', topic: 'task:build', content: 'legal build' });
+  assert.equal(legalPost.id, 'p-legal');
+  assert.equal(store.get('p-legal')?.content, 'legal build');
+
+  // 4. adapter.filterDirtyPosts 清洗脏数据
+  const dirtyPosts = [
+    { id: 'p1', topic: 'task:audit' },
+    { id: 'p2', topic: 'telemetry:trace' },
+    { id: 'p3', topic: 'call:steer' },
+    { id: 'p4', topic: 'spec:release' }
+  ];
+  const { cleanedPosts, dirtyCount } = adapter.filterDirtyPosts(dirtyPosts);
+  assert.equal(dirtyCount, 2);
+  assert.deepEqual(cleanedPosts.map(p => p.id), ['p1', 'p4']);
+
+  await store.close();
+  await fs.rm(tmpDir, { recursive: true, force: true });
 });

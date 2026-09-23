@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import {
@@ -1030,5 +1030,57 @@ test('new session 与未产生调用的新会话在看板中正常呈现 (PRD 2.
   assert.ok(ws, '必须包含所属工作区分组容器');
   assert.ok(ws.sessionIds.includes('session-new-born-1234'));
   assert.ok(ws.sessionIds.includes('session-existing-5678'));
+});
+
+test('CallTelemetryRingBuffer: DRY 路径规范化与 ESM 循环依赖彻底阻断 (ADR-0012 Invariant 3)', async () => {
+  const filePath = path.resolve('lib/call-telemetry.mjs');
+  const fileContent = readFileSync(filePath, 'utf8');
+
+  // 1. DRY 校验：公共纯函数 normalizeWorkspace 必须通过公共路径引用，严禁就地复制代码
+  assert.ok(
+    /from\s+['"][^'"]*board-store(\.mjs)?['"]/i.test(fileContent),
+    'lib/call-telemetry.mjs 必须通过公共路径导入 normalizeWorkspace'
+  );
+  assert.ok(
+    !/function\s+normalizeWorkspace\s*\(/i.test(fileContent),
+    'lib/call-telemetry.mjs 严禁就地复制声明 normalizeWorkspace'
+  );
+
+  // 2. 循环依赖彻底阻断：call-telemetry.mjs 绝对禁止在顶层静态 import 或 export from web-telemetry-route.mjs
+  assert.ok(
+    !/from\s+['"][^'"]*web-telemetry-route(\.mjs)?['"]/i.test(fileContent),
+    'lib/call-telemetry.mjs 绝不能在 ESM 顶层静态引入 web-telemetry-route.mjs（避免循环依赖）'
+  );
+
+  // 3. 动态按需桥接校验：getCanvasTelemetry 必须通过动态 import 按需求值
+  assert.ok(
+    /import\(['"][^'"]*web-telemetry-route(\.mjs)?['"]\)/.test(fileContent),
+    'lib/call-telemetry.mjs 必须采用动态 import 延迟桥接快照聚合器'
+  );
+
+  // 4. 环形缓冲记录与工作区过滤功能正常运行
+  const buffer = new CallTelemetryRingBuffer(10);
+  const rec = buffer.record({
+    callerSessionId: 'sess-pure-1',
+    callerWorkspace: 'C:\\pure\\project\\',
+    targetSessionId: 'sess-pure-2',
+    targetWorkspace: 'c:/pure/project',
+    messagePayload: 'hello pure ringbuffer'
+  });
+  assert.equal(rec.callerWorkspace, 'c:/pure/project');
+  assert.equal(rec.targetWorkspace, 'c:/pure/project');
+
+  const queryRes = buffer.query({ workspace: 'C:\\pure\\project' });
+  assert.equal(queryRes.length, 1);
+  assert.equal(queryRes[0].id, rec.id);
+
+  // 5. 动态桥接全景拓扑快照聚合调用验证
+  const mockCtx = createMockCtx({
+    agentsList: [createMockAgent('sess-snap-1', { title: 'Snap Agent 1' })]
+  });
+  const snapshot = await getCanvasTelemetry(mockCtx, { workspace: 'c:/pure/project' });
+  assert.ok(snapshot && Array.isArray(snapshot.sessions), '动态桥接快照返回有效全景数据结构');
+  assert.equal(typeof computeSessionShortId, 'function', '向后兼容导出 computeSessionShortId');
+  assert.equal(typeof isHumanReadableTitle, 'function', '向后兼容导出 isHumanReadableTitle');
 });
 
