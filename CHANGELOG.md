@@ -7,6 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.6] - 2026-09-23
+
+### Summary
+Deep module architecture refactoring and peer session creation decoupling release. Folds shallow facade modules, separates storage engine from tool execution, extracts pure mathematical geometric routing and viewport clamping, and decouples the 920-line `session_create` monolith into a hermetic DSH host gateway, transactional admission safeguard lease, and peer bootstrap lifecycle coordinator (ADR-0024 & ADR-0025).
+
+### Added
+- **DSH Host Gateway (`lib/dsh-host-gateway.mjs`, ADR-0025)**:
+  - Encapsulates Cordis host service discovery (`agents`, `agentDefaultModel`, `sessionController`, `agentPresets`, `sessionTitle`, `workspaceRegistry`).
+  - Hermetic `createRootAgent` shielding deep-frozen host objects (`Object.isFrozen`) and stripping parent session origin metadata.
+  - Three-tier model cascade resolution (`resolveEffectiveModel`) and composition setup hook chaining (`resolvePresetSetup`).
+  - Durable `session/title` event persistence and workspace attachment helpers.
+  - Added dedicated unit test suite (`tests/dsh-host-gateway.test.mjs`, 18 tests).
+- **Session Admission Safeguard (`lib/session-safeguard.mjs`, ADR-0025)**:
+  - Concentrates sliding-window rate limiting (5/min), concurrent running quota (max 5 per workspace), and generation depth cutoff (<= 2).
+  - Transactional `AdmissionLease` with optimistic in-flight reservation, `lease.commit()`, and zero-leak automatic `lease.release()` rollback.
+  - Added dedicated unit test suite (`tests/session-safeguard.test.mjs`, 9 tests).
+- **Peer Session Bootstrapper (`lib/peer-bootstrap.mjs`, ADR-0025)**:
+  - Extracted initial task message formatting, context reference normalization (`#post-xxx`), 120-character summary truncation, and safe non-blocking dispatch.
+  - Public blackboard lifecycle bootstrap announcement (`session:bootstrap`) with 1-hour TTL and origin metadata.
+  - Added dedicated unit test suite (`tests/peer-bootstrap.test.mjs`, 16 tests).
+- **Pure Canvas Geometry & Viewport Clamping Modules (`lib/client.js`, ADR-0024)**:
+  - Extracted pure mathematical geometry routing (ellipse intersection, self-loops, channel-split routing, blackboard gutter).
+  - Viewport dual-clamping and macro framing algorithms decoupled from React/DOM runtime.
+  - Added dedicated unit test suites (`tests/canvas-geometry-routing.test.mjs`, `tests/canvas-viewport-clamping.test.mjs`).
+
+### Changed
+- Re-architected `PeerSessionFactory` (`lib/session-create.mjs`) from a 923-line procedural monolith into a lean ~340-line composition coordinator.
+- Folded shallow `session-query.mjs` facade directly into `SessionDirectory.prototype.query` while maintaining 100% backward-compatible re-exports.
+- Decoupled `BoardToolsAdapter` from `BoardStore` to isolate tool parsing and reserved topic filtering from the pure storage engine.
+- Realigned `CallTelemetryRingBuffer` to eliminate static ESM circular dependencies and inverted data source imports.
+
+### Fixed
+- Fixed rate limit and in-flight creation state leaks on session creation failures via atomic `AdmissionLease`.
+- Fixed terminology breaches and duplicate rate limiting implementations identified in code review.
+- Fixed in-flight reservation accounting for untitled session creation requests with orthogonal leaseId tracking.
+
 ## [0.1.5] - 2026-09-21
 
 ### Summary
