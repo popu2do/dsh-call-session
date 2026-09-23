@@ -50,6 +50,7 @@ ADRs transition through the following states:
 | **ADR-0022** | Verifiable Architecture Topology Artifacts and Agent Discipline Decoupling | **Accepted** | 2026-09-18 | `.githooks/pre-commit`, `AGENTS.md`, `docs/architecture/` | [0022-verifiable-architecture-topology-and-agent-discipline-decoupling.md](./0022-verifiable-architecture-topology-and-agent-discipline-decoupling.md) |
 | **ADR-0023** | Bilingual Localization Architecture and Standardized English Error Protocol | **Accepted** | 2026-09-21 | `lib/locales/index.mjs`, `index.mjs`, `lib/client.js` | [0023-bilingual-localization-and-english-error-standardization.md](./0023-bilingual-localization-and-english-error-standardization.md) |
 | **ADR-0024** | Deep Module Architecture Refactoring, Shallow Query Facade Folding, and Storage-Tool Adapter Decoupling | **Accepted** | 2026-09-23 | `lib/client.js`, `lib/session-directory.mjs`, `lib/board-store.mjs`, `lib/web-telemetry-route.mjs` | [0024-deep-module-architecture-refactoring-and-shallow-facade-folding.md](./0024-deep-module-architecture-refactoring-and-shallow-facade-folding.md) |
+| **ADR-0025** | Peer Session Creation Host Gateway, Safeguard Lease, and Bootstrap Decoupling | **Accepted** | 2026-09-23 | `lib/dsh-host-gateway.mjs`, `lib/session-safeguard.mjs`, `lib/peer-bootstrap.mjs`, `lib/session-create.mjs` | [0025-peer-session-creation-gateway-safeguard-and-bootstrap-decoupling.md](./0025-peer-session-creation-gateway-safeguard-and-bootstrap-decoupling.md) |
 
 ---
 
