@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.7] - 2026-10-10
+
+### Summary
+DeepSeek Harness 2.0 (0.2.x) runtime compatibility, collaboration canvas redesign, and deep lineage analysis release. Fully adapts to DSH 2.0 host slot supervision and HMR invariants, redesigns session cards to 192x52 rounded rectangles with closed-form outer-tangent edge routing (ADR-0026), streamlines the canvas toolbar with localStorage-persisted dual lineage toggle (minimal/full), adopts pure vector SVG icons (zero emoji), and extracts the pure `analyzeLineage` graph traversal module.
+
+### Added
+- **DeepSeek Harness 2.0 (0.2.x) Runtime Compatibility**:
+  - Aligned with DSH 2.0 (`@deepseek-ai/dsh` `0.2.0-rc.2`) `SlotErrorBoundary` host supervision: preserved direct functional component registration (`CanvasView`) in `ctx.slots.register('conversation.view', ...)` without class component wrappers, preventing permanent slot abdication.
+  - Guarded React Hook baseline topology against HMR index drift across live reloads (useState 1..8, 19 useRefs, useState 9, useRef 20, useState 10, useState 11 edgeMode, 4 useEffects).
+  - Updated compatibility matrix in `README.md` and `README_ZH.md` to formally document verified support for DSH 2.0 (`0.2.0-rc.2`).
+  - Added automated `RELEASE_NOTES.md` extraction in release CI workflow to synchronize release notes from `CHANGELOG.md` to GitHub Releases.
+- **Rounded Card Geometry & Closed-Form Outer-Tangent Routing (ADR-0026)**:
+  - 192x52 rounded card geometry with canonical `rx=8`, `ry=8` corner radii, expanding title layout width to 160px.
+  - Mathematical closed-form outer-tangent ray-to-rounded-rectangle intersection for straight edge routing, eliminating 17.6px inward notch distortion.
+  - Gutter channel isolation: outer-column bypass routes for inter-column and intra-column calls without central column penetration.
+  - Dedicated routing geometry test suite extensions (`tests/canvas-geometry-routing.test.mjs`).
+- **Streamlined Toolbar & Dual Lineage Mode (ADR-0026)**:
+  - Streamlined top toolbar by removing redundant zoom buttons in favor of natural wheel/gesture zoom while retaining macro fit-view and session locating.
+  - Dual lineage rendering modes: minimal (`minimal` / default focus on 1-hop lineage with zero static edge noise) and full (`full` / show all inter-session lines).
+  - Browser `localStorage` persistence (`dsh_canvas_edge_mode_v1`) preserving mode selection across reloads.
+  - Pure vector SVG icons across all canvas controls, replacing emoji glyphs.
+- **Deep Lineage Analysis Module (`lib/client.js`, `types/client.d.ts`)**:
+  - Extracted pure graph traversal engine `analyzeLineage` from the `CanvasView` rendering tree for deterministic 1-hop ancestor and descendant lineage resolution.
+  - Exported complete TypeScript declarations and types in `types/client.d.ts`.
+  - Preserved strict React Hook ordering and functional component slot seams.
+- **Opt-in Cross-Workspace Peer Session Creation (ADR-0010)**:
+  - Supported explicit `args.workspace` in `session_create` with independent target workspace quota accounting and directory attachment.
+
+### Changed
+- Refactored `CanvasView` toolbar styling with unified CSS variable tokens and light/dark theme surface adaptability.
+- Updated domain terminology across `types/*.d.ts` and JSDoc annotations to align strictly with `CONTEXT.md` (看板数据, 公共黑板, 调用连线).
+
 ## [0.1.6] - 2026-09-23
 
 ### Summary
