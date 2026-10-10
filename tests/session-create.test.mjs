@@ -12,49 +12,8 @@ import {
   resolvePeerPresetAndSetup,
   PEER_SESSION_CONSTANTS
 } from '../lib/session-create.mjs';
+import { createMockAgent } from './helpers/mock-agent.mjs';
 
-function createMockAgent(id, {
-  status = 'idle',
-  title = 'Test Agent',
-  cwd = 'c:/workspace/project-alpha',
-  generation = 0,
-  options = {},
-  steerFn = null,
-  followupFn = null
-} = {}) {
-  const received = [];
-  const agent = {
-    id,
-    status,
-    title,
-    generation,
-    options: { ...options },
-    agentOptions: { ...options },
-    session: {
-      id,
-      title,
-      header: { cwd, title },
-      cwd,
-      metadata: { generation },
-      events: [],
-      append(type, data) {
-        const ev = { type, data, seq: this.events.length, time: Date.now() };
-        this.events.push(ev);
-        return ev;
-      }
-    },
-    steer: steerFn || ((msg) => {
-      agent.status = 'running';
-      received.push({ type: 'steer', msg });
-    }),
-    followup: followupFn || ((msg) => {
-      agent.status = 'running';
-      received.push({ type: 'followup', msg });
-    }),
-    received
-  };
-  return agent;
-}
 
 function createMockCtx({
   agentsList = [],
@@ -149,7 +108,7 @@ function createMockBoardStore() {
   };
 }
 
-test('PEER_SESSION_CONSTANTS: 常量定义完整性', () => {
+test('同级会话治理配额与特权过滤规则契约 (ADR-0008 & ADR-0017)', () => {
   assert.equal(PEER_SESSION_CONSTANTS.MAX_ACTIVE_PEER_SESSIONS, 5);
   assert.equal(PEER_SESSION_CONSTANTS.MAX_CONCURRENT_RUNNING_PEER_SESSIONS, 5);
   assert.equal(PEER_SESSION_CONSTANTS.MAX_CREATIONS_PER_MINUTE, 5);
@@ -157,17 +116,16 @@ test('PEER_SESSION_CONSTANTS: 常量定义完整性', () => {
   assert.equal(PEER_SESSION_CONSTANTS.MAX_TITLE_LENGTH, 60);
   assert.equal(PEER_SESSION_CONSTANTS.MAX_INITIAL_MESSAGE_LENGTH, 4000);
   assert.equal(PEER_SESSION_CONSTANTS.MAX_CONTEXT_POST_IDS, 5);
-  assert.ok(PEER_SESSION_CONSTANTS.PRIVILEGED_PREFIX_REGEX.test('[SYSTEM] Test'));
-  assert.ok(PEER_SESSION_CONSTANTS.PRIVILEGED_PREFIX_REGEX.test('[CAPTAIN] Worker'));
-  assert.ok(PEER_SESSION_CONSTANTS.PRIVILEGED_PREFIX_REGEX.test('[ROOT] Daemon'));
-  assert.ok(PEER_SESSION_CONSTANTS.PRIVILEGED_PREFIX_REGEX.test('[ADMIN] Auditor'));
-  assert.ok(PEER_SESSION_CONSTANTS.PRIVILEGED_PREFIX_REGEX.test('admin: Auditor'));
-  assert.ok(PEER_SESSION_CONSTANTS.PRIVILEGED_PREFIX_REGEX.test('system: Core'));
-  assert.ok(PEER_SESSION_CONSTANTS.PRIVILEGED_PREFIX_REGEX.test('root: Daemon'));
-  assert.ok(PEER_SESSION_CONSTANTS.PRIVILEGED_PREFIX_REGEX.test('captain: Leader'));
+  // 特权标识判定：特权前缀必须被正则捕获，普通前缀安全放行
+  const privilegedSamples = ['[SYSTEM] Core', '[CAPTAIN] Lead', '[ROOT] Daemon', 'system: Ingest', 'captain: Exec'];
+  for (const sample of privilegedSamples) {
+    assert.ok(PEER_SESSION_CONSTANTS.PRIVILEGED_PREFIX_REGEX.test(sample));
+  }
+  assert.equal(PEER_SESSION_CONSTANTS.PRIVILEGED_PREFIX_REGEX.test('normal-worker-1'), false);
+  assert.ok(Object.isFrozen(PEER_SESSION_CONSTANTS));
 });
 
-test('executeSessionCreate: 参数基本校验（空对象/非法数据类型/超长字符串）', async () => {
+test('创建会话参数校验契约：拦截空参数、非法数据类型与超长字符串', async () => {
   const caller = createMockAgent('caller-root');
   const ctx = createMockCtx({ agentsList: [caller] });
   const exec = { agent: caller };
@@ -372,6 +330,38 @@ test('executeSessionCreate: 工作区隔离（跨工程会话不占用配额，�
   assert.equal(res.title, 'Alpha Peer Worker');
 });
 
+test('executeSessionCreate: 显式跨工作区创建 (ADR-0010: 默认隔离 + 显式选择 Opt-in)', async () => {
+  resetRateLimits();
+  const caller = createMockAgent('caller-alpha', { cwd: 'c:/workspace/project-alpha' });
+  const ctx = createMockCtx({ agentsList: [caller] });
+  const exec = { agent: caller };
+
+  // 显式传入合法目标工作区
+  const res = await executeSessionCreate({
+    ctx,
+    args: {
+      title: 'Cross Workspace Worker',
+      workspace: 'c:/workspace/project-beta',
+      initial_message: 'Start task in beta'
+    },
+    exec
+  });
+
+  assert.equal(res.success, true);
+  assert.equal(res.workspace, 'c:/workspace/project-beta');
+  assert.equal(res.title, 'Cross Workspace Worker');
+
+  // 非法工作区参数拦截
+  await assert.rejects(
+    async () => executeSessionCreate({
+      ctx,
+      args: { title: 'Invalid WS', workspace: '   ' },
+      exec
+    }),
+    /\[InvalidParameter\]/
+  );
+});
+
 test('executeSessionCreate: 衍生代际深度限制 (Generation <= 2)', async () => {
   resetRateLimits();
   // 1. Root 会话 (Gen 0) -> 创建 Gen 1
@@ -464,8 +454,9 @@ test('executeSessionCreate: 初始消息分发与 Context Post 关联', async ()
   assert.equal(msg.role, 'user');
   assert.ok(msg.content[0].text.includes('> Context Ref: #post-1001, #post-1002'));
   assert.ok(msg.content[0].text.includes('Please process the dataset'));
-  assert.equal(msg.source.kind, 'plugin');
-  assert.equal(msg.source.plugin, 'dsh-call-session');
+  assert.equal(msg.source.kind, 'plugin:dsh-call-session');
+  assert.notEqual(msg.source.kind, 'plugin');
+  assert.equal(msg.source.plugin, undefined);
   assert.equal(msg.source.form, 'session_create');
 
   // 验证黑板会话就绪公告

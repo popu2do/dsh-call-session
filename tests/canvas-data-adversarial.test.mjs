@@ -43,7 +43,7 @@ function createMockWebServer() {
   };
 }
 
-test('遥测路由认证校验：401 未授权、403 禁止访问与 503 服务不可用拦截', async () => {
+test('看板数据路由认证校验：401 未授权、403 禁止访问与 503 服务不可用拦截', async () => {
   const rawServer = createMockWebServer();
   let underlyingHandlerInvocations = 0;
 
@@ -132,7 +132,7 @@ test('遥测路由认证校验：401 未授权、403 禁止访问与 503 服务�
   assert.equal(underlyingHandlerInvocations, 0, '未授权请求不调用底层数据处理器');
 });
 
-test('遥测路由 HTTP 请求方法限制：非 GET 请求返回 405', async () => {
+test('看板数据路由 HTTP 请求方法限制：非 GET 请求返回 405', async () => {
   let aggregatorExecuted = 0;
   const mockCtx = {
     agents: { list: () => [] },
@@ -343,7 +343,7 @@ test('环形缓冲区 FIFO 淘汰与内存占用测试', () => {
   assert.equal(emptyRec.status, 'active');
 });
 
-test('画板全景快照与遥测路由不产生被动唤醒', async () => {
+test('画板全景快照与看板数据路由不产生被动唤醒', async () => {
   // 5.1 构造包含 15 个会话的复杂集群，并对所有唤醒入口挂载高敏感度拦截监控 Spy
   const wakeUpCalls = [];
   function createSpyAgent(id, { status = 'idle', isSubagent = false } = {}) {
@@ -459,11 +459,11 @@ test('画板全景快照与遥测路由不产生被动唤醒', async () => {
   assert.equal(
     wakeUpCalls.length,
     0,
-    `全景画板快照与遥测路由在 ${CONCURRENT_RUNS * 2} 次并发拉取中触发了 ${wakeUpCalls.length} 次被动唤醒`
+    `全景画板快照与看板数据路由在 ${CONCURRENT_RUNS * 2} 次并发拉取中触发了 ${wakeUpCalls.length} 次被动唤醒`
   );
 
-  // 5.4 架构防御断言：遥测接口不注册为 Agent Tool
-  assert.equal(mockCtx.tools.has('canvas_telemetry'), false, '遥测接口不注册为 Agent Tool');
-  assert.equal(mockCtx.tools.has('get_telemetry'), false, '遥测接口不注册为 Agent Tool');
-  assert.equal(mockCtx.tools.has('telemetry_query'), false, '遥测接口不注册为 Agent Tool');
+  // 5.4 架构防御断言：看板数据内部接口不注册为 Agent Tool
+  assert.equal(mockCtx.tools.has('canvas_telemetry'), false, '看板数据接口不注册为 Agent Tool');
+  assert.equal(mockCtx.tools.has('get_telemetry'), false, '看板数据接口不注册为 Agent Tool');
+  assert.equal(mockCtx.tools.has('telemetry_query'), false, '看板数据接口不注册为 Agent Tool');
 });

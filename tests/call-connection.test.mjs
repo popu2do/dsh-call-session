@@ -13,38 +13,8 @@ import {
 import { executeSessionCall } from '../lib/session-call.mjs';
 import { AtomicBoardStore } from '../lib/board-store.mjs';
 import { apply } from '../index.mjs';
+import { createMockAgent, silentLogger } from './helpers/mock-agent.mjs';
 
-function createMockAgent(id, {
-  status = 'idle',
-  title = 'Test Agent',
-  cwd = 'c:/workspace/app',
-  steerFn = null,
-  followupFn = null,
-  sendFn = null
-} = {}) {
-  const received = [];
-  return {
-    id,
-    status,
-    title,
-    session: {
-      id,
-      title,
-      cwd
-    },
-    steer: steerFn || ((msg) => { received.push({ type: 'steer', msg }); }),
-    followup: followupFn || ((msg) => { received.push({ type: 'followup', msg }); }),
-    send: sendFn,
-    received
-  };
-}
-
-const silentLogger = Object.freeze({
-  debug() {},
-  info() {},
-  warn() {},
-  error() {}
-});
 
 function createMockCtx({
   agentsList = [],
@@ -233,7 +203,7 @@ test('CallTelemetryRingBuffer: 会话注销级联清理 (settleSession & cleanup
   assert.equal(buffer.query({ crossWorkspace: true })[0].messagePayload, 'msg 3');
 });
 
-test('session_call 端到端集成：执行单播时自动记录内存遥测快照', async () => {
+test('session_call 端到端集成：执行单播时自动记录调用轨迹快照', async () => {
   const caller = createMockAgent('caller-node-101', { cwd: 'c:/workspace/main', title: 'Captain' });
   const target = createMockAgent('target-node-202', { cwd: 'c:/workspace/main', title: 'Worker', status: 'running' });
 
@@ -258,7 +228,7 @@ test('session_call 端到端集成：执行单播时自动记录内存遥测快�
   assert.equal(callRes.success, true);
   assert.equal(callRes.deliveryMode, 'steer');
 
-  // 验证 RingBuffer 中已记录遥测
+  // 验证 RingBuffer 中已记录调用轨迹
   assert.equal(ringBuffer.size(), 1);
   const [record] = ringBuffer.query({ crossWorkspace: true });
   assert.equal(record.callerSessionId, 'caller-node-101');
@@ -295,7 +265,7 @@ test('getCanvasTelemetry: 零被动唤醒验证 (ADR-0012 Invariant 2 & Gate 2)'
   }
 
   // 断言被动唤醒次数为 0
-  assert.equal(wakeCount, 0, '读取画板遥测不触发 Agent 唤醒');
+  assert.equal(wakeCount, 0, '读取看板数据不触发 Agent 唤醒');
 });
 
 test('getCanvasTelemetry: 全景快照结构完整性与离线级联对齐', async () => {
@@ -379,7 +349,7 @@ test('Prompt KV Cache 防御与工具集物理隔离 (ADR-0012 Invariant 4 & Gat
   const storagePath = path.join(tmpDir, 'board.json');
   apply(ctx, { storagePath });
 
-  // 检验 ctx.tools 注册清单：遥测接口不暴露给大模型
+  // 检验 ctx.tools 注册清单：看板数据内部接口不暴露给大模型
   assert.ok(!registeredTools.has('getCanvasTelemetry'), '禁止将 getCanvasTelemetry 暴露为大模型工具');
   assert.ok(!registeredTools.has('call_telemetry'), '禁止将 call_telemetry 暴露为大模型工具');
   assert.ok(!registeredTools.has('canvas_telemetry'), '禁止将 canvas_telemetry 暴露为大模型工具');
@@ -499,7 +469,7 @@ test('CallTelemetryRingBuffer: 异常参数处理与 query 过滤组合', () => 
   assert.equal(limitQuery2[0].messagePayload, 'new active msg');
 });
 
-test('session_call: 遥测写入异常隔离', async () => {
+test('session_call: 调用连线写入异常隔离', async () => {
   const caller = createMockAgent('caller-node-safe', { cwd: 'c:/workspace/app', title: 'Caller' });
   const target = createMockAgent('target-node-safe', { cwd: 'c:/workspace/app', title: 'Target', status: 'idle' });
 
@@ -517,7 +487,7 @@ test('session_call: 遥测写入异常隔离', async () => {
 
   const exec = { agent: caller };
 
-  // session_call 捕获遥测异常，不阻断单播通信
+  // session_call 捕获连线写入异常，不阻断单播通信
   const callRes = await executeSessionCall({
     ctx,
     args: {
@@ -705,7 +675,7 @@ test('端到端生命周期总线级联清理测试 (Cordis session/archive, ses
 
   // 4. 触发 ctx dispose 清空
   await mockCtx.emit('dispose');
-  assert.equal(ringBuffer.size(), 0, 'dispose 之后清空调用遥测缓存');
+  assert.equal(ringBuffer.size(), 0, 'dispose 之后清空调用轨迹缓存');
 });
 
 test('getCanvasTelemetry: 多 Agent 拓扑聚合与并发查询不唤醒 Agent', async () => {
@@ -763,10 +733,10 @@ test('getCanvasTelemetry: 多 Agent 拓扑聚合与并发查询不唤醒 Agent',
   assert.equal(snap.metrics.activeCalls, 1);
 
   // 验证被动唤醒次数为 0
-  assert.equal(wakeEvents, 0, '并发遥测查询不产生被动唤醒');
+  assert.equal(wakeEvents, 0, '并发看板数据查询不产生被动唤醒');
 });
 
-test('内存遥测操作延迟验证', () => {
+test('内存调用连线操作延迟验证', () => {
   const buffer = new CallTelemetryRingBuffer(100);
 
   // 连续记录 5,000 条调用
@@ -788,7 +758,7 @@ test('内存遥测操作延迟验证', () => {
   const totalDuration = Date.now() - start;
 
   // 5,000 次写入与 100 次过滤查询耗时验证
-  assert.ok(totalDuration < 150, `内存遥测操作耗时在预期范围内，当前耗时: ${totalDuration}ms`);
+  assert.ok(totalDuration < 150, `内存调用连线操作耗时在预期范围内，当前耗时: ${totalDuration}ms`);
   assert.equal(buffer.size(), 100);
 });
 

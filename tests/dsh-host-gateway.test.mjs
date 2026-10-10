@@ -13,6 +13,7 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { createMockAgent, createMockSession } from './helpers/mock-agent.mjs';
 import {
   DshHostGateway,
   resolveCordisService,
@@ -26,51 +27,6 @@ import {
   attachWorkspace
 } from '../lib/dsh-host-gateway.mjs';
 
-function createMockSession({
-  id = 'session-test-1',
-  title = 'Test Session',
-  cwd = '/workspaces/project-1',
-  frozenHeader = false,
-  metadata = {}
-} = {}) {
-  const header = { cwd, title };
-  if (frozenHeader) {
-    Object.freeze(header);
-  }
-
-  const appendedEvents = [];
-  return {
-    id,
-    title,
-    header,
-    metadata: { ...metadata },
-    append: async (type, payload) => {
-      appendedEvents.push({ type, payload });
-      return { id: `evt-${appendedEvents.length}` };
-    },
-    _appendedEvents: appendedEvents
-  };
-}
-
-function createMockAgent({
-  id = 'agent-test-1',
-  title = 'Test Agent',
-  cwd = '/workspaces/project-1',
-  generation = 0,
-  options = {},
-  frozenHeader = false,
-  metadata = {}
-} = {}) {
-  const session = createMockSession({ id, title, cwd, frozenHeader, metadata });
-  return {
-    id,
-    title,
-    generation,
-    options,
-    session,
-    _session: session
-  };
-}
 
 // -----------------------------------------------------------------------------
 // 1. Cordis 宿主服务探测 (Host Service Probing)

@@ -192,12 +192,12 @@ test('Topology Visual Layout Engine: Multi-workspace columns and session node po
   assert.equal(layoutMulti.workspaceBounds.length, 2);
   assert.ok(layoutMulti.nodePositions['s1']);
   assert.ok(layoutMulti.nodePositions['s2']);
-  assert.ok(layoutMulti.nodePositions['s3'], 's3 must be positioned in multi-ws swimlane');
+  assert.ok(layoutMulti.nodePositions['s3'], 's3 must be positioned in multi-ws workspace column');
 
-  // Verify swimlanes do not overlap horizontally
+  // Verify workspace group columns do not overlap horizontally
   const ws1 = layoutMulti.workspaceBounds[0];
   const ws2 = layoutMulti.workspaceBounds[1];
-  assert.ok(ws2.x >= ws1.x + ws1.width, 'Workspace swimlanes must be laid out side-by-side without overlapping');
+  assert.ok(ws2.x >= ws1.x + ws1.width, 'Workspace group columns must be laid out side-by-side without overlapping');
 });
 
 test('Three-State Time-Decayed Connection Lines: getCallEdgeDecay and smooth Bezier calculation', () => {
@@ -727,7 +727,7 @@ test('Topology Visual Layout Engine: Blackboard strip, side-by-side workspace co
   assert.equal(layout.nodePositions['s3'].y, 240 + 2 * 72, 's3 cy must be 240 + 144 = 384');
 
   // Lane Beta: cx = 336 + 130 = 466
-  assert.equal(layout.nodePositions['s4'].x, 466, 's4 cx must be centered in swimlane at 466');
+  assert.equal(layout.nodePositions['s4'].x, 466, 's4 cx must be centered in workspace column at 466');
   assert.equal(layout.nodePositions['s4'].y, 240, 's4 cy must start at 240');
 
   assert.equal(layout.nodePositions['s5'].x, 466, 's5 cx must stay in single column at 466');
@@ -735,9 +735,9 @@ test('Topology Visual Layout Engine: Blackboard strip, side-by-side workspace co
 
   // 单列纵向居中不变式：同工作区列内的全部会话 x 坐标必须严格相同
   const alphaXSet = new Set(['s1', 's2', 's3'].map(id => layout.nodePositions[id].x));
-  assert.equal(alphaXSet.size, 1, 'All sessions in alpha swimlane must share identical x coordinate (single-column)');
+  assert.equal(alphaXSet.size, 1, 'All sessions in alpha workspace column must share identical x coordinate (single-column)');
   const betaXSet = new Set(['s4', 's5'].map(id => layout.nodePositions[id].x));
-  assert.equal(betaXSet.size, 1, 'All sessions in beta swimlane must share identical x coordinate (single-column)');
+  assert.equal(betaXSet.size, 1, 'All sessions in beta workspace column must share identical x coordinate (single-column)');
 });
 
 test('Three Relationship Edge Classes: Edge generation and boundary tolerance (missing author, empty context, non-existent sessions)', () => {
@@ -1002,7 +1002,7 @@ test('SVG Transform Invariants: Breathing indicator transform-box and transform-
   // 每个 session node 在椭圆外侧有一个状态指示灯 circle
   const runningCircle = circles.find(c => c.props && c.props.className === 'dsh-pulse-dot');
   assert.ok(runningCircle, 'Running session node must have status circle with dsh-pulse-dot className');
-  assert.equal(Number(runningCircle.props.r), 4.5, 'Pulse circle radius must be 4.5');
+  assert.equal(Number(runningCircle.props.r), 4, 'Pulse circle radius must be 4');
 
   const idleCircle = circles.find(c => c.props && c.props.className === '');
   assert.ok(idleCircle, 'Idle session node must have status circle without dsh-pulse-dot');
@@ -1166,7 +1166,7 @@ test('全量合规审查：三次贝塞尔外切、无重复节点渲染、工�
   assert.ok(clientSource.includes("z-index: 100;"), 'L2 Tooltip z-index 必须为 100 置顶');
   assert.ok(clientSource.includes("transform-box: fill-box !important;"), '呼吸指示灯必须声明 transform-box: fill-box !important');
 
-  // 窗口失焦与聚焦时遥测轮询退避与恢复的运行时动态行为验证
+  // 窗口失焦与聚焦时看板数据轮询退避与恢复的运行时动态行为验证
   let registeredListeners = {};
   let currentIntervalMs = null;
   let timerClearedCount = 0;
@@ -1250,7 +1250,7 @@ test('全量合规审查：三次贝塞尔外切、无重复节点渲染、工�
   const prevFetchCount = fetchCount;
   registeredListeners['focus']();
   assert.equal(currentIntervalMs, 1500, '重新聚焦后轮询周期必须恢复至 1500ms');
-  assert.ok(fetchCount > prevFetchCount, '重新聚焦时必须立即触发一次遥测拉取 fetchSnapshot');
+  assert.ok(fetchCount > prevFetchCount, '重新聚焦时必须立即触发一次看板数据拉取 fetchSnapshot');
 
   // 执行卸载 cleanup：断言解绑 blur 与 focus，并清理定时器
   mockEffectReact._cleanups.forEach((cleanup) => cleanup());
@@ -1764,7 +1764,7 @@ test('ADR-0013 看板默认全局透视、首列固定当前工作区、移除�
   assert.equal(isMatchingSession('', 's1'), false, '源 ID 为空时必须返回 false');
   assert.equal(isMatchingSession(null, 's1'), false, '源 ID 为 null 时安全返回 false');
 
-  // 2. 模拟双工作区遥测数据（/ws/main 当前工作区，/ws/peer 外部隔离工作区）
+  // 2. 模拟双工作区看板数据（/ws/main 当前工作区，/ws/peer 外部隔离工作区）
   const telemetryMultiWs = {
     timestamp: Date.now(),
     currentWorkspace: '/ws/main',
@@ -1888,16 +1888,23 @@ test('ADR-0013 看板默认全局透视、首列固定当前工作区、移除�
   assert.ok(curNodeGroup, '当前会话节点必须带有专属元素 ID');
   assert.ok(curNodeGroup.props.className.includes('dsh-canvas-node-current'), '当前会话节点外层必须带有 dsh-canvas-node-current 类名');
 
-  const curEllipse = curNodeGroup.children.find(c => c && c.type === 'ellipse');
-  assert.ok(curEllipse, '当前会话椭圆节点必须存在');
-  assert.equal(curEllipse.props.stroke, '#38bdf8', '当前会话椭圆边框采用专属高亮青色 (#38bdf8)');
-  assert.equal(curEllipse.props.strokeWidth, '2.4', '当前会话椭圆边框加粗至 2.4px');
-  assert.equal(curEllipse.props.strokeDasharray, 'none', '当前会话椭圆边框为实线');
-  assert.equal(curEllipse.props.style.filter, 'drop-shadow(0 0 8px #38bdf8)', '当前会话椭圆外围必须渲染 drop-shadow(0 0 8px #38bdf8) 发光光晕');
+  const curCard = curNodeGroup.children.find(c => c && (c.type === 'rect' || c.type === 'ellipse'));
+  assert.ok(curCard, '当前会话卡片节点必须存在');
+  assert.equal(curCard.type, 'rect', '当前会话节点应渲染为 rect 卡片');
+  assert.equal(curCard.props.x, -96, '当前会话卡片 X 坐标必须为 -96');
+  assert.equal(curCard.props.y, -26, '当前会话卡片 Y 坐标必须为 -26');
+  assert.equal(curCard.props.width, 192, '当前会话卡片宽度必须为 192');
+  assert.equal(curCard.props.height, 52, '当前会话卡片高度必须为 52');
+  assert.equal(curCard.props.rx, 8, '当前会话卡片圆角 rx 必须为 8');
+  assert.equal(curCard.props.ry, 8, '当前会话卡片圆角 ry 必须为 8');
+  assert.equal(curCard.props.stroke, '#38bdf8', '当前会话卡片边框采用专属高亮青色 (#38bdf8)');
+  assert.equal(curCard.props.strokeWidth, '2.0', '当前会话卡片边框宽度规范为 2.0px');
+  assert.equal(curCard.props.strokeDasharray, 'none', '当前会话卡片边框为实线');
+  assert.ok(curCard.props.style.filter.includes('drop-shadow(0 0'), '当前会话卡片外围必须渲染发光光晕');
 
   // 状态标签断言（中文环境）
   const curBadge = curNodeGroup.children.find(c => c && c.props && c.props.className === 'dsh-canvas-session-current-badge');
-  assert.ok(curBadge, '当前会话标题旁必须渲染状态标签分组');
+  assert.ok(curBadge, '当前会话元信息行必须渲染状态标签分组');
   const curBadgeText = curBadge.children.find(c => c && c.type === 'text');
   assert.equal(curBadgeText.children[0], '[当前]', '中文环境下状态标签必须渲染 [当前]');
 
@@ -1905,8 +1912,8 @@ test('ADR-0013 看板默认全局透视、首列固定当前工作区、移除�
   const otherNodeGroup = findNodeById(nodesLayer, 'dsh-canvas-node-session-other');
   assert.ok(otherNodeGroup, '非当前会话节点存在');
   assert.equal(otherNodeGroup.props.className.includes('dsh-canvas-node-current'), false, '非当前会话严禁携带 dsh-canvas-node-current');
-  const otherEllipse = otherNodeGroup.children.find(c => c && c.type === 'ellipse');
-  assert.notEqual(otherEllipse.props.style.filter, 'drop-shadow(0 0 8px #38bdf8)', '非当前会话严禁具备当前会话专属光晕');
+  const otherCard = otherNodeGroup.children.find(c => c && (c.type === 'rect' || c.type === 'ellipse'));
+  assert.notEqual(otherCard.props.style.filter, curCard.props.style.filter, '非当前会话严禁具备当前会话专属光晕');
   const otherBadge = otherNodeGroup.children.find(c => c && c.props && c.props.className === 'dsh-canvas-session-current-badge');
   assert.equal(otherBadge, undefined, '非当前会话严禁渲染 [当前] 状态标签');
 
@@ -1990,7 +1997,7 @@ test('Topology Relationship Edges Contrast & WCAG 2.1 Compliance (PRD §3.1, §4
   const reactMock = createStatelessMockReact(telemetryWithEdges);
   const plugin = loadClientBundle((name) => name === 'react' ? reactMock : null);
   const t = (k) => plugin.zh[k] || k;
-  const view = plugin.CanvasView({ t: t });
+  const view = plugin.CanvasView({ t: t, edgeMode: 'full' });
 
   // 1. 发布归属边 (Author Edge) 默认态与规格断言
   const authorEdgesGroup = findNodeById(view, 'dsh-canvas-author-edges');
@@ -2178,20 +2185,20 @@ test('Session Node Title Dynamic Space & Word-Boundary Truncation (PRD §5.1 & T
   const nodesLayer = findNodeById(view, 'dsh-canvas-nodes');
   assert.ok(nodesLayer, 'dsh-canvas-nodes 容器必须存在');
 
-  // 当前会话 s-cur：具备 [当前] 状态徽章，titleMaxWidth = 64px -> 'Agent...'
+  // 当前会话 s-cur：双层栅格解耦，titleMaxWidth = 160px -> 'Agent Workspace...'
   const curGroup = findNodeById(nodesLayer, 'dsh-canvas-node-s-cur');
   const curTitle = findVNodes(curGroup, n => n.props && n.props.className === 'dsh-canvas-session-title')[0];
-  assert.equal(curTitle.children[0], 'Agent...', '当前会话节点分配 64px 空间截断标题');
+  assert.equal(curTitle.children[0], 'Agent Workspace...', '当前会话节点独享 160px 宽度，完整呈现两个英文单词');
 
-  // 具备调用徽章会话 s-call：具备右侧数字徽章，titleMaxWidth = 105px -> 'Agent...'
+  // 具备调用徽章会话 s-call：右上角独立徽标，titleMaxWidth = 160px -> 'Agent Workspace...'
   const callGroup = findNodeById(nodesLayer, 'dsh-canvas-node-s-call');
   const callTitle = findVNodes(callGroup, n => n.props && n.props.className === 'dsh-canvas-session-title')[0];
-  assert.equal(callTitle.children[0], 'Agent...', '带调用计数徽章节点分配 105px 空间截断标题');
+  assert.equal(callTitle.children[0], 'Agent Workspace...', '带调用计数徽章节点独享 160px 宽度，完整呈现两个英文单词');
 
-  // 普通会话 s-plain：无任何右侧徽章，充分利用留白，titleMaxWidth = 140px -> 'Agent Workspace...'
+  // 普通会话 s-plain：无任何右侧徽章，titleMaxWidth = 160px -> 'Agent Workspace...'
   const plainGroup = findNodeById(nodesLayer, 'dsh-canvas-node-s-plain');
   const plainTitle = findVNodes(plainGroup, n => n.props && n.props.className === 'dsh-canvas-session-title')[0];
-  assert.equal(plainTitle.children[0], 'Agent Workspace...', '无徽章普通会话放宽至 140px 留白空间，完整呈现两个英文单词');
+  assert.equal(plainTitle.children[0], 'Agent Workspace...', '无徽章普通会话独享 160px 宽度，完整呈现两个英文单词');
 });
 
 test('黑板区域在无条目时的平滑压缩与空状态过渡 (PRD §3.1 & Task t12)', () => {
@@ -2712,7 +2719,7 @@ test('通道走线槽位离散 (ADR-0014)：多条黑板连线右侧通道离散
     document: { getElementById: () => null, createElement: () => ({ id: '', textContent: '' }), head: { appendChild: () => {} } }
   }, (name) => name === 'react' ? mockReact : null);
 
-  const view = plugin.CanvasView({ sessionId: 's1', t: (k) => k });
+  const view = plugin.CanvasView({ sessionId: 's1', t: (k) => k, edgeMode: 'full' });
 
   const authorEdgesGroup = findNodeById(view, 'dsh-canvas-author-edges');
   assert.ok(authorEdgesGroup, 'authorEdgesGroup 必须存在');
@@ -2782,14 +2789,15 @@ test('多会话工作区纵向自适应居中 (PRD §8.2)：11会话工作区底
   );
 });
 
-function createTestCanvasHarness(canvasData, hoveredEntity = null) {
+function createTestCanvasHarness(canvasData, hoveredEntity = null, edgeMode = 'minimal') {
   let hookCounter = 0;
   const mockReact = {
     useState: (initial) => {
       hookCounter++;
-      // 1: canvasData, 2: selectedEntity, 3: focusedEntity, 4: hoveredEntity
+      // 1: canvasData, 2: selectedEntity, 3: focusedEntity, 4: hoveredEntity, 11: edgeMode
       if (hookCounter === 1) return [canvasData, () => {}];
       if (hoveredEntity && hookCounter === 4) return [hoveredEntity, () => {}];
+      if (hookCounter === 11) return [edgeMode, () => {}];
       return [initial, () => {}];
     },
     useRef: (initial) => ({ current: initial }),
@@ -2861,6 +2869,80 @@ test('ADR-0019 常态按需显影与历史调用连线抑制测试', () => {
   const pulsePath = findVNodes(freshEdge, (n) => n && n.props && n.props.className && n.props.className.includes('dsh-pulse-edge'))[0];
   assert.ok(pulsePath, '高亮关联连线中的可视化路径必须包含 dsh-pulse-edge 脉冲类');
   assert.equal(pulsePath.props.opacity, 1.0, '高亮关联连线不透明度严格为 1.0');
+});
+
+test('ADR-0019 & Task t5 反向调用链路与动效不变式全量验收: 目标悬停反向高亮、流动与静止动效、常态零渲染断言', () => {
+  const now = Date.now();
+  const mockCanvasData = {
+    workspaces: [{ id: '/ws/1', name: 'main', isCurrent: true }],
+    sessions: [
+      { id: 's1', workspace: '/ws/1', title: 'Agent Caller', status: 'idle', state: 'idle' },
+      { id: 's2', workspace: '/ws/1', title: 'Agent Target', status: 'running', state: 'running' },
+      { id: 's3', workspace: '/ws/1', title: 'Agent Unrelated', status: 'idle', state: 'idle' }
+    ],
+    posts: [],
+    calls: [
+      // 活跃新鲜调用 (<= 15s)
+      { id: 'call-fresh', callerSessionId: 's1', targetSessionId: 's2', callType: 'task_dispatch', timestamp: now - 3000, status: 'active' },
+      // 已结算调用 (settled)
+      { id: 'call-settled', callerSessionId: 's1', targetSessionId: 's2', callType: 'task_report', timestamp: now - 5000, status: 'settled' },
+      // 历史过期调用 (> 15s)
+      { id: 'call-historical', callerSessionId: 's1', targetSessionId: 's2', callType: 'notice', timestamp: now - 25000, status: 'active' }
+    ],
+    metrics: { totalSessions: 3, runningSessions: 1, activeCalls: 1, totalPosts: 0 }
+  };
+
+  // 1. 常态未交互：已结算和历史过期调用严格零渲染，仅渲染 1 条活跃新鲜调用
+  const { view: defaultView } = createTestCanvasHarness(mockCanvasData);
+  const defaultEdgesGroup = findVNodes(defaultView, (n) => n && n.props && n.props.id === 'dsh-canvas-call-edges')[0];
+  const defaultEdges = defaultEdgesGroup.children.filter(Boolean);
+  assert.equal(defaultEdges.length, 1, '常态下已结算和历史调用完全零渲染，仅渲染 1 条活跃新鲜调用');
+  assert.equal(defaultEdges[0].props.key, 'call-fresh');
+
+  // 动效验证：常态新鲜活跃调用为流动虚线 (6 4) 并携带 dsh-flow-edge
+  const freshPath = findVNodes(defaultEdges[0], (n) => n && n.props && n.props.className && n.props.className.includes('dsh-flow-edge'))[0];
+  assert.ok(freshPath, '常态新鲜活跃调用具有 dsh-flow-edge 流动虚线动画');
+  assert.equal(freshPath.props.strokeDasharray, '6 4', '流动虚线样式为 6 4');
+
+  // 2. 悬停目标节点 s2：反向调用链路点亮上游 caller 与全量连线
+  const hoveredTarget = { kind: 'session', id: 's2', entity: mockCanvasData.sessions[1], x: 200, y: 300 };
+  const { view: targetHoverView } = createTestCanvasHarness(mockCanvasData, hoveredTarget);
+
+  const s1Node = findVNodes(targetHoverView, (n) => n && n.props && n.props.id === 'dsh-canvas-node-s1')[0];
+  const s2Node = findVNodes(targetHoverView, (n) => n && n.props && n.props.id === 'dsh-canvas-node-s2')[0];
+  const s3Node = findVNodes(targetHoverView, (n) => n && n.props && n.props.id === 'dsh-canvas-node-s3')[0];
+
+  assert.ok(s2Node.props.className.includes('dsh-canvas-highlighted'), '目标会话自身保持高亮');
+  assert.ok(s1Node.props.className.includes('dsh-canvas-highlighted'), '反向链路触发：上游发起者 s1 联动高亮');
+  assert.ok(s3Node.props.className.includes('dsh-canvas-dimmed'), '无关会话 s3 置灰');
+
+  // 反向连线显影断言：常态抑制的已结算与历史连线全部显影复苏 (共 3 条)
+  const targetEdgesGroup = findVNodes(targetHoverView, (n) => n && n.props && n.props.id === 'dsh-canvas-call-edges')[0];
+  const targetHoverEdges = targetEdgesGroup.children.filter(Boolean);
+  assert.equal(targetHoverEdges.length, 3, '悬停目标节点时，常态抑制的历史与已结算连线按需显影复苏 (共3条)');
+
+  for (const edge of targetHoverEdges) {
+    const pulseLine = findVNodes(edge, (n) => n && n.props && n.props.className && n.props.className.includes('dsh-pulse-edge'))[0];
+    assert.ok(pulseLine, '反向链路复苏连线必须统一使用 dsh-pulse-edge 脉冲呼吸');
+    assert.equal(pulseLine.props.strokeDasharray, 'none', '高亮连线转为实线，互斥流动虚线样式');
+    assert.equal(pulseLine.props.opacity, 1.0, '高亮连线不透明度达到 1.0');
+  }
+
+  // 3. 悬停发起节点 s1：正向调用链路点亮下游 target
+  const hoveredCaller = { kind: 'session', id: 's1', entity: mockCanvasData.sessions[0], x: 200, y: 200 };
+  const { view: callerHoverView } = createTestCanvasHarness(mockCanvasData, hoveredCaller);
+  const s2UnderCaller = findVNodes(callerHoverView, (n) => n && n.props && n.props.id === 'dsh-canvas-node-s2')[0];
+  const s3UnderCaller = findVNodes(callerHoverView, (n) => n && n.props && n.props.id === 'dsh-canvas-node-s3')[0];
+  assert.ok(s2UnderCaller.props.className.includes('dsh-canvas-highlighted'), '正向链路触发：下游目标会话 s2 联动高亮');
+  assert.ok(s3UnderCaller.props.className.includes('dsh-canvas-dimmed'), '无关会话 s3 置灰');
+
+  // 4. 卡片图元圆角矩形契约断言
+  const s2Card = findVNodes(s2Node, (n) => n && n.type === 'rect' && n.props.rx === 8)[0];
+  assert.ok(s2Card, '会话节点必须渲染 rx=8 圆角矩形卡片');
+  assert.equal(s2Card.props.x, -96);
+  assert.equal(s2Card.props.y, -26);
+  assert.equal(s2Card.props.width, 192);
+  assert.equal(s2Card.props.height, 52);
 });
 
 test('ADR-0019 超轻量单行胶囊 Tooltip 结构与尺寸测试', () => {
@@ -3368,4 +3450,217 @@ test('ADR-0013 宏观取景缩放下限：超大拓扑不得低于可读底线',
   assert.ok(mediumFramed.zoom > 0.30, '中等拓扑不得被下限截断，应完整容纳');
   assert.ok(medium.maxX * mediumFramed.zoom + mediumFramed.panX <= 1200 - 48 + 1e-6, '中等拓扑必须完整容纳于视口');
 });
+
+test('ADR-0026 顶栏精简、紧凑指标与双态连线模式切换验证', () => {
+  const plugin = loadClientBundle();
+  const { CanvasView } = plugin;
+
+  // 验证人话字典
+  assert.equal(plugin.zh['toolbar.edgeModeShow'], '显示连线');
+  assert.equal(plugin.zh['toolbar.edgeModeHide'], '隐藏连线');
+
+  const mockTelemetry = {
+    timestamp: Date.now(),
+    currentWorkspace: '/ws/test',
+    workspaces: [{ id: '/ws/test', name: 'test', isCurrent: true }],
+    sessions: [
+      { id: 'session-s1', title: 'Session 1', workspace: '/ws/test', status: 'running' },
+      { id: 'session-s2', title: 'Session 2', workspace: '/ws/test', status: 'idle' }
+    ],
+    posts: [{ id: 'post-p1', topic: 'test', authorSessionId: 'session-s1', status: 'active' }],
+    calls: [
+      {
+        id: 'call-settled-1',
+        callerSessionId: 'session-s1',
+        targetSessionId: 'session-s2',
+        callType: 'task_dispatch',
+        status: 'settled',
+        timestamp: Date.now() - 30000
+      }
+    ],
+    metrics: { totalSessions: 2, runningSessions: 1, activeCalls: 0, totalPosts: 1 }
+  };
+
+  // 1. 验证顶栏按钮精简与紧凑指标
+  const vnode = CanvasView({
+    sessionId: 'session-s1',
+    edgeMode: 'minimal',
+    fetchTelemetry: () => Promise.resolve(mockTelemetry)
+  });
+
+  const buttons = findVNodes(vnode, n => n && n.type === 'button');
+  const btnTexts = buttons.map(b => Array.isArray(b.children) ? b.children.join('') : (typeof b.children === 'string' ? b.children : ''));
+  assert.equal(btnTexts.some(t => t.includes('放大')), false, '顶栏彻底移除【放大】按钮');
+  assert.equal(btnTexts.some(t => t.includes('缩小')), false, '顶栏彻底移除【缩小】按钮');
+
+  const edgeModeBtn = buttons.find(b => b.props && b.props.id === 'dsh-canvas-edge-mode-toggle');
+  assert.ok(edgeModeBtn, '顶栏必须包含连线模式切换按钮 (dsh-canvas-edge-mode-toggle)');
+  assert.equal(edgeModeBtn.props.title, '显示连线', '隐藏连线模式下按钮悬浮提示必须为人话「显示连线」');
+
+  // 2. 验证紧凑指标徽标包含 title 属性且内容精简
+  const badges = findVNodes(vnode, n => n && n.props && typeof n.props.className === 'string' && n.props.className.includes('dsh-canvas-badge'));
+  assert.ok(badges.length >= 4, '必须渲染 4 项统计指标徽标');
+  assert.ok(badges.some(b => b.props && b.props.title && b.props.title.includes('运行')), '运行中指标必须包含悬停提示');
+  assert.ok(badges.some(b => b.props && b.props.title && b.props.title.includes('会话')), '总会话指标必须包含悬停提示');
+
+  // 3. 验证连线在 minimal (隐藏连线) 模式下，全部连线彻底零渲染
+  const mockReact = createStatelessMockReact(mockTelemetry);
+  const pluginWithMock = loadClientBundle((name) => name === 'react' ? mockReact : null);
+  const minimalView = pluginWithMock.CanvasView({ sessionId: 'session-s1', edgeMode: 'minimal' });
+
+  const authorEdgesGroup = findNodeById(minimalView, 'dsh-canvas-author-edges');
+  const renderedAuthorEdges = (authorEdgesGroup && authorEdgesGroup.children) ? authorEdgesGroup.children.filter(Boolean) : [];
+  assert.equal(renderedAuthorEdges.length, 0, '隐藏连线 (minimal) 模式下常态黑板归属线必须彻底零渲染');
+
+  const callEdgesGroup = findNodeById(minimalView, 'dsh-canvas-call-edges');
+  const renderedCallEdges = (callEdgesGroup && callEdgesGroup.children) ? callEdgesGroup.children.filter(Boolean) : [];
+  assert.equal(renderedCallEdges.length, 0, '隐藏连线 (minimal) 模式下常态已结算调用连线必须彻底零渲染');
+
+  // 4. 验证在 full (显示连线) 模式下，连线全部正常渲染呈现
+  const fullView = pluginWithMock.CanvasView({ sessionId: 'session-s1', edgeMode: 'full' });
+  const fullAuthorEdgesGroup = findNodeById(fullView, 'dsh-canvas-author-edges');
+  const fullRenderedAuthorEdges = (fullAuthorEdgesGroup && fullAuthorEdgesGroup.children) ? fullAuthorEdgesGroup.children.filter(Boolean) : [];
+  assert.equal(fullRenderedAuthorEdges.length, 1, '显示连线 (full) 模式下黑板归属线必须呈现');
+
+  const fullCallEdgesGroup = findNodeById(fullView, 'dsh-canvas-call-edges');
+  const fullRenderedCallEdges = (fullCallEdgesGroup && fullCallEdgesGroup.children) ? fullCallEdgesGroup.children.filter(Boolean) : [];
+  assert.equal(fullRenderedCallEdges.length, 1, '显示连线 (full) 模式下已结算调用线必须以虚线和箭头呈现');
+
+  const fullEdgeBtn = findNodeById(fullView, 'dsh-canvas-edge-mode-toggle');
+  assert.equal(fullEdgeBtn.props.title, '隐藏连线', '显示连线模式下按钮悬浮提示必须为人话「隐藏连线」');
+  assert.ok(fullEdgeBtn.props.className.includes('active'), '显示连线模式下按钮必须挂载 active 类名');
+
+  // 5. 验证 CSS 样式表中浅色模式下 active 按钮样式规约
+  const clientPath = path.join(rootDir, 'lib', 'client.js');
+  const code = fs.readFileSync(clientPath, 'utf8');
+  assert.ok(code.includes('.dsh-canvas-container.dsh-canvas-light .dsh-canvas-btn.active'), '必须包含浅色模式 active 按钮特化样式');
+  assert.ok(code.includes('rgba(37, 99, 235, 0.12)'), '浅色模式 active 按钮底色必须为微透品牌浅蓝');
+});
+
+test('Spec 009: 看板客户端热重载样式动态同步验证', () => {
+  const mockExistingStyle = { id: 'dsh-canvas-styles', textContent: '/* old css */' };
+  const mockDoc = {
+    getElementById: (id) => id === 'dsh-canvas-styles' ? mockExistingStyle : null,
+    createElement: () => ({ id: '', textContent: '' }),
+    head: { appendChild: () => {} }
+  };
+
+  const { plugin: sandboxPlugin } = loadClientInSandbox({ document: mockDoc });
+  assert.equal(typeof sandboxPlugin.ensureStyles, 'function', '插件必须导出 ensureStyles');
+  sandboxPlugin.ensureStyles();
+  assert.notEqual(mockExistingStyle.textContent, '/* old css */', '旧样式标签必须在热重载时被更新为最新 CSS');
+  assert.ok(mockExistingStyle.textContent.includes('.dsh-canvas-container'), '热重载样式必须包含最新画布容器类');
+});
+
+test('analyzeLineage: 纯函数深层子图链路聚焦分析验证 (codebase-design)', () => {
+  const plugin = loadClientBundle();
+  assert.equal(typeof plugin.analyzeLineage, 'function', '插件必须导出 analyzeLineage');
+
+  const sampleCalls = [
+    {
+      id: 'call-1',
+      callerSessionId: 'session-alpha',
+      targetSessionId: 'session-beta',
+      contextPostIds: ['post-100']
+    },
+    {
+      id: 'call-2',
+      callerSessionId: 'session-beta',
+      targetSessionId: 'session-gamma',
+      contextPostIds: []
+    }
+  ];
+
+  const samplePosts = [
+    {
+      id: 'post-100',
+      authorSessionId: 'session-alpha',
+      topic: 'task:design'
+    },
+    {
+      id: 'post-200',
+      authorSessionId: 'session-gamma',
+      topic: 'task:review'
+    }
+  ];
+
+  // 1. 无高亮实体时返回空集合
+  const emptyRes = plugin.analyzeLineage(null, sampleCalls, samplePosts);
+  assert.equal(emptyRes.activeId, null);
+  assert.equal(emptyRes.activeKind, null);
+  assert.equal(emptyRes.connectedSessionIds.size, 0);
+  assert.equal(emptyRes.connectedCallIds.size, 0);
+  assert.equal(emptyRes.connectedPostIds.size, 0);
+
+  // 2. 聚焦 session 时：关联该会话的呼入/呼出调用、对方会话、发布的帖子及关联帖
+  const sessionRes = plugin.analyzeLineage({ kind: 'session', id: 'session-alpha' }, sampleCalls, samplePosts);
+  assert.equal(sessionRes.activeId, 'session-alpha');
+  assert.equal(sessionRes.activeKind, 'session');
+  assert.ok(sessionRes.connectedSessionIds.has('session-alpha'));
+  assert.ok(sessionRes.connectedSessionIds.has('session-beta'));
+  assert.ok(sessionRes.connectedCallIds.has('call-1'));
+  assert.ok(sessionRes.connectedPostIds.has('post-100'));
+  assert.ok(sessionRes.connectedAuthorEdgeKeys.has('session-alpha->post-100'));
+  assert.ok(sessionRes.connectedContextEdgeKeys.has('call-1->post-100'));
+  assert.equal(sessionRes.connectedSessionIds.has('session-gamma'), false);
+
+  // 3. 聚焦 call 时：关联 caller, target 及 contextPostIds
+  const callRes = plugin.analyzeLineage({ kind: 'call', id: 'call-1' }, sampleCalls, samplePosts);
+  assert.ok(callRes.connectedCallIds.has('call-1'));
+  assert.ok(callRes.connectedSessionIds.has('session-alpha'));
+  assert.ok(callRes.connectedSessionIds.has('session-beta'));
+  assert.ok(callRes.connectedPostIds.has('post-100'));
+  assert.ok(callRes.connectedContextEdgeKeys.has('call-1->post-100'));
+
+  // 4. 聚焦 post 时：关联 author 及引用该 post 的调用
+  const postRes = plugin.analyzeLineage({ kind: 'post', id: 'post-100' }, sampleCalls, samplePosts);
+  assert.ok(postRes.connectedPostIds.has('post-100'));
+  assert.ok(postRes.connectedSessionIds.has('session-alpha'));
+  assert.ok(postRes.connectedAuthorEdgeKeys.has('session-alpha->post-100'));
+  assert.ok(postRes.connectedCallIds.has('call-1'));
+  assert.ok(postRes.connectedContextEdgeKeys.has('call-1->post-100'));
+
+  // 5. 兼容对象参数签名 { calls, posts }
+  const optsRes = plugin.analyzeLineage({ kind: 'session', id: 'session-beta' }, { calls: sampleCalls, posts: samplePosts });
+  assert.ok(optsRes.connectedSessionIds.has('session-beta'));
+  assert.ok(optsRes.connectedSessionIds.has('session-alpha'));
+  assert.ok(optsRes.connectedSessionIds.has('session-gamma'));
+  assert.ok(optsRes.connectedCallIds.has('call-1'));
+  assert.ok(optsRes.connectedCallIds.has('call-2'));
+});
+test('Zero-Dead-Code: Canvas dictionaries must have zero unused i18n keys and symmetrical definitions', () => {
+  const plugin = loadClientBundle();
+  const clientPath = path.join(rootDir, 'lib', 'client.js');
+  const code = fs.readFileSync(clientPath, 'utf8');
+
+  // 1. 验证 zh 与 en 字典键必须 100% 对称且无孤立键
+  const zhKeys = Object.keys(plugin.zh).sort();
+  const enKeys = Object.keys(plugin.en).sort();
+  assert.deepEqual(zhKeys, enKeys, 'zh 与 en 字典键必须完全一致');
+
+  // 2. 验证所有声明的字典键必须在 CanvasView / CanvasDrawer 中真实消费 (零未消费死词条)
+  const unusedKeys = [];
+  for (const key of zhKeys) {
+    const directPattern = new RegExp("['\"]" + key + "['\"]");
+    const prefix = key.split('.')[0] + '.';
+    const dynamicPattern = new RegExp("['\"]" + prefix + "['\"]\\s*\\+");
+    if (!directPattern.test(code) && !dynamicPattern.test(code)) {
+      unusedKeys.push(key);
+    }
+  }
+  assert.deepEqual(unusedKeys, [], '字典中不得存在未被消费的死词条');
+
+  // 3. 验证无未完成的 TODO / FIXME 标记
+  const lines = code.split('\n');
+  const unfinishedMarkers = [];
+  lines.forEach((line, idx) => {
+    if (/^\s*\/\/\s*(TODO|FIXME|HACK):/i.test(line)) {
+      unfinishedMarkers.push({ line: idx + 1, content: line.trim() });
+    }
+  });
+  assert.deepEqual(unfinishedMarkers, [], '生产代码中严禁残留未完成的 TODO/FIXME/HACK 标记');
+});
+
+
+
 

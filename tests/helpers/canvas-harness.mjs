@@ -5,7 +5,7 @@ import vm from 'node:vm';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-export const rootDir = path.resolve(__dirname, '..', '..');
+const rootDir = path.resolve(__dirname, '..', '..');
 
 /** 画布工具栏高度：视口位于容器内部工具栏之下 */
 const TOOLBAR_HEIGHT = 44;
@@ -323,7 +323,7 @@ export function createCanvasRuntime(options = {}) {
   function ellipseOf(view, nodeId) {
     const node = nodeOf(view, nodeId);
     if (!node) return null;
-    return node.children.find((c) => c && c.type === 'ellipse');
+    return node.children.find((c) => c && (c.type === 'rect' || c.type === 'ellipse'));
   }
 
   function latestObserver() {
@@ -361,7 +361,7 @@ export function createCanvasRuntime(options = {}) {
 
   return {
     plugin, render, pans, zooms, injectedStyles, mockViewport,
-    surfaceOf, buttonOf, nodesLayerOf, ellipseOf, resize, cleanupAll,
+    surfaceOf, buttonOf, nodesLayerOf, ellipseOf, cardOf: ellipseOf, resize, cleanupAll,
     pendingDelays, fireTimers
   };
 }

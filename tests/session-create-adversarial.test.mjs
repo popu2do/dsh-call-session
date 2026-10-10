@@ -8,55 +8,8 @@ import {
   inspectWorkspaceActiveSessions,
   PEER_SESSION_CONSTANTS
 } from '../lib/session-create.mjs';
+import { createMockAgent, silentLogger } from './helpers/mock-agent.mjs';
 
-function createMockAgent(id, {
-  status = 'idle',
-  title = 'Test Agent',
-  cwd = 'c:/workspace/project-alpha',
-  generation = 0,
-  origin = undefined,
-  blank = false,
-  headerFrozen = false,
-  steerFn = null,
-  followupFn = null
-} = {}) {
-  const received = [];
-  const rawHeader = { cwd, title, origin };
-  const header = headerFrozen ? Object.freeze(rawHeader) : rawHeader;
-
-  const agent = {
-    id,
-    status,
-    title,
-    generation,
-    origin,
-    blank,
-    session: {
-      id,
-      title,
-      header,
-      cwd,
-      metadata: { generation }
-    },
-    steer: steerFn || ((msg) => {
-      agent.status = 'running';
-      received.push({ type: 'steer', msg });
-    }),
-    followup: followupFn || ((msg) => {
-      agent.status = 'running';
-      received.push({ type: 'followup', msg });
-    }),
-    received
-  };
-  return agent;
-}
-
-const silentLogger = Object.freeze({
-  debug() {},
-  info() {},
-  warn() {},
-  error() {}
-});
 
 function createMockCtx({
   agentsList = [],

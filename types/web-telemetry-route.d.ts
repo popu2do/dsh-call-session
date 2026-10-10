@@ -1,6 +1,6 @@
 /**
  * @module dsh-call-session/web-telemetry-route
- * 只读画板遥测宿主 Web 路由契约
+ * 只读看板数据宿主 Web 路由契约
  */
 
 /** 宿主 Web 服务探针键序列 */
@@ -28,7 +28,7 @@ export declare function authenticatedWebRoutes(
 ): AuthenticatedWebRoutes;
 
 /**
- * 构造 GET-only 只读遥测处理器，非 GET 请求返回 405。
+ * 构造 GET-only 只读看板数据处理器，非 GET 请求返回 405。
  */
 export declare function createTelemetryHandler(
   ctx: any,
@@ -36,7 +36,7 @@ export declare function createTelemetryHandler(
 ): (req: any, res: any) => Promise<void>;
 
 /**
- * 懒加载挂载遥测路由；无 Web 宿主时保持 tool-only 回退运行。
+ * 懒加载挂载看板数据路由；无 Web 宿主时保持 tool-only 回退运行。
  */
 export declare function installTelemetryWebSurface(
   ctx: any,

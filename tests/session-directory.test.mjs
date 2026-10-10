@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { SessionDirectory, executeSessionQuery } from '../lib/session-directory.mjs';
+import { createMockAgent } from './helpers/mock-agent.mjs';
 import { normalizeWorkspace } from '../lib/board-store.mjs';
 
 function createMockCordis(liveAgents = [], archivedIds = []) {
@@ -25,30 +26,6 @@ function createMockCordis(liveAgents = [], archivedIds = []) {
   };
 }
 
-function createMockAgent({
-  id,
-  title = '',
-  cwd = 'c:/workspace/proj-a',
-  status = 'idle',
-  origin = 'user',
-  blank = false,
-  events = []
-}) {
-  return {
-    id,
-    title,
-    status,
-    origin,
-    blank,
-    session: {
-      id,
-      title,
-      cwd,
-      header: { cwd, title, origin },
-      events
-    }
-  };
-}
 
 test('SessionDirectory: resolveCwd and resolveWorkspace', () => {
   const dir = new SessionDirectory({});

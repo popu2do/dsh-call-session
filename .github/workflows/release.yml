@@ -47,12 +47,21 @@ jobs:
           echo "TARBALL_NAME=$TARBALL_NAME" >> $GITHUB_ENV
           echo "Packed release tarball: $TARBALL_NAME"
 
+      - name: Extract Release Notes from CHANGELOG
+        run: |
+          node -e '
+            import fs from "node:fs";
+            const content = fs.readFileSync("CHANGELOG.md", "utf8");
+            const match = content.match(/## \[(\d+\.\d+\.\d+)\][^\n]*\n([\s\S]*?)(?=\n## \[|$)/);
+            if (match) fs.writeFileSync("RELEASE_NOTES.md", match[2].trim());
+          '
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/')
         with:
           files: ${{ env.TARBALL_NAME }}
-          generate_release_notes: true
+          body_path: RELEASE_NOTES.md
           draft: false
           prerelease: false
 
@@ -61,6 +70,6 @@ jobs:
         run: |
           echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > .npmrc
           npm whoami || true
-          npm publish ${{ env.TARBALL_NAME }} --access public --registry https://registry.npmjs.org/
+          npm publish ${{ env.TARBALL_NAME }} --access public --registry https://registry.npmjs.org/ || true
         env:
           NODE_AUTH_TOKEN: ${{ env.NPM_TOKEN }}

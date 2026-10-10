@@ -1,6 +1,6 @@
 /**
  * @module dsh-call-session/call-telemetry
- * 内存调用遥测缓冲区契约与画板聚合数据模型
+ * 内存调用连线缓冲区契约与看板聚合数据模型
  */
 
 /** 单播呼叫意图分类 */
@@ -16,7 +16,7 @@ export type CanvasSessionState = 'running' | 'idle';
 export type CanvasBoardPostStatus = 'active' | 'archived' | 'expired';
 
 /**
- * 内存调用遥测记录
+ * 内存调用连线记录
  */
 export interface CallTelemetryRecord {
   /** 唯一标识，例如 call-1725800000000-a1b2c3d4 */
@@ -56,7 +56,7 @@ export interface CallTelemetryRecord {
 }
 
 /**
- * 调用遥测记录查询过滤器
+ * 调用连线记录查询过滤器
  */
 export interface CallTelemetryFilter {
   /** 目标工程工作区过滤 */
@@ -76,7 +76,7 @@ export interface CallTelemetryFilter {
 }
 
 /**
- * 内存环形调用遥测缓冲区
+ * 内存环形调用连线缓冲区
  */
 export declare class CallTelemetryRingBuffer {
   constructor(capacity?: number);
@@ -86,14 +86,14 @@ export declare class CallTelemetryRingBuffer {
   size(): number;
   /** 清空缓冲区 */
   clear(): void;
-  /** 写入单条调用遥测记录 */
+  /** 写入单条调用连线记录 */
   record(entry: Partial<CallTelemetryRecord> & {
     callerSessionId: string;
     targetSessionId: string;
     callType?: CanvasCallType;
     deliveryMode?: CanvasDeliveryMode;
   }): CallTelemetryRecord;
-  /** 查询调用遥测记录 */
+  /** 查询调用连线记录 */
   query(filter?: CallTelemetryFilter): CallTelemetryRecord[];
   /** 级联落定指定会话的调用连线 */
   settleSession(sessionId: string): number;
@@ -102,7 +102,7 @@ export declare class CallTelemetryRingBuffer {
 }
 
 /**
- * 画板工作区集群实体
+ * 看板工作区集群实体
  */
 export interface CanvasWorkspaceEntity {
   /** 工作区规范化绝对路径 */
@@ -116,7 +116,7 @@ export interface CanvasWorkspaceEntity {
 }
 
 /**
- * 画板会话节点实体
+ * 看板会话节点实体
  */
 export interface CanvasSessionEntity {
   /** 会话唯一标识 */
@@ -146,7 +146,7 @@ export interface CanvasSessionEntity {
 }
 
 /**
- * 画板黑板公告条目实体
+ * 看板公共黑板公告条目实体
  */
 export interface CanvasBoardPostEntity {
   /** 条目唯一 ID */
@@ -178,7 +178,7 @@ export interface CanvasBoardPostEntity {
 }
 
 /**
- * 画板全景遥测聚合快照
+ * 看板全景数据聚合快照
  */
 export interface CanvasTelemetrySnapshot {
   /** 快照生成时间戳 */
@@ -204,7 +204,7 @@ export interface CanvasTelemetrySnapshot {
 }
 
 /**
- * 聚合全景遥测查询入参
+ * 聚合全景看板数据查询入参
  */
 export interface GetCanvasTelemetryOptions {
   /** 目标工作区路径 */
@@ -257,7 +257,7 @@ export declare function resolveCanvasSessionDisplayTitle(
 ): string;
 
 /**
- * 聚合全景画板遥测快照，只读且不唤醒目标会话
+ * 聚合全景看板数据快照，只读且不唤醒目标会话
  */
 export declare function getCanvasTelemetry(
   ctx: any,

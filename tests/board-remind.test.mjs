@@ -9,20 +9,12 @@ import {
   normalizeWorkspace
 } from '../lib/board-store.mjs';
 import { apply } from '../index.mjs';
+import { createMockAgent } from './helpers/mock-agent.mjs';
 
 function createTempDir() {
   return fs.mkdtemp(path.join(os.tmpdir(), 'dsh-remind-test-'));
 }
 
-function createMockAgent(id, { cwd = 'c:/workspace/project-alpha' } = {}) {
-  return {
-    id,
-    session: {
-      id,
-      header: { cwd }
-    }
-  };
-}
 
 function createMockContext() {
   const contexts = new Map();

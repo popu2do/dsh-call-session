@@ -4,20 +4,7 @@ import path from 'node:path';
 import os from 'node:os';
 import fs from 'node:fs/promises';
 import { BoardStore, BoardToolsAdapter, normalizeExecParams } from '../lib/board-store.mjs';
-
-function createMockAgent(id, {
-  title = 'Test Agent',
-  cwd = 'c:/workspace/test-project'
-} = {}) {
-  return {
-    id,
-    title,
-    session: {
-      header: { cwd, title },
-      metadata: {}
-    }
-  };
-}
+import { createMockAgent } from './helpers/mock-agent.mjs';
 
 test('BoardStore.executePost: 领域操作封装与保留主题拦截', async () => {
   const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'dsh-board-op-'));

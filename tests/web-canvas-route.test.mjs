@@ -16,16 +16,10 @@ import {
 } from '../lib/web-telemetry-route.mjs';
 import { CallTelemetryRingBuffer } from '../lib/call-telemetry.mjs';
 import { apply } from '../index.mjs';
+import { silentLogger } from './helpers/mock-agent.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, '..');
-
-const silentLogger = Object.freeze({
-  debug() {},
-  info() {},
-  warn() {},
-  error() {}
-});
 
 /** Minimal ServerResponse double capturing status, headers and body. */
 function createMockResponse() {
@@ -104,7 +98,7 @@ function createMockWebServer() {
   };
 }
 
-test('Web Telemetry Route: 前后端请求路径与宿主注册路径完全一致', () => {
+test('Web Canvas Route: 前后端请求路径与宿主注册路径完全一致', () => {
   assert.equal(TELEMETRY_ROUTE_PATH, '/plugins/dsh-call-session/telemetry');
 
   const clientSource = fs.readFileSync(path.join(rootDir, 'lib', 'client.js'), 'utf8');
@@ -118,7 +112,7 @@ test('Web Telemetry Route: 前后端请求路径与宿主注册路径完全一�
   assert.deepEqual([...WEB_SERVER_KEYS], ['webServer', 'httpServer']);
 });
 
-test('Web Telemetry Route: 宿主懒加载注册与 ctx.effect 卸载摘除', () => {
+test('Web Canvas Route: 宿主懒加载注册与 ctx.effect 卸载摘除', () => {
   const webServer = createMockWebServer();
   const ctx = createMockCtx({ webServer });
 
@@ -135,7 +129,7 @@ test('Web Telemetry Route: 宿主懒加载注册与 ctx.effect 卸载摘除', ()
   assert.equal(webServer.registered.length, 1);
 });
 
-test('Web Telemetry Route: 无 Web 宿主时保持 tool-only 静默回退', () => {
+test('Web Canvas Route: 无 Web 宿主时保持 tool-only 静默回退', () => {
   const ctx = createMockCtx({ webServer: undefined });
   const surface = installTelemetryWebSurface(ctx, { logger: silentLogger });
 
@@ -143,7 +137,7 @@ test('Web Telemetry Route: 无 Web 宿主时保持 tool-only 静默回退', () =
   assert.equal(ctx.effects.length, 0);
 });
 
-test('Web Telemetry Route: internal/service 事件延迟绑定后补挂载', () => {
+test('Web Canvas Route: internal/service 事件延迟绑定后补挂载', () => {
   let webServer;
   const ctx = createMockCtx({ webServer: undefined });
   ctx.get = (name) => {
@@ -162,7 +156,7 @@ test('Web Telemetry Route: internal/service 事件延迟绑定后补挂载', () 
   assert.equal(webServer.registered.length, 1);
 });
 
-test('Web Telemetry Route: httpServer 备选探针键生效', () => {
+test('Web Canvas Route: httpServer 备选探针键生效', () => {
   const webServer = createMockWebServer();
   const ctx = createMockCtx({ webServer, serverKey: 'httpServer' });
 
@@ -172,7 +166,7 @@ test('Web Telemetry Route: httpServer 备选探针键生效', () => {
   assert.equal(webServer.registered[0].path, TELEMETRY_ROUTE_PATH);
 });
 
-test('Web Telemetry Route: 认证围栏拒绝未授权与服务缺失请求', async () => {
+test('Web Canvas Route: 认证围栏拒绝未授权与服务缺失请求', async () => {
   const rawServer = createMockWebServer();
 
   // 1. Connection service missing -> 503, handler must never run.
@@ -242,7 +236,7 @@ test('Web Telemetry Route: 认证围栏拒绝未授权与服务缺失请求', as
   assert.equal(handlerRuns, 1);
 });
 
-test('Web Telemetry Route: 只读 GET-only，非 GET 返回 405', async () => {
+test('Web Canvas Route: 只读 GET-only，非 GET 返回 405', async () => {
   const ctx = createMockCtx({ agentsList: [] });
   const handler = createTelemetryHandler(ctx, { logger: silentLogger });
 
@@ -255,7 +249,7 @@ test('Web Telemetry Route: 只读 GET-only，非 GET 返回 405', async () => {
   }
 });
 
-test('Web Telemetry Route: GET 返回只读全景快照与查询参数透传', async () => {
+test('Web Canvas Route: GET 返回只读全景快照与查询参数透传', async () => {
   const telemetry = new CallTelemetryRingBuffer(50);
   telemetry.record({
     callerSessionId: 'session-aaaaaaaa-1',
@@ -316,7 +310,7 @@ test('Web Telemetry Route: GET 返回只读全景快照与查询参数透传', a
   }
 });
 
-test('Web Telemetry Route: 无 crossWorkspace 参数时默认返回全量多工作区与全部会话 (ADR-0013)', async () => {
+test('Web Canvas Route: 无 crossWorkspace 参数时默认返回全量多工作区与全部会话 (ADR-0013)', async () => {
   const telemetry = new CallTelemetryRingBuffer(20);
   telemetry.record({
     callerSessionId: 'session-main-1',
@@ -372,7 +366,7 @@ test('Web Telemetry Route: 无 crossWorkspace 参数时默认返回全量多工�
   assert.equal(snapshot.calls.length, 1, '跨工作区调用必须包含在内');
 });
 
-test('Web Telemetry Route: 快照聚合抛错时返回 500 且不泄漏内部堆栈', async () => {
+test('Web Canvas Route: 快照聚合抛错时返回 500 且不泄漏内部堆栈', async () => {
   const brokenCtx = createMockCtx({ agentsList: [] });
   brokenCtx.agents = {
     list: () => { throw new Error('agents service exploded'); }
@@ -388,7 +382,7 @@ test('Web Telemetry Route: 快照聚合抛错时返回 500 且不泄漏内部堆
   assert.ok(!res.body.includes('agents service exploded'));
 });
 
-test('Web Telemetry Route: 无 ctx.effect 的宿主仍能直接挂载', () => {
+test('Web Canvas Route: 无 ctx.effect 的宿主仍能直接挂载', () => {
   const webServer = createMockWebServer();
   const ctx = createMockCtx({ webServer, hasEffect: false });
 
@@ -398,7 +392,7 @@ test('Web Telemetry Route: 无 ctx.effect 的宿主仍能直接挂载', () => {
   assert.equal(webServer.registered.length, 1);
 });
 
-test('Web Telemetry Route: apply 挂载遥测路由且不唤醒 Agent', async () => {
+test('Web Canvas Route: apply 挂载看板数据路由且不唤醒 Agent', async () => {
   const webServer = createMockWebServer();
   const wakeups = [];
   const agents = [
@@ -471,7 +465,7 @@ test('Web Telemetry Route: apply 挂载遥测路由且不唤醒 Agent', async ()
   }
 });
 
-test('Web Telemetry Route: 快照聚合器独立性与全景数据协同验证', async () => {
+test('Web Canvas Route: 快照聚合器独立性与全景数据协同验证', async () => {
   // 1. 验证 getCanvasTelemetry 及其辅助纯函数从 lib/web-telemetry-route.mjs 独立导出
   assert.equal(typeof getCanvasTelemetry, 'function', 'getCanvasTelemetry 必须在 web-telemetry-route 中原生导出');
   assert.equal(typeof computeSessionShortId, 'function', 'computeSessionShortId 必须在 web-telemetry-route 中原生导出');

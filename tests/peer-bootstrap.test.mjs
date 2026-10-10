@@ -7,33 +7,8 @@ import {
   publishBootstrapNotice,
   bootstrapPeerSession
 } from '../lib/peer-bootstrap.mjs';
+import { createMockAgent } from './helpers/mock-agent.mjs';
 
-function createMockAgent({
-  id = 'peer-agent-1',
-  status = 'idle',
-  title = 'Target Peer',
-  generation = 1,
-  shouldFail = false
-} = {}) {
-  const received = [];
-  return {
-    id,
-    status,
-    title,
-    generation,
-    steer(msg) {
-      if (shouldFail) throw new Error('steer dispatch failed');
-      received.push({ type: 'steer', msg });
-      return Promise.resolve();
-    },
-    followup(msg) {
-      if (shouldFail) throw new Error('followup dispatch failed');
-      received.push({ type: 'followup', msg });
-      return Promise.resolve();
-    },
-    _received: received
-  };
-}
 
 function createMockBoardStore({ shouldFail = false } = {}) {
   const posts = [];
@@ -81,8 +56,9 @@ test('formatInitialMessage: builds standard UserMessage structure', () => {
   assert.equal(msg.id, 'msg-custom-id-999');
   assert.equal(msg.role, 'user');
   assert.deepEqual(msg.content, [{ type: 'text', text: 'Analyze system architecture' }]);
-  assert.equal(msg.source.kind, 'plugin');
-  assert.equal(msg.source.plugin, 'dsh-call-session');
+  assert.equal(msg.source.kind, 'plugin:dsh-call-session');
+  assert.notEqual(msg.source.kind, 'plugin');
+  assert.equal(msg.source.plugin, undefined);
   assert.equal(msg.source.form, 'session_create');
   assert.equal(msg.source.summary, '[Peer Session Bootstrap] from CaptainAgent: Analyze system architecture');
 
@@ -140,7 +116,7 @@ test('dispatchInitialMessage: returns idle when messagePayload is null or undefi
   const targetAgent = createMockAgent();
   assert.equal(dispatchInitialMessage(targetAgent, null), 'idle');
   assert.equal(dispatchInitialMessage(targetAgent, undefined), 'idle');
-  assert.equal(targetAgent._received.length, 0);
+  assert.equal(targetAgent.received.length, 0);
 });
 
 test('dispatchInitialMessage: dispatches to running or idle agent and returns running on success', () => {
@@ -153,8 +129,8 @@ test('dispatchInitialMessage: dispatches to running or idle agent and returns ru
 
   const status = dispatchInitialMessage(agent, payload);
   assert.equal(status, 'running');
-  assert.equal(agent._received.length, 1);
-  assert.equal(agent._received[0].type, 'followup');
+  assert.equal(agent.received.length, 1);
+  assert.equal(agent.received[0].type, 'followup');
 });
 
 test('dispatchInitialMessage: safely catches dispatch error, logs warn, and returns idle', () => {
@@ -279,7 +255,7 @@ test('bootstrapPeerSession: coordinates initial message and board bootstrap noti
 
   assert.equal(result.status, 'running');
   assert.ok(result.bootstrapPostId);
-  assert.equal(agent._received.length, 1);
+  assert.equal(agent.received.length, 1);
   assert.equal(boardStore.posts.length, 1);
   assert.equal(boardStore.posts[0].id, result.bootstrapPostId);
 });
@@ -300,7 +276,7 @@ test('bootstrapPeerSession: returns idle status when no initialMessage provided'
 
   assert.equal(result.status, 'idle');
   assert.ok(result.bootstrapPostId);
-  assert.equal(agent._received.length, 0);
+  assert.equal(agent.received.length, 0);
   assert.equal(boardStore.posts.length, 1);
 });
 

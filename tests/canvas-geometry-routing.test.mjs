@@ -6,8 +6,10 @@ const plugin = loadClientBundle();
 const {
   calculateBezierPath,
   getEllipseIntersection,
+  getRoundedRectIntersection,
   computePostEdgeCoordinates,
-  GUTTER_CONFIG
+  GUTTER_CONFIG,
+  SESSION_NODE_CORNER_RADIUS
 } = plugin;
 
 /**
@@ -34,14 +36,76 @@ function parseBezierPath(d) {
 
 test('纯数学几何导出与配置契约完整性', () => {
   assert.equal(typeof calculateBezierPath, 'function', '必须导出 calculateBezierPath');
-  assert.equal(typeof getEllipseIntersection, 'function', '必须导出 getEllipseIntersection');
+  assert.equal(typeof getEllipseIntersection, 'function', '必须导出 getEllipseIntersection (保留向后兼容)');
+  assert.equal(typeof getRoundedRectIntersection, 'function', '必须导出 getRoundedRectIntersection');
   assert.equal(typeof computePostEdgeCoordinates, 'function', '必须导出 computePostEdgeCoordinates');
+  assert.equal(SESSION_NODE_CORNER_RADIUS, 8, '必须导出 SESSION_NODE_CORNER_RADIUS 且等于 8');
   assert.ok(GUTTER_CONFIG && typeof GUTTER_CONFIG === 'object', '必须导出 GUTTER_CONFIG 配置常量');
-  assert.equal(GUTTER_CONFIG.NODE_RX, 96, '椭圆水平半轴必须为 96px');
-  assert.equal(GUTTER_CONFIG.NODE_RY, 26, '椭圆垂直半轴必须为 26px');
+  assert.equal(GUTTER_CONFIG.NODE_RX, 96, '节点水平半轴必须为 96px');
+  assert.equal(GUTTER_CONFIG.NODE_RY, 26, '节点垂直半轴必须为 26px');
+  assert.equal(GUTTER_CONFIG.NODE_RADIUS, 8, '卡片圆角必须为 8px');
   assert.equal(GUTTER_CONFIG.CHANNEL_MIN_OFFSET, 106, '同列走线通道内轨必须为 106px');
   assert.equal(GUTTER_CONFIG.CHANNEL_MAX_OFFSET, 126, '同列走线通道外轨必须为 126px');
   assert.equal(GUTTER_CONFIG.POST_OUTER_OFFSET, 130, '黑板专属通道起始必须为 130px');
+});
+
+test('圆角矩形外切交点计算 (getRoundedRectIntersection)：正交、平直段与角圆弧精确外切', () => {
+  const cx = 200;
+  const cy = 300;
+  const a = 96;
+  const b = 26;
+  const r = 8;
+
+  // 1. 正右方向射线 (dx > 0, dy = 0)
+  const rightPt = getRoundedRectIntersection(cx, cy, cx + 150, cy, a, b, r);
+  assert.equal(rightPt.x, cx + a, '正右射线外切交点 X 应为 cx + a');
+  assert.equal(rightPt.y, cy, '正右射线外切交点 Y 应为 cy');
+
+  // 2. 正左方向射线 (dx < 0, dy = 0)
+  const leftPt = getRoundedRectIntersection(cx, cy, cx - 150, cy, a, b, r);
+  assert.equal(leftPt.x, cx - a, '正左射线外切交点 X 应为 cx - a');
+  assert.equal(leftPt.y, cy, '正左射线外切交点 Y 应为 cy');
+
+  // 3. 正下方向射线 (dx = 0, dy > 0)
+  const downPt = getRoundedRectIntersection(cx, cy, cx, cy + 100, a, b, r);
+  assert.equal(downPt.x, cx, '正下射线外切交点 X 应为 cx');
+  assert.equal(downPt.y, cy + b, '正下射线外切交点 Y 应为 cy + b');
+
+  // 4. 正上方向射线 (dx = 0, dy < 0)
+  const upPt = getRoundedRectIntersection(cx, cy, cx, cy - 100, a, b, r);
+  assert.equal(upPt.x, cx, '正上射线外切交点 X 应为 cx');
+  assert.equal(upPt.y, cy - b, '正上射线外切交点 Y 应为 cy - b');
+
+  // 5. 定理 1 (出入点收敛定理)：偏角 |dy| <= 18px 且 dx >= 96px 时，交点 X 恒等于 cx + 96
+  const lead15Right = getRoundedRectIntersection(cx, cy, cx + 106, cy + 15, a, b, r);
+  assert.equal(lead15Right.x, cx + 96, '同列下行走线偏角 15px 时 X 坐标恒收敛于 cx + 96');
+  assert.ok(Math.abs(lead15Right.y - (cy + 15 * (96 / 106))) < 1e-6);
+
+  const lead15Left = getRoundedRectIntersection(cx, cy, cx - 106, cy - 15, a, b, r);
+  assert.equal(lead15Left.x, cx - 96, '同列上行走线偏角 -15px 时 X 坐标恒收敛于 cx - 96');
+  assert.ok(Math.abs(lead15Left.y - (cy - 15 * (96 / 106))) < 1e-6);
+
+  // 6. 水平平直段：|dx| <= 88 且 dy >= 26 时，交点 Y 恒等于 cy + 26
+  const bottomFlatPt = getRoundedRectIntersection(cx, cy, cx + 40, cy + 100, a, b, r);
+  assert.equal(bottomFlatPt.y, cy + 26, '平直底边交点 Y 恒为 cy + 26');
+  assert.ok(Math.abs(bottomFlatPt.x - (cx + 40 * (26 / 100))) < 1e-6);
+
+  // 7. 四个角圆弧相交：满足 (x - cornerX)^2 + (y - cornerY)^2 = r^2
+  // 角圆弧区间斜率介于 18/96 (0.1875) 与 26/88 (~0.2955) 之间，选取 dx=92, dy=-22 (斜率 ~0.239)
+  const cornerX = cx + (a - r);
+  const cornerY = cy - (b - r);
+  const diagPt = getRoundedRectIntersection(cx, cy, cx + 92, cy - 22, a, b, r);
+  const distToCornerCenter = Math.hypot(diagPt.x - cornerX, diagPt.y - cornerY);
+  assert.ok(Math.abs(distToCornerCenter - r) < 1e-5, `交点必须位于右上圆角圆弧上: ${distToCornerCenter}`);
+
+  // 8. 零向量与极小偏移退化保护
+  const originPt = getRoundedRectIntersection(cx, cy, cx, cy, a, b, r);
+  assert.equal(originPt.x, cx);
+  assert.equal(originPt.y, cy);
+
+  const tinyPt = getRoundedRectIntersection(cx, cy, cx + 0.00001, cy + 0.00001, a, b, r);
+  assert.equal(tinyPt.x, cx);
+  assert.equal(tinyPt.y, cy);
 });
 
 test('椭圆外切交点计算 (getEllipseIntersection)：正交与斜向射线精确外切几何', () => {

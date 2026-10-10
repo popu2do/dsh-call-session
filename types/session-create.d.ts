@@ -24,6 +24,8 @@ export interface SessionCreateArgs {
   reasoning_effort?: string;
   /** 可选指定挂载的智能体预设 ID。默认继承当前会话或全局默认预设，除非手动指定。 */
   preset?: string;
+  /** 可选指定目标工作区路径。默认继承调用方工作区，显式指定时跨工作区创建 (ADR-0010)。 */
+  workspace?: string;
 }
 
 export interface SessionCreateResult {

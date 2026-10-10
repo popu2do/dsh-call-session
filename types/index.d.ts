@@ -138,7 +138,7 @@ export interface CallSessionConfig {
   debounceMs?: number;
   /** 黑板保留条目上限，按 FIFO 淘汰，默认 200 */
   maxCapacity?: number;
-  /** 跨会话调用遥测环形缓冲区保留上限，按 FIFO 淘汰，默认 200 */
+  /** 跨会话调用连线环形缓冲区保留上限，按 FIFO 淘汰，默认 200 */
   telemetryCapacity?: number;
   /** 注入全局 System Prompt 的排序权重，默认 118 */
   promptSectionOrder?: number;

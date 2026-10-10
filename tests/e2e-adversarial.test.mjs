@@ -20,48 +20,12 @@ import {
   dispatchNativeMessage
 } from '../lib/session-call.mjs';
 import { apply } from '../index.mjs';
+import { createMockAgent } from './helpers/mock-agent.mjs';
 
 function createTempDir() {
   return fs.mkdtemp(path.join(os.tmpdir(), 'dsh-e2e-adv-'));
 }
 
-function createMockAgent(id, {
-  status = 'idle',
-  title = 'Test Agent',
-  cwd = 'c:/workspace/project-alpha',
-  generation = 0,
-  creatorSessionId = null,
-  steerFn = null,
-  followupFn = null
-} = {}) {
-  const received = [];
-  const agent = {
-    id,
-    status,
-    title,
-    generation,
-    session: {
-      id,
-      title,
-      header: { cwd, title },
-      cwd,
-      metadata: {
-        generation,
-        creatorSessionId
-      }
-    },
-    steer: steerFn || ((msg) => {
-      agent.status = 'running';
-      received.push({ type: 'steer', msg });
-    }),
-    followup: followupFn || ((msg) => {
-      agent.status = 'running';
-      received.push({ type: 'followup', msg });
-    }),
-    received
-  };
-  return agent;
-}
 
 function createMockHarness({
   initialAgents = [],
@@ -89,7 +53,8 @@ function createMockHarness({
         title: options.title || options.meta?.title || '',
         cwd: options.cwd || options.meta?.cwd || workspace,
         generation: options.meta?.generation || 1,
-        creatorSessionId: options.meta?.creatorSessionId || null
+        creatorSessionId: options.meta?.creatorSessionId || null,
+        mutateStatusOnDispatch: true
       });
       registeredAgents.set(id, agent);
       return { agent };

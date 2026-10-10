@@ -272,7 +272,7 @@ test('ADR-0020 Invariant 2: Peer Session Quota Synchronous Rejection Baseline (P
   );
 });
 
-test('ADR-0020 Invariant 3: Web Telemetry Route Snapshot Aggregation (P99 <= 20ms, CI 3x Margin <= 60ms)', async () => {
+test('ADR-0020 Invariant 3: Web Canvas Route Snapshot Aggregation (P99 <= 20ms, CI 3x Margin <= 60ms)', async () => {
   const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'dsh-perf-telemetry-'));
   const storagePath = path.join(tmpDir, 'board.json');
 
