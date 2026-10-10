@@ -12,5 +12,24 @@ if [ -n "$bad_docs" ]; then
   exit 1
 fi
 
+# 1. 机械阻断在 scripts/ 下新增非标脚手架脚本（仅允许标准维护脚本）
+bad_scripts=$(git diff --cached --name-only --diff-filter=A | grep -E '^scripts/' | grep -vE '^scripts/(scan-secrets|check-commit-msg|install-hooks)\.mjs$' || true)
+if [ -n "$bad_scripts" ]; then
+  echo "hook: 严禁向 scripts/ 增加非标临时脚本 ($bad_scripts)。所有验证与契约逻辑必须编写为 tests/*.test.mjs 单元测试。" >&2
+  exit 1
+fi
+
+# 2. 机械阻断代码中硬编码开发者本地绝对路径 (/home/ 或 /Users/)
+if git diff --cached | grep -qE '^\+[^+].*["''`][/](home|Users)[/]'; then
+  echo "hook: 严禁在代码中硬编码本地环境绝对路径 (/home/ 或 /Users/)！" >&2
+  exit 1
+fi
+
+# 3. 机械阻断意外篡改 package.json 版本号；仅在显式声明 ALLOW_VERSION_BUMP=1 时允许变更
+if [ "$ALLOW_VERSION_BUMP" != "1" ] && git diff --cached package.json | grep -qE '^\+\s*"version":'; then
+  echo "hook: 检测到 package.json 版本号变更。若为替换发版请勿修改版本；若确认升级版本请显式设置 ALLOW_VERSION_BUMP=1。" >&2
+  exit 1
+fi
+
 node scripts/scan-secrets.mjs --staged
 npm run --silent verify

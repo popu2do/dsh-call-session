@@ -76,8 +76,8 @@ export interface NativeUserMessage {
   }>;
   /** 语义源标识 */
   source: {
-    kind: 'plugin';
-    plugin: 'dsh-call-session';
+    kind: 'plugin:dsh-call-session' | 'plugin';
+    plugin?: string;
     form: 'notice';
     summary: string;
   };

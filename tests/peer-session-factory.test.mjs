@@ -5,77 +5,16 @@ import {
   PEER_SESSION_CONSTANTS,
   executeSessionCreate
 } from '../lib/session-create.mjs';
+import { createMockAgent } from './helpers/mock-agent.mjs';
+import { createMockEnvironment } from './helpers/mock-host.mjs';
 
-function createMockAgent(id, {
-  status = 'idle',
-  title = 'Parent Agent',
-  cwd = 'c:/workspace/project-alpha',
-  generation = 0,
-  options = { provider: 'test-prov', model: 'test-model' }
-} = {}) {
-  const received = [];
-  const agent = {
-    id,
-    status,
-    title,
-    generation,
-    options,
-    session: {
-      header: { cwd, title },
-      metadata: { generation },
-      append: async () => {},
-      messages: []
-    },
-    steer(msg) {
-      received.push({ type: 'steer', msg });
-      return Promise.resolve();
-    },
-    followup(msg) {
-      received.push({ type: 'followup', msg });
-      return Promise.resolve();
-    },
-    _received: received
-  };
-  return agent;
-}
-
-function createMockEnvironment(agentList = []) {
-  const list = [...agentList];
-  const mockAgentsService = {
-    create: async (payload) => {
-      const target = createMockAgent(payload.sessionId, {
-        title: payload.title,
-        cwd: payload.cwd,
-        generation: payload.meta?.generation ?? 1,
-        options: payload.agentOptions
-      });
-      list.push(target);
-      return target;
-    },
-    list: () => list
-  };
-
-  const mockCtx = {
-    root: {
-      agents: mockAgentsService
-    },
-    agents: mockAgentsService,
-    get: (key) => {
-      if (key === 'agents') return mockAgentsService;
-      return undefined;
-    }
-  };
-
-  return { ctx: mockCtx, agentsService: mockAgentsService, list };
-}
-
-test('PeerSessionFactory: 实例化与核心生命周期接口', async () => {
+test('同级会话生命周期与创建契约：初始化、标题推导与选项解析', async () => {
   PeerSessionFactory.reset();
   const { ctx } = createMockEnvironment();
   const factory = new PeerSessionFactory(ctx);
   assert.ok(factory.directory, '应该包含内部初始化的 SessionDirectory 实例');
 
-  const caller = createMockAgent('caller-1');
+  const caller = createMockAgent('caller-1', { options: { provider: 'test-prov', model: 'test-model' } });
   const result = await factory.create({
     args: {
       title: 'Peer Worker',
@@ -109,7 +48,7 @@ test('PeerSessionFactory: 实例化与核心生命周期接口', async () => {
   PeerSessionFactory.reset();
 });
 
-test('PeerSessionFactory: 限频与并发配额校验', async () => {
+test('会话治理安全网：滑动窗口限频与单工作区运行并发配额硬拦截', async () => {
   PeerSessionFactory.reset();
   const { ctx } = createMockEnvironment();
   const factory = new PeerSessionFactory(ctx);
@@ -144,7 +83,7 @@ test('PeerSessionFactory: 限频与并发配额校验', async () => {
   assert.equal(resAfterReset.success, true);
 });
 
-test('PeerSessionFactory: 代际深度与工作区配额拦截', async () => {
+test('会话治理熔断：代际深度超限 (depth >= 2) 与配额熔断', async () => {
   PeerSessionFactory.reset();
   const { ctx } = createMockEnvironment();
   const factory = new PeerSessionFactory(ctx);
@@ -183,7 +122,7 @@ test('PeerSessionFactory: 代际深度与工作区配额拦截', async () => {
   );
 });
 
-test('PeerSessionFactory: 模型继承、预设与参数清洗', async () => {
+test('派发模型继承与预设装配：继承调用方 LLM 配置并执行安全参数清洗', async () => {
   PeerSessionFactory.reset();
   const { ctx } = createMockEnvironment();
   const factory = new PeerSessionFactory(ctx);

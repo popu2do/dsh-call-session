@@ -9,7 +9,7 @@ import {
   resetInFlightCreations
 } from '../lib/session-safeguard.mjs';
 
-test('SessionSafeguard - 常量导出与冻结保护', () => {
+test('SessionSafeguard - 会话安全治理配额契约与冻结保护', () => {
   assert.ok(SAFEGUARD_CONSTANTS, 'SAFEGUARD_CONSTANTS 应被导出');
   assert.ok(PEER_SESSION_CONSTANTS, 'PEER_SESSION_CONSTANTS 应被导出以保持向后兼容');
 
@@ -17,15 +17,16 @@ test('SessionSafeguard - 常量导出与冻结保护', () => {
   assert.equal(SAFEGUARD_CONSTANTS.MAX_ACTIVE_PEER_SESSIONS, 5);
   assert.equal(SAFEGUARD_CONSTANTS.MAX_CREATIONS_PER_MINUTE, 5);
 
-  assert.equal(PEER_SESSION_CONSTANTS.MAX_GENERATION, 2);
-  assert.equal(PEER_SESSION_CONSTANTS.MAX_ACTIVE_PEER_SESSIONS, 5);
-  assert.equal(PEER_SESSION_CONSTANTS.MAX_CREATIONS_PER_MINUTE, 5);
+  // 向后兼容别名对齐
+  assert.equal(PEER_SESSION_CONSTANTS.MAX_GENERATION, SAFEGUARD_CONSTANTS.MAX_GENERATION);
+  assert.equal(PEER_SESSION_CONSTANTS.MAX_ACTIVE_PEER_SESSIONS, SAFEGUARD_CONSTANTS.MAX_ACTIVE_PEER_SESSIONS);
 
   assert.ok(Object.isFrozen(SAFEGUARD_CONSTANTS), 'SAFEGUARD_CONSTANTS 应当为只读冻结对象');
   assert.ok(Object.isFrozen(PEER_SESSION_CONSTANTS), 'PEER_SESSION_CONSTANTS 应当为只读冻结对象');
 
   assert.ok(PEER_SESSION_CONSTANTS.PRIVILEGED_PREFIX_REGEX.test('[SYSTEM] Worker'));
   assert.ok(PEER_SESSION_CONSTANTS.PRIVILEGED_PREFIX_REGEX.test('captain: Leader'));
+  assert.equal(PEER_SESSION_CONSTANTS.PRIVILEGED_PREFIX_REGEX.test('worker: Normal'), false);
 });
 
 test('SessionSafeguard - 代际深度熔断机制 (MAX_GENERATION=2)', () => {

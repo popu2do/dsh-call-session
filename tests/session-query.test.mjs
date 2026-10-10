@@ -7,29 +7,8 @@ import {
   resolveAgentsService,
   executeSessionQuery
 } from '../lib/session-query.mjs';
+import { createMockAgent } from './helpers/mock-agent.mjs';
 
-function createMockAgent(id, {
-  status = 'idle',
-  title = 'Test Session',
-  cwd = 'c:/workspace/project-a',
-  origin = undefined,
-  blank = false,
-  events = []
-} = {}) {
-  return {
-    id,
-    status,
-    title,
-    origin,
-    blank,
-    session: {
-      id,
-      title,
-      cwd,
-      events
-    }
-  };
-}
 
 function createMockCtx({
   agentsList = [],

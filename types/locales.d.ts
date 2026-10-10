@@ -35,7 +35,7 @@ export interface LocaleTools {
   board_clear: ToolCatalogItem<'id' | 'topic' | 'mode'>;
   session_call: ToolCatalogItem<'target_session_id' | 'message' | 'call_type' | 'context_post_ids'>;
   session_query: ToolCatalogItem<'query' | 'running_only' | 'cross_workspace' | 'top_level_only' | 'limit'>;
-  session_create: ToolCatalogItem<'title' | 'initial_message' | 'context_post_ids' | 'model' | 'reasoning_effort' | 'preset'>;
+  session_create: ToolCatalogItem<'title' | 'initial_message' | 'context_post_ids' | 'model' | 'reasoning_effort' | 'preset' | 'workspace'>;
 }
 
 export interface LocaleCatalog {
@@ -49,7 +49,6 @@ export interface LocaleCatalog {
 }
 
 export declare const SUPPORTED_LOCALES: readonly ['zh', 'en'];
-export declare const DEFAULT_LOCALE: 'en';
 export declare const CATALOGS: {
   readonly zh: LocaleCatalog;
   readonly en: LocaleCatalog;

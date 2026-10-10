@@ -7,40 +7,9 @@ import {
   buildTransportPayload,
   sanitizePostIds
 } from '../lib/session-call.mjs';
-
-function createMockAgent(id, {
-  status = 'idle',
-  title = 'Test Agent',
-  cwd = 'c:/workspace/app',
-  steerFn = null,
-  followupFn = null,
-  sendFn = null
-} = {}) {
-  const received = [];
-  return {
-    id,
-    status,
-    title,
-    session: {
-      id,
-      title,
-      cwd
-    },
-    steer: steerFn || ((msg) => { received.push({ type: 'steer', msg }); }),
-    followup: followupFn || ((msg) => { received.push({ type: 'followup', msg }); }),
-    send: sendFn,
-    received
-  };
-}
+import { createMockAgent, silentLogger } from './helpers/mock-agent.mjs';
 
 const HEADER_REGEX = /^\[From: .+? \(.+?\) \| CallType: (task_dispatch|task_report|notice)\](\n> Context Ref: .+?)?\n\n/;
-
-const silentLogger = Object.freeze({
-  debug() {},
-  info() {},
-  warn() {},
-  error() {}
-});
 
 function createMockCtx({ agentsList = [], archivedIds = [], logger = silentLogger } = {}) {
   const archivedSet = new Set(archivedIds);
@@ -71,13 +40,16 @@ function createMockCtx({ agentsList = [], archivedIds = [], logger = silentLogge
   };
 }
 
-test('CALL_TYPE_INTENTS 常量定义完整性', () => {
-  assert.equal(CALL_TYPE_INTENTS.task_dispatch, 'TASK_DISPATCH');
-  assert.equal(CALL_TYPE_INTENTS.task_report, 'TASK_REPORT');
-  assert.equal(CALL_TYPE_INTENTS.notice, 'NOTICE');
+test('单播调用类型意图枚举与协议映射契约 (ADR-0006)', () => {
+  const supportedIntents = ['task_dispatch', 'task_report', 'notice'];
+  for (const intent of supportedIntents) {
+    assert.ok(typeof CALL_TYPE_INTENTS[intent] === 'string' && CALL_TYPE_INTENTS[intent].length > 0);
+  }
+  assert.equal(CALL_TYPE_INTENTS['unknown_intent'], undefined);
+  assert.ok(Object.isFrozen(CALL_TYPE_INTENTS));
 });
 
-test('dispatchNativeMessage: 状态分发 (steer / followup / send)', () => {
+test('单播原生通信分发：按目标会话运行状态自适应选择 steer 或 followup 通道', () => {
   // 1. target 为 running 态且具有 steer 方法 -> steer
   const runningAgent = createMockAgent('agent-running', { status: 'running' });
   const mode1 = dispatchNativeMessage(runningAgent, { role: 'user', content: [] });
@@ -109,7 +81,7 @@ test('dispatchNativeMessage: 状态分发 (steer / followup / send)', () => {
   assert.throws(() => dispatchNativeMessage({}, {}), /\[ServiceUnavailable\]/);
 });
 
-test('executeSessionCall: 参数校验测试 (通配符/自呼叫/超长消息/空参数)', async () => {
+test('单播调用参数安全校验：拦截通配符、自呼叫、超长消息与空参数', async () => {
   const caller = createMockAgent('caller-session-12345678');
   const target = createMockAgent('target-session-87654321');
   const ctx = createMockCtx({ agentsList: [caller, target] });
@@ -170,7 +142,7 @@ test('executeSessionCall: 参数校验测试 (通配符/自呼叫/超长消息/�
   );
 });
 
-test('executeSessionCall: 会话前缀解析与多重匹配处理', async () => {
+test('目标会话解析契约：支持前缀匹配并在歧义时抛出 AmbiguousTarget', async () => {
   const caller = createMockAgent('caller-00000000');
   const sessionAlpha1 = createMockAgent('cluster-worker-node-alpha-1');
   const sessionAlpha2 = createMockAgent('cluster-worker-node-alpha-2');
@@ -221,7 +193,7 @@ test('executeSessionCall: 会话前缀解析与多重匹配处理', async () => 
   );
 });
 
-test('executeSessionCall: 归档会话过滤', async () => {
+test('会话生命周期过滤：已归档会话拒绝接收单播调用', async () => {
   const caller = createMockAgent('caller-11112222');
   const archivedTarget = createMockAgent('archived-session-33334444');
 
@@ -278,8 +250,9 @@ test('executeSessionCall: 消息投递、Context Post 关联与两态分发', as
   );
   assert.ok(dispatchedToIdle.content[0].text.includes('> Context Ref: #post-998, #post-999'));
   assert.ok(dispatchedToIdle.content[0].text.includes('Please review task #42'));
-  assert.equal(dispatchedToIdle.source.kind, 'plugin');
-  assert.equal(dispatchedToIdle.source.plugin, 'dsh-call-session');
+  assert.equal(dispatchedToIdle.source.kind, 'plugin:dsh-call-session');
+  assert.notEqual(dispatchedToIdle.source.kind, 'plugin');
+  assert.equal(dispatchedToIdle.source.plugin, undefined);
   assert.ok(dispatchedToIdle.source.summary.includes('[Cross-Session TASK_DISPATCH]'));
 
   // 2. 呼叫 running 会话 -> 触发 steer

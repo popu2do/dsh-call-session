@@ -11,41 +11,8 @@ import {
 import {
   CallTelemetryRingBuffer
 } from '../lib/call-telemetry.mjs';
+import { createMockAgent } from './helpers/mock-agent.mjs';
 
-function createMockAgent(id, {
-  status = 'idle',
-  title = 'Test Agent',
-  cwd = 'c:/workspace/project-alpha',
-  isSubagent = false
-} = {}) {
-  const received = [];
-  return {
-    id,
-    status,
-    title,
-    session: {
-      id,
-      title,
-      cwd,
-      header: Object.freeze({
-        version: 0,
-        id,
-        cwd,
-        origin: isSubagent ? 'subagent' : undefined
-      })
-    },
-    received,
-    steer(msg) {
-      received.push({ method: 'steer', msg });
-    },
-    followup(msg) {
-      received.push({ method: 'followup', msg });
-    },
-    send(msg) {
-      received.push({ method: 'send', msg });
-    }
-  };
-}
 
 function createMockCtx({
   agentsList = [],
@@ -362,8 +329,9 @@ test('超长 Payload 与异常输入边界容错', async () => {
   assert.ok(textContent.includes('> Context Ref: #post-001, #post-002, #999'));
   assert.ok(textContent.includes('Valid task instruction'));
 
-  // 验证 Semantic MessageSource
-  assert.equal(receivedMsg.source.plugin, 'dsh-call-session');
+  // 验证 Semantic MessageSource (DSH 格式 v4 生产者归属契约)
+  assert.equal(receivedMsg.source.kind, 'plugin:dsh-call-session');
+  assert.notEqual(receivedMsg.source.kind, 'plugin');
+  assert.equal(receivedMsg.source.plugin, undefined);
   assert.equal(receivedMsg.source.form, 'notice');
-  assert.equal(receivedMsg.source.kind, 'plugin');
 });

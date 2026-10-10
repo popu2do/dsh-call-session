@@ -657,6 +657,10 @@ export function apply(ctx, config = {}) {
           preset: {
             type: 'string',
             description: catalog.tools.session_create.parameters.preset
+          },
+          workspace: {
+            type: 'string',
+            description: catalog.tools.session_create.parameters.workspace
           }
         }
       },

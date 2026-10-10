@@ -15,20 +15,12 @@ import {
   getReservedTopicErrorMessage
 } from '../lib/board-store.mjs';
 import { apply } from '../index.mjs';
+import { createMockAgent } from './helpers/mock-agent.mjs';
 
 function createTempDir() {
   return fs.mkdtemp(path.join(os.tmpdir(), 'dsh-hygiene-adv-'));
 }
 
-function createMockAgent(id, { cwd = 'c:/workspace/project-alpha' } = {}) {
-  return {
-    id,
-    session: {
-      id,
-      header: { cwd }
-    }
-  };
-}
 
 function createMockCordisContext() {
   const tools = new Map();
@@ -365,7 +357,7 @@ test('端到端保留主题拒绝与拦截防护：board_post 与 BoardStore.pos
     await store.close();
   });
 
-  // 1. BoardStore.post 对保留前缀与遥测主题的底层抛错拦截
+  // 1. BoardStore.post 对保留前缀与非公开主题的底层抛错拦截
   const blockedTopics = [
     'telemetry:call',
     'telemetry:trace',
@@ -432,7 +424,7 @@ test('端到端保留主题拒绝与拦截防护：board_post 与 BoardStore.pos
 
     assert.equal(res.success, false, `board_post 工具必须拦截 ${topic}`);
     assert.ok(res.message.includes('[ReservedTopic]'), '必须包含保留主题拦截提示');
-    assert.ok(res.message.includes('ADR-0012') || res.message.includes('CallTelemetryRingBuffer'), '错误信息必须引导至 ADR-0012 内存遥测域');
+    assert.ok(res.message.includes('ADR-0012') || res.message.includes('CallTelemetryRingBuffer'), '错误信息必须引导至 ADR-0012 内存调用连线域');
   }
 
   // 4. 合法业务调用 board_post 应当成功
@@ -455,7 +447,7 @@ test('BoardStore.hydratePosts: 启动水合历史脏数据过滤与持久化恢�
 
   const storagePath = path.join(tmpDir, 'board-legacy.json');
 
-  // 1. 模拟历史脏文件：其中混入了误写入黑板的遥测与保留主题条目
+  // 1. 模拟历史脏文件：其中混入了误写入黑板的保留主题条目
   const mixedInitialData = {
     version: 1,
     posts: [
@@ -534,7 +526,7 @@ test('BoardStore.hydratePosts: 启动水合历史脏数据过滤与持久化恢�
   const activePosts = store.findActiveByAuthor('session-alpha', 'c:/workspace/proj');
   assert.equal(activePosts.length, 2, 'session-alpha 仅能查询到其合法发布的 2 条条目');
   const reminderText = formatAuthorReminderText(activePosts);
-  assert.ok(!reminderText.includes('telemetry:'), 'System Prompt 提醒文本绝不能包含遥测脏条目');
+  assert.ok(!reminderText.includes('telemetry:'), 'System Prompt 提醒文本绝不能包含非公开脏条目');
   assert.ok(!reminderText.includes('call:'), 'System Prompt 提醒文本绝不能包含调用脏条目');
 
   // 5. 等待自愈落盘并验证磁盘文件已修复

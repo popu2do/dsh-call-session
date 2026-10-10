@@ -11,6 +11,7 @@ import {
   formatAuthorReminderText
 } from '../lib/board-store.mjs';
 import { apply } from '../index.mjs';
+import { createMockAgent } from './helpers/mock-agent.mjs';
 
 function createTempDir() {
   return fs.mkdtemp(path.join(os.tmpdir(), 'dsh-board-security-'));
@@ -65,17 +66,8 @@ function createMockCordisContext() {
   };
 }
 
-function createMockAgent(id, cwd = 'c:/workspace/proj-security') {
-  return {
-    id,
-    session: {
-      id,
-      header: { cwd }
-    }
-  };
-}
 
-test('isReservedTopic: 保留主题与遥测命名空间判定 (ADR-0001 & ADR-0012)', () => {
+test('isReservedTopic: 保留主题与非公开命名空间判定 (ADR-0001 & ADR-0012)', () => {
   // 1. 保留前缀集合断言
   assert.ok(Array.isArray(RESERVED_TOPIC_PREFIXES));
   assert.ok(RESERVED_TOPIC_PREFIXES.includes('telemetry:'));
@@ -125,7 +117,7 @@ test('isReservedTopic: 保留主题与遥测命名空间判定 (ADR-0001 & ADR-0
   assert.equal(isReservedTopic(12345), false);
 });
 
-test('BoardStore.post: 直接写入保留主题与遥测数据时抛错拦截', async (t) => {
+test('BoardStore.post: 直接写入保留主题与非公开数据时抛错拦截', async (t) => {
   const tmpDir = await createTempDir();
   t.after(async () => {
     await fs.rm(tmpDir, { recursive: true, force: true });
@@ -227,7 +219,7 @@ test('BoardStore.post: 直接写入保留主题与遥测数据时抛错拦截', 
   await store.close();
 });
 
-test('BoardStore.hydratePosts: 启动水合自动清洗误写入的遥测数据并保护 KV Cache', async (t) => {
+test('BoardStore.hydratePosts: 启动水合自动清洗误写入的非公开保留数据并保护 KV Cache', async (t) => {
   const tmpDir = await createTempDir();
   t.after(async () => {
     await fs.rm(tmpDir, { recursive: true, force: true });
@@ -235,7 +227,7 @@ test('BoardStore.hydratePosts: 启动水合自动清洗误写入的遥测数据�
 
   const storagePath = path.join(tmpDir, 'board.json');
 
-  // 构造模拟历史脏数据（包含 2 条正常业务条目和 4 条遥测/保留主题脏条目）
+  // 构造模拟历史脏数据（包含 2 条正常业务条目和 4 条保留主题脏条目）
   const dirtyDiskData = {
     version: 1,
     posts: [
@@ -307,8 +299,8 @@ test('BoardStore.hydratePosts: 启动水合自动清洗误写入的遥测数据�
   const reminderText = formatAuthorReminderText(activePosts);
   assert.ok(reminderText.includes('task:audit'));
   assert.ok(reminderText.includes('spec:api'));
-  assert.ok(!reminderText.includes('task:telemetry'), '提醒文本不得包含遥测脏条目');
-  assert.ok(!reminderText.includes('telemetry:call:trace'), '提醒文本不得包含遥测脏条目');
+  assert.ok(!reminderText.includes('task:telemetry'), '提醒文本不得包含保留脏条目');
+  assert.ok(!reminderText.includes('telemetry:call:trace'), '提醒文本不得包含保留脏条目');
 
   // 3. 验证自动自愈落盘：hydratePosts 发现脏数据后触发 scheduleFlush，磁盘上文件被清洗重写
   await store.close();

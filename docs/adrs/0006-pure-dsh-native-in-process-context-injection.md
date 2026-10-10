@@ -50,7 +50,7 @@
 - **Cons**: 未能根治上下文污染与 Token 浪费，且无法利用原生折叠通知行展示。
 
 ### Option 3 (Chosen): Pure Native In-Process Direct Lookup + Semantic MessageSource + Dual-Channel Steer/Followup
-- **Description**: 废除 HTTP 与定界符包装，通过 `ctx.agents.get(...)` 获取目标实例；使用 `source: { kind: 'plugin', plugin: 'dsh-call-session', form: 'notice', summary: '...' }` 封装 Payload；目标 `idle` 调用 `followup`，目标 `running` 调用 `steer`。
+- **Description**: 废除 HTTP 与定界符包装，通过 `ctx.agents.get(...)` 获取目标实例；使用 `source: { kind: 'plugin:dsh-call-session', form: 'notice', summary: '...' }` 封装 Payload；目标 `idle` 调用 `followup`，目标 `running` 调用 `steer`。
 - **Pros**: 消除网络请求与文本包装开销，直接使用进程内内存对象，对接原生 UI 折叠通知。
 - **Cons**: 需要重构 `session_call` 核心实现并废除历史辅助函数。
 
@@ -69,7 +69,7 @@
      - 若携带公共黑板上下文关联，换行追加：`> Context Ref: #post-xxx, #post-yyy`；
      - 报头与原始正文之间使用空行（`\n\n`）隔离；
      - 原始正文保持原样透传，不篡改内容，不追加指令；
-3. **Invariant 3 (Pure Plugin Source)**：消息源显式声明为 `{ kind: 'plugin', plugin: 'dsh-call-session', form: 'notice', summary: '...' }`；
+3. **Invariant 3 (Pure Plugin Source)**：消息源显式声明为 `{ kind: 'plugin:dsh-call-session', form: 'notice', summary: '...' }`，符合 DSH 会话格式 v4 生产者归属约束；
 4. **Invariant 4 (State-Adaptive Routing)**：
    - 目标为 `idle`：使用 `targetAgent.followup(userMessage)` 唤醒下一轮对话；
    - 目标为 `running`：使用 `targetAgent.steer(userMessage)` 在单步决策边界注入；
