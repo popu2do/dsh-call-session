@@ -46,8 +46,6 @@ dsh plugin --profile web list
 dsh plugin --profile web remove dsh-call-session
 ```
 
-> Note: The `--profile` option must follow the `plugin` subcommand, e.g. `dsh plugin --profile web ...`.
-
 ---
 
 ## Scenarios
