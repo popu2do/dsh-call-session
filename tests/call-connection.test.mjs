@@ -1008,7 +1008,7 @@ test('CallTelemetryRingBuffer: DRY 路径规范化与 ESM 循环依赖彻底阻�
 
   // 1. DRY 校验：公共纯函数 normalizeWorkspace 必须通过公共路径引用，严禁就地复制代码
   assert.ok(
-    /from\s+['"][^'"]*board-store(\.mjs)?['"]/i.test(fileContent),
+    /from\s+['"][^'"]*workspace(\.mjs)?['"]/i.test(fileContent),
     'lib/call-telemetry.mjs 必须通过公共路径导入 normalizeWorkspace'
   );
   assert.ok(
