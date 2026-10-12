@@ -17,7 +17,6 @@ import type z from '@deepseek-ai/schemastery';
 import {
   BoardStore,
   AtomicBoardStore,
-  normalizeWorkspace,
   extractTitle,
   formatAuthorReminderText,
   RESERVED_TOPIC_PREFIXES,
@@ -34,6 +33,10 @@ import {
   type BoardClearResult,
   type BoardStoreOptions
 } from './board-store.js';
+
+import {
+  normalizeWorkspace
+} from './workspace.js';
 
 import {
   CALL_TYPE_INTENTS,
