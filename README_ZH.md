@@ -46,8 +46,6 @@ dsh plugin --profile web list
 dsh plugin --profile web remove dsh-call-session
 ```
 
-> 注意：`--profile` 参数必须置于 `plugin` 子命令之后，如 `dsh plugin --profile web ...`。
-
 ---
 
 ## 场景
