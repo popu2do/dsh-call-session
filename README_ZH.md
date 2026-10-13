@@ -80,7 +80,7 @@ dsh plugin --profile web remove dsh-call-session
 在 DSH Web 会话视图顶部提供看板，用于实时观察工作区内的多会话协作全景：
 
 <p align="center">
-  <img src="./assets/canvas-demo.png" width="100%" alt="dsh-call-session canvas" />
+  <img src="./assets/canvas-demo-zh.png" width="100%" alt="dsh-call-session canvas" />
 </p>
 
 - 拓扑呈现：展示工作区分组列、运行与就绪状态节点、黑板条目及存活倒计时、调用连线轨迹。
