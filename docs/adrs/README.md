@@ -53,6 +53,7 @@ ADRs transition through the following states:
 | **ADR-0025** | Peer Session Creation Host Gateway, Safeguard Lease, and Bootstrap Decoupling | **Accepted** | 2026-09-23 | `lib/dsh-host-gateway.mjs`, `lib/session-safeguard.mjs`, `lib/peer-bootstrap.mjs`, `lib/session-create.mjs` | [0025-peer-session-creation-gateway-safeguard-and-bootstrap-decoupling.md](./0025-peer-session-creation-gateway-safeguard-and-bootstrap-decoupling.md) |
 | **ADR-0026** | Canvas Rounded Rectangle Cards, Toolbar Streamlining, and Dual Lineage Modes | **Accepted** | 2026-10-08 | `lib/client.js`, `types/client.d.ts` | [0026-canvas-rounded-rect-cards-toolbar-streamlining-and-dual-lineage-modes.md](./0026-canvas-rounded-rect-cards-toolbar-streamlining-and-dual-lineage-modes.md) |
 | **ADR-0027** | Deep Module Architecture: Workspace Domain Primitive Isolation, Physical Adapter Seams, and Tools Registry Facade | **Accepted** | 2026-10-10 | `lib/workspace.mjs`, `lib/board-tools-adapter.mjs`, `lib/tools-registry.mjs`, `index.mjs` | [0027-deep-module-workspace-isolation-tools-registry-and-canvas-geometry.md](./0027-deep-module-workspace-isolation-tools-registry-and-canvas-geometry.md) |
+| **ADR-0028** | Deep Admission Safeguard Seam, Atomic Title Resolution, and Lease Single Source of Truth | **Accepted** | 2026-10-13 | `lib/session-safeguard.mjs`, `lib/session-create.mjs`, `CONTEXT.md` | [0028-deep-admission-safeguard-seam-and-lease-single-source-of-truth.md](./0028-deep-admission-safeguard-seam-and-lease-single-source-of-truth.md) |
 
 ---
 

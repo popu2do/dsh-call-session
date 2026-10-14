@@ -514,3 +514,54 @@ test('SessionSafeguard - 高阶 admit 接口集成解析与准入校验', () => 
   lease.release();
 });
 
+test('SessionSafeguard - 深层 admit 接口自动推导、前缀清洗与在途合并防重', () => {
+  const safeguard = new SessionSafeguard();
+  safeguard.reset();
+
+  const caller = {
+    id: 'caller-admit-deep',
+    cwd: '/ws/deep',
+    session: { id: 'caller-admit-deep', cwd: '/ws/deep', metadata: { generation: 0 } }
+  };
+
+  const agentsSvc = {
+    list: () => []
+  };
+
+  // 1. 未传 title，仅传 initialMessage，自动推导并交付规范标题
+  const lease1 = safeguard.admit({
+    callerAgent: caller,
+    workspace: '/ws/deep',
+    initialMessage: 'Refactor admission seam for peer session',
+    agentsService: agentsSvc
+  });
+  assert.equal(lease1.title, 'Peer: Refactor admission seam for peer session');
+  assert.equal(lease1.generation, 1);
+
+  // 2. 传特权前缀 [SYSTEM]，自动清洗为合规标题
+  const lease2 = safeguard.admit({
+    callerAgent: caller,
+    workspace: '/ws/deep',
+    title: '[SYSTEM] Cleaned Worker',
+    agentsService: agentsSvc
+  });
+  assert.equal(lease2.title, 'Cleaned Worker');
+
+  // 3. 在途重名拦截：再次申请 Cleaned Worker 应当在在途集合中直接被拒绝
+  assert.throws(
+    () => {
+      safeguard.admit({
+        callerAgent: caller,
+        workspace: '/ws/deep',
+        title: 'cleaned worker',
+        agentsService: agentsSvc
+      });
+    },
+    /[DuplicateTitle]/
+  );
+
+  lease1.release();
+  lease2.release();
+});
+
+
