@@ -3,6 +3,8 @@
  * Declarations for SessionSafeguard and atomic AdmissionLease.
  */
 
+import type { SessionDirectory } from '../types/session-directory.js';
+
 export interface SafeguardConstants {
   readonly MAX_ACTIVE_PEER_SESSIONS: number;
   readonly MAX_CONCURRENT_RUNNING_PEER_SESSIONS: number;
@@ -62,6 +64,8 @@ export interface AcquireParams {
   callerWorkspace?: string;
   title?: string;
   targetTitle?: string;
+  initialMessage?: string;
+  directory?: SessionDirectory | any;
   now?: number;
   activeCount?: number;
   activeTitles?: Set<string>;
