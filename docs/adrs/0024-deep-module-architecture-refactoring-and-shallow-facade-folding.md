@@ -1,6 +1,6 @@
 # ADR-0024: Deep Module Architecture Refactoring, Shallow Query Facade Folding, and Storage-Tool Adapter Decoupling
 
-- **Status**: Accepted
+- **Status**: Accepted (Tool adapter evolved by ADR-0027 and ADR-0030)
 - **Date**: 2026-09-23
 - **Deciders**: Architect, Engineering Team, Core Contributors
 - **Consulted**: Canvas Engineers, Telemetry Engineers, Directory Maintainers, QA Reviewers
@@ -58,6 +58,10 @@
 ---
 
 ## 4. Decision Outcome
+
+> **Architecture Evolution Notice**:
+> The logical separation of `BoardToolsAdapter` from `BoardStore` established here was physically decoupled into `lib/board-tools-adapter.mjs` by [ADR-0027](./0027-deep-module-workspace-isolation-tools-registry-and-canvas-geometry.md) and directly bound in tools registry by [ADR-0030](./0030-direct-tool-binding-to-board-tools-adapter.md).
+
 
 ### 4.1 四大重构架构支柱
 

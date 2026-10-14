@@ -315,18 +315,9 @@
 - **保护前端与看板数据系统**：明确固化 `sessionId`、`targetSessionId`、`callerSessionId` 出参，协作看板与看板数据管道稳定兼容。
 - **参数链路对称流转**：从会话发现到单播呼叫，再到黑板引用，参数命名对称一致。
 
-### 6.2 Implementation Directives (Handoff to Task 2 & Downstream)
-- **Task 2 (fullstack-dev)**：
-  - 依照本规范清理 `lib/session-call.mjs`, `lib/session-create.mjs`, `lib/session-query.mjs`, `index.mjs`；
-  - 移除 `args.active_only`、`args.reasoningEffort`、`args.agentPreset` 以及入参 `args.sessionId` 兼容逻辑；
-  - 同步更新 `types/session-call.d.ts`, `types/session-create.d.ts`, `types/session-query.d.ts`, `types/index.d.ts`，移除无用别名字段；
-  - 执行 `npm run lint` 与 `npm run typecheck` 确保类型 100% 对齐。
-- **Task 3 (fullstack-dev)**：
-  - 更新测试套件中显式使用废除别名的测试用例，全量回归验证 193+ 测试。
-- **Task 4 (code-reviewer)**：
-  - 对照本 ADR 逐项审查代码改造与别名清理的完整性。
-- **Task 5 (fullstack-dev)**：
-  - 依据 §5 修正案内容，更新 ADR-0001/0005/0006/0010/0011/0015 并同步至 3080 运行时。
+### 6.2 Operational Directives
+- 所有原生工具实现（`index.mjs`, `lib/*.mjs`）与 TypeScript 类型定义（`types/*.d.ts`）必须严格执行零别名纪律，禁止引入兼容层或私有别名。
+- 测试用例与文档用例必须使用规范参数，杜绝已被废除的历史别名。
 
 ---
 
