@@ -1,14 +1,18 @@
 # ADR-0012: Visual Collaboration Canvas and In-Memory Call Telemetry Architecture
 
-- **Status**: Accepted (Workspace isolation superseded by ADR-0013)
+- **Status**: Accepted (Workspace isolation superseded by ADR-0013; canvas geometry evolved by ADR-0014, ADR-0018, ADR-0019, ADR-0026)
 - **Date**: 2026-09-09
 - **Deciders**: Architect, Core Engineering Team, QA Automation Lead
 - **Consulted**: Frontend Engineering Team, UX Reviewer, Security Auditor
 - **Informed**: All Plugin Consumers, Downstream Subagents, DSH Web Users
 
-> **Superseded & Terminology Notice**:
-> The workspace isolation mechanism (`crossWorkspace` filter toggle) in Section 4.2 was formally superseded by [ADR-0013](./0013-human-canvas-global-transparency-vs-agent-workspace-isolation.md) (Human Canvas Global Transparency).
-> User-facing and documentation terminology strictly follows `CONTEXT.md`: use **看板数据 / Canvas Data** and **调用轨迹 / Call Trace**, and avoid telemetry jargon.
+> **Architecture Evolution Notice**:
+> - **Workspace Scoping**: Superseded by [ADR-0013](./0013-human-canvas-global-transparency-vs-agent-workspace-isolation.md) (Human Canvas Global Transparency vs Agent Workspace Isolation).
+> - **Gutter Routing & Theme**: Standardized by [ADR-0014](./0014-canvas-gutter-routing-and-scoped-theme-parity.md).
+> - **Motion Tokens & Invariants**: Enforced by [ADR-0018](./0018-canvas-motion-and-visual-restraint.md).
+> - **Channel Split Geometry**: Decoupled by [ADR-0019](./0019-channel-split-routing-and-lineage-on-demand-focus.md).
+> - **Rounded Rectangle Cards**: Refined by [ADR-0026](./0026-canvas-rounded-rect-cards-toolbar-streamlining-and-dual-lineage-modes.md).
+> - **Terminology**: Strictly obeys `CONTEXT.md`: use **看板数据 / Canvas Data** and **调用连线 / Call Connection**, and avoid telemetry or monitoring jargon.
 
 ---
 
