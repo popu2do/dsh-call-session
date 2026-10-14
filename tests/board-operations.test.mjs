@@ -4,6 +4,7 @@ import path from 'node:path';
 import os from 'node:os';
 import fs from 'node:fs/promises';
 import { BoardStore, BoardToolsAdapter, normalizeExecParams } from '../lib/board-store.mjs';
+import { buildToolDefinitions, registerNativeTools } from '../lib/tools-registry.mjs';
 import { createMockAgent } from './helpers/mock-agent.mjs';
 
 test('BoardStore.executePost: 领域操作封装与保留主题拦截', async () => {
@@ -366,6 +367,53 @@ test('BoardToolsAdapter: 主题校验收口与 BoardStore 纯存储分离', asyn
   const { cleanedPosts, dirtyCount } = adapter.filterDirtyPosts(dirtyPosts);
   assert.equal(dirtyCount, 2);
   assert.deepEqual(cleanedPosts.map(p => p.id), ['p1', 'p4']);
+
+  await store.close();
+  await fs.rm(tmpDir, { recursive: true, force: true });
+});
+
+test('buildToolDefinitions: 支持显式注入 boardToolsAdapter 且直接执行工具领域方法', async () => {
+  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'dsh-tools-adapter-'));
+  const storagePath = path.join(tmpDir, 'board.json');
+  const store = new BoardStore({ storagePath, debounceMs: 0 });
+  const adapter = new BoardToolsAdapter(store);
+
+  const tools = buildToolDefinitions({}, { boardToolsAdapter: adapter });
+  const postTool = tools.find(t => t.name === 'board_post');
+  const listTool = tools.find(t => t.name === 'board_list');
+  const clearTool = tools.find(t => t.name === 'board_clear');
+
+  assert.ok(postTool, '应该存在 board_post 工具');
+  assert.ok(listTool, '应该存在 board_list 工具');
+  assert.ok(clearTool, '应该存在 board_clear 工具');
+
+  const agent = createMockAgent('agent-direct', { cwd: '/workspaces/direct' });
+
+  const postRes = await postTool.execute({
+    topic: 'task:direct',
+    content: 'Direct adapter tool execution'
+  }, { agent });
+  assert.equal(postRes.success, true);
+  assert.equal(postRes.topic, 'task:direct');
+
+  const listRes = await listTool.execute({}, { agent });
+  assert.equal(listRes.success, true);
+  assert.equal(listRes.count, 1);
+
+  const clearRes = await clearTool.execute({ id: postRes.postId }, { agent });
+  assert.equal(clearRes.success, true);
+  assert.equal(clearRes.clearedCount, 1);
+
+  const registered = [];
+  const mockCtx = {
+    tools: {
+      register(def) { registered.push(def); }
+    }
+  };
+  registerNativeTools(mockCtx, { boardToolsAdapter: adapter });
+  assert.equal(registered.length, 6);
+  assert.ok(registered.some(t => t.name === 'board_post'));
+  assert.ok(registered.some(t => t.name === 'session_create'));
 
   await store.close();
   await fs.rm(tmpDir, { recursive: true, force: true });

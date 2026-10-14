@@ -20,6 +20,7 @@ import {
   isReservedTopic,
   getReservedTopicErrorMessage
 } from './lib/board-store.mjs';
+import { BoardToolsAdapter } from './lib/board-tools-adapter.mjs';
 import {
   normalizeWorkspace
 } from './lib/workspace.mjs';
@@ -182,6 +183,12 @@ export function apply(ctx, config = {}) {
     config
   });
 
+  const boardToolsAdapter = new BoardToolsAdapter(boardStore, {
+    ctx,
+    config,
+    logger
+  });
+
   const callTelemetry = new CallTelemetryRingBuffer(config.telemetryCapacity ?? 200);
   if (typeof ctx.provide === 'function') {
     ctx.provide('callTelemetry', callTelemetry);
@@ -242,11 +249,11 @@ export function apply(ctx, config = {}) {
     ctx.systemPrompt.context({
       name: 'board:remind',
       order: config.remindContextOrder ?? 130,
-      text: (context) => boardStore.getAuthorReminder(context?.agent, ctx, config)
+      text: (context) => boardToolsAdapter.getAuthorReminder(context?.agent, ctx, config)
     });
   }
 
-  registerNativeTools(ctx, { boardStore, config, logger });
+  registerNativeTools(ctx, { boardStore, boardToolsAdapter, config, logger });
 
   logger.debug?.('[dsh-call-session] Plugin initialized.');
 }

@@ -55,6 +55,7 @@ ADRs transition through the following states:
 | **ADR-0027** | Deep Module Architecture: Workspace Domain Primitive Isolation, Physical Adapter Seams, and Tools Registry Facade | **Accepted** | 2026-10-10 | `lib/workspace.mjs`, `lib/board-tools-adapter.mjs`, `lib/tools-registry.mjs`, `index.mjs` | [0027-deep-module-workspace-isolation-tools-registry-and-canvas-geometry.md](./0027-deep-module-workspace-isolation-tools-registry-and-canvas-geometry.md) |
 | **ADR-0028** | Deep Admission Safeguard Seam, Atomic Title Resolution, and Lease Single Source of Truth | **Accepted** | 2026-10-13 | `lib/session-safeguard.mjs`, `lib/session-create.mjs`, `CONTEXT.md` | [0028-deep-admission-safeguard-seam-and-lease-single-source-of-truth.md](./0028-deep-admission-safeguard-seam-and-lease-single-source-of-truth.md) |
 | **ADR-0029** | Consolidated Native Message Transport and Bootstrap Facade Folding | **Accepted** | 2026-10-14 | `lib/native-message-transport.mjs`, `lib/session-call.mjs`, `lib/peer-bootstrap.mjs` | [0029-consolidated-native-message-transport-and-bootstrap-facade-folding.md](./0029-consolidated-native-message-transport-and-bootstrap-facade-folding.md) |
+| **ADR-0030** | Direct Tool Binding to BoardToolsAdapter and Pure Storage Engine Alignment | **Accepted** | 2026-10-14 | `lib/tools-registry.mjs`, `index.mjs`, `lib/board-store.mjs` | [0030-direct-tool-binding-to-board-tools-adapter.md](./0030-direct-tool-binding-to-board-tools-adapter.md) |
 
 ---
 

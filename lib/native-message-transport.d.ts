@@ -14,6 +14,7 @@ export declare const CALL_TYPE_INTENTS: Readonly<CallTypeIntents>;
 export declare function generateMessageId(): string;
 
 export declare function sanitizeContextPostIds(postIds?: unknown): string[];
+export declare function sanitizePostIds(postIds?: unknown): string[];
 
 export interface TransportPayloadOptions {
   callerSessionId?: string;
