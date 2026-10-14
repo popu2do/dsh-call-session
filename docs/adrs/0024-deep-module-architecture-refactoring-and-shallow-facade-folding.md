@@ -6,6 +6,9 @@
 - **Consulted**: Canvas Engineers, Telemetry Engineers, Directory Maintainers, QA Reviewers
 - **Informed**: All Plugin Users, Downstream Agents, Web Interface Maintainers
 
+
+> **Architecture Evolution Notice**:
+> The logical separation of `BoardToolsAdapter` from `BoardStore` established here was physically decoupled into `lib/board-tools-adapter.mjs` by [ADR-0027](./0027-deep-module-workspace-isolation-tools-registry-and-canvas-geometry.md) and directly bound in tools registry by [ADR-0030](./0030-direct-tool-binding-to-board-tools-adapter.md).
 ---
 
 ## 1. Context and Problem Statement
@@ -58,10 +61,6 @@
 ---
 
 ## 4. Decision Outcome
-
-> **Architecture Evolution Notice**:
-> The logical separation of `BoardToolsAdapter` from `BoardStore` established here was physically decoupled into `lib/board-tools-adapter.mjs` by [ADR-0027](./0027-deep-module-workspace-isolation-tools-registry-and-canvas-geometry.md) and directly bound in tools registry by [ADR-0030](./0030-direct-tool-binding-to-board-tools-adapter.md).
-
 
 ### 4.1 四大重构架构支柱
 

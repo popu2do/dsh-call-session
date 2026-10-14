@@ -6,6 +6,13 @@
 - **Consulted**: QA Engineer, Multi-Agent Runtime Ops, Community Users
 - **Informed**: All Plugin Users, Downstream Subagents, Session Orchestrators
 
+
+> **Architecture Evolution Notice**:
+> - **Transport Layer**: Initial in-process dispatch was modernized by [ADR-0006](./0006-pure-dsh-native-in-process-context-injection.md) and formally consolidated into the dedicated native message transport by [ADR-0029](./0029-consolidated-native-message-transport-and-bootstrap-facade-folding.md).
+> - **Tool Binding & Storage Engine**: Direct execution and physical adapter decoupling were finalized by [ADR-0027](./0027-deep-module-workspace-isolation-tools-registry-and-canvas-geometry.md) and [ADR-0030](./0030-direct-tool-binding-to-board-tools-adapter.md).
+
+
+**Chosen Option**: Option 3 — Explicit Dual-Domain Separation.
 ---
 
 ## 1. Context and Problem Statement
@@ -64,13 +71,6 @@ This architectural coupling produced severe operational failures in production:
 ---
 
 ## 4. Decision Outcome
-
-> **Architecture Evolution Notice**:
-> - **Transport Layer**: Initial in-process dispatch was modernized by [ADR-0006](./0006-pure-dsh-native-in-process-context-injection.md) and formally consolidated into the dedicated native message transport by [ADR-0029](./0029-consolidated-native-message-transport-and-bootstrap-facade-folding.md).
-> - **Tool Binding & Storage Engine**: Direct execution and physical adapter decoupling were finalized by [ADR-0027](./0027-deep-module-workspace-isolation-tools-registry-and-canvas-geometry.md) and [ADR-0030](./0030-direct-tool-binding-to-board-tools-adapter.md).
-
-
-**Chosen Option**: Option 3 — Explicit Dual-Domain Separation.
 
 ### 4.1 Core Architectural Principles & Invariants
 

@@ -12,13 +12,33 @@ const repoRoot = path.resolve(__dirname, '..');
 const adrsDir = path.join(repoRoot, 'docs', 'adrs');
 const readmePath = path.join(adrsDir, 'README.md');
 
-test('ADR 目录完整性：全部 ADR 文件存在且编号连续无断层', async () => {
-  const entries = await fs.readdir(adrsDir);
-  const adrFiles = entries.filter(f => /^\d{4}-.*\.md$/.test(f)).sort();
+let cachedAdrFiles = null;
+let cachedFileContents = null;
 
+async function getAdrFiles() {
+  if (!cachedAdrFiles) {
+    const entries = await fs.readdir(adrsDir);
+    cachedAdrFiles = entries.filter(f => /^\d{4}-.*\.md$/.test(f)).sort();
+  }
+  return cachedAdrFiles;
+}
+
+async function getFileContents() {
+  if (!cachedFileContents) {
+    const files = await getAdrFiles();
+    cachedFileContents = new Map();
+    for (const file of files) {
+      const text = await fs.readFile(path.join(adrsDir, file), 'utf8');
+      cachedFileContents.set(file, text);
+    }
+  }
+  return cachedFileContents;
+}
+
+test('ADR 目录完整性：全部 ADR 文件存在且编号连续无断层', async () => {
+  const adrFiles = await getAdrFiles();
   assert.ok(adrFiles.length >= 30, 'ADR 数量应至少为 30 篇');
 
-  // 验证编号连续性 0001 ~ 0030
   for (let i = 1; i <= adrFiles.length; i++) {
     const prefix = String(i).padStart(4, '0');
     const matched = adrFiles.find(f => f.startsWith(prefix));
@@ -27,8 +47,7 @@ test('ADR 目录完整性：全部 ADR 文件存在且编号连续无断层', as
 });
 
 test('ADR 索引一致性：README.md 目录矩阵与物理磁盘文件 1:1 双向对齐', async () => {
-  const entries = await fs.readdir(adrsDir);
-  const adrFiles = entries.filter(f => /^\d{4}-.*\.md$/.test(f)).sort();
+  const adrFiles = await getAdrFiles();
   const readme = await fs.readFile(readmePath, 'utf8');
 
   for (const file of adrFiles) {
@@ -38,7 +57,6 @@ test('ADR 索引一致性：README.md 目录矩阵与物理磁盘文件 1:1 双�
     );
   }
 
-  // 抽取 README 中引用的所有 ./NNNN-*.md 链接，反向验证物理存在
   const linkMatches = Array.from(readme.matchAll(/\[(.*?)\]\(\.\/(\d{4}-[^)]+\.md)\)/g));
   assert.ok(linkMatches.length >= 30, 'README 中引用的 ADR 链接应不少于 30 个');
   for (const match of linkMatches) {
@@ -51,54 +69,78 @@ test('ADR 索引一致性：README.md 目录矩阵与物理磁盘文件 1:1 双�
 });
 
 test('ADR 结构规范性：每篇 ADR 均包含标准 H1 标题、Status 字段、Context 与 Decision 核心段落', async () => {
-  const entries = await fs.readdir(adrsDir);
-  const adrFiles = entries.filter(f => /^\d{4}-.*\.md$/.test(f)).sort();
+  const contents = await getFileContents();
 
-  for (const file of adrFiles) {
-    const content = await fs.readFile(path.join(adrsDir, file), 'utf8');
+  for (const [file, content] of contents.entries()) {
     const lines = content.split('\n');
 
-    // 1. H1 标题
     const h1 = lines.find(l => /^#\s+ADR-\d{4}:\s+.+/.test(l.trim()));
-    assert.ok(h1, `${file} 必须包含合法的 H1 标题 (# ADR-NNNN: ...)`);
+    assert.ok(h1, `${file} 必须包含合法的 H1 标题`);
 
-    // 2. Status 字段
     const statusLine = lines.find(l => /^-\s+\*\*Status\*\*:\s+.+/.test(l.trim()));
-    assert.ok(statusLine, `${file} 必须包含 Status 字段 (- **Status**: ...)`);
+    assert.ok(statusLine, `${file} 必须包含 Status 字段`);
     assert.ok(
       /Accepted|Proposed|Deprecated|Superseded/i.test(statusLine),
       `${file} Status 必须包含规范状态值：${statusLine}`
     );
 
-    // 3. Context 段落
     const hasContext = lines.some(l => /^##+\s+.*(Context|背景)/i.test(l.trim()));
-    assert.ok(hasContext, `${file} 必须包含 Context 段落`);
+    assert.ok(hasContext, `${file} 必须包含 Context 或背景段落`);
 
-    // 4. Decision 或 Invariants 段落
     const hasDecision = lines.some(l => /^##+\s+.*(Decision|Invariants|Outcome|决策|支柱)/i.test(l.trim()));
     assert.ok(hasDecision, `${file} 必须包含 Decision 或 Invariants 核心决策段落`);
   }
 });
 
 test('ADR 替代关系有效性：标记为 Superseded 的记录必须包含有效后继 ADR 目标', async () => {
-  const entries = await fs.readdir(adrsDir);
-  const adrFiles = entries.filter(f => /^\d{4}-.*\.md$/.test(f)).sort();
+  const adrFiles = await getAdrFiles();
+  const contents = await getFileContents();
 
-  for (const file of adrFiles) {
-    const content = await fs.readFile(path.join(adrsDir, file), 'utf8');
+  for (const [file, content] of contents.entries()) {
     const statusLine = content.split('\n').find(l => /^-\s+\*\*Status\*\*:\s+.+/.test(l.trim())) || '';
 
-    // 若标为 Superseded 或 包含 superseded by
-    if (/superseded\s+by\s+ADR-(\d{4})/i.test(statusLine)) {
-      const targetMatches = Array.from(statusLine.matchAll(/superseded\s+by\s+ADR-(\d{4})/gi));
+    if (/superseded.*ADR-(\d{4})/i.test(statusLine)) {
+      const targetMatches = Array.from(statusLine.matchAll(/ADR-(\d{4})/gi));
       for (const m of targetMatches) {
         const targetId = m[1];
+        if (file.startsWith(targetId)) continue;
         const targetExists = adrFiles.some(f => f.startsWith(targetId));
         assert.ok(
           targetExists,
           `${file} 中的替代目标 ADR-${targetId} 必须存在于 docs/adrs/ 目录中`
         );
       }
+    }
+  }
+});
+
+test('ADR 领域词汇规范性：ADR 标题严禁使用 CONTEXT.md 禁用词', async () => {
+  const forbiddenTerms = [
+    '全局事件总线',
+    '广播信道',
+    '消息队列',
+    '广播消息',
+    '事件通知',
+    '多播',
+    '提示词信封',
+    '调度引导词',
+    '消息包装器',
+    '遥测大屏',
+    '监控面板',
+    '泳道',
+    'Swimlane',
+    '边缘走线',
+    '留白槽'
+  ];
+
+  const contents = await getFileContents();
+  for (const [file, content] of contents.entries()) {
+    const firstLines = content.split('\n').slice(0, 10).join(' ');
+    for (const term of forbiddenTerms) {
+      assert.ok(
+        !firstLines.includes(term),
+        `${file} 标题与头部禁止包含禁用词：${term}`
+      );
     }
   }
 });

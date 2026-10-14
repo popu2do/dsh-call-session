@@ -61,6 +61,7 @@ As `dsh-call-session` evolved into version 0.1.0, the accompanying user document
 **Chosen Option**: Option 3 — Restrained Minimalist Technical Documentation.
 
 ### 4.1 Invariants
+7. **Operational Discipline Decoupling Invariant**: All ongoing agent tone, language, and zero-parentheses rules are maintained live in `AGENTS.md`; this ADR serves strictly as the immutable historical decision record, per ADR-0022.
 1. **Zero Emoji Invariant**: Exactly 0 Unicode pictographs and pseudographics across all documentation.
 2. **Four-Character Heading Invariant**: Level 2 and Level 3 Chinese headings must not exceed 4 characters.
 3. **Plain Technical Language Invariant**: Forbid metaphorical jargon. Use "单播呼叫" (unicast call) and "共享黑板" (shared board).
