@@ -6,6 +6,29 @@
 - **Consulted**: Core Contributors, Multi-Agent Teams Reviewers
 - **Informed**: All Plugin Users, Downstream Agents, DSH Web Interface Users
 
+> **Architecture Evolution Notice**:
+> - **Concurrent Running Quota**: Revised by [ADR-0021](./0021-concurrent-running-quota-and-model-inheritance-alignment.md) from 10 to 5 concurrent running root sessions.
+> - **Peer Session Creation**: Autonomous root session creation and safeguard leases were decoupled and deepened by [ADR-0025](./0025-peer-session-creation-gateway-safeguard-and-bootstrap-decoupling.md) and [ADR-0028](./0028-deep-admission-safeguard-seam-and-lease-single-source-of-truth.md).
+> - **Tool Facade**: Decoupled from the pure storage engine by [ADR-0027](./0027-deep-module-workspace-isolation-tools-registry-and-canvas-geometry.md) and [ADR-0030](./0030-direct-tool-binding-to-board-tools-adapter.md).
+
+
+**Chosen Decision**: 实施方案 Option 1.3（基于 `systemPrompt.context` 的状态镜像投影与级联清理）与 Option 2.3（基于 `ctx.root.agents.create` 的受控同级会话创建接口）。
+
+### 4.1 核心规范
+
+1. **Invariant 1 (Pure State Idempotency & Cache Protection)**：
+   状态镜像投影文本不输出易逝动态时间（如 `remainingSeconds`、时间差或 `Date.now()`）。过期条目在内存求值时布尔静默过滤。仅当黑板发生离散实体增删改或状态迁移时，投影文本才改变，保证服务端 Prompt KV Cache 命中率。
+2. **Invariant 2 (Strict Workspace Encapsulation)**：
+   状态镜像投影严格基于 `resolveSessionCwd(context.agent)` 过滤当前工作区条目；`session_create` 强制继承创建者的规范化工作区路径，防止跨越工程边界。
+3. **Invariant 3 (Bounded Blast Radius)**：
+   同一工作区活跃 Root Session 硬配额为 10；单会话创建限频 5 次/分钟；平级派生代际深度上限为 2（Generation <= 2，拒绝第 3 代递归衍生），防止 Fork Bomb。
+4. **Invariant 4 (Title Integrity & Anti-Spoofing)**：
+   会话标题强制过滤 `[SYSTEM]`、`[CAPTAIN]`、`[ROOT]` 等特权伪造前缀，禁止重名，未提供时由初始消息提取并规范化为 `Peer: <Summary>`。
+5. **Invariant 5 (Dual-Track Cascaded Cleanup)**：
+   兼备事件监听（`workspaceRegistry.archiveSession`、`dispose`）与状态镜像投影查询时的惰性自愈探针（`ctx.agents.get`），实现分级清理（dismiss 软归档 / purge 物理抹除 / deliverable-retention 成果保留）。
+6. **Invariant 6 (Atomic Fire-and-Forget Ignition)**：
+   `session_create` 完成平级会话创建与首条指令挂载后，通过 `followup()` 异步启动执行，立即返回会话句柄元数据，严禁同步阻塞等待对端执行。
+
 > **Concurrency Quota Revision Notice**:
 > The active root session quota of 10 in Section 2.2 and Section 5 was revised by [ADR-0021](./0021-concurrent-running-quota-and-model-inheritance-alignment.md). The running quota limit is now 5, counted strictly on `status === 'running'` root sessions (idle sessions do not consume quota).
 
@@ -70,28 +93,7 @@
 
 ## 4. Decision Outcome
 
-> **Architecture Evolution Notice**:
-> - **Active Quota**: Revised by [ADR-0021](./0021-concurrent-running-quota-and-model-inheritance-alignment.md) from 10 to 5 concurrent running root sessions.
-> - **Peer Session Creation**: Autonomous root session creation and safeguard leases were decoupled and deepened by [ADR-0025](./0025-peer-session-creation-gateway-safeguard-and-bootstrap-decoupling.md) and [ADR-0028](./0028-deep-admission-safeguard-seam-and-lease-single-source-of-truth.md).
-> - **Tool Facade**: Decoupled from the pure storage engine by [ADR-0027](./0027-deep-module-workspace-isolation-tools-registry-and-canvas-geometry.md) and [ADR-0030](./0030-direct-tool-binding-to-board-tools-adapter.md).
 
-
-**Chosen Decision**: 实施方案 Option 1.3（基于 `systemPrompt.context` 的状态镜像投影与级联清理）与 Option 2.3（基于 `ctx.root.agents.create` 的受控同级会话创建接口）。
-
-### 4.1 核心规范
-
-1. **Invariant 1 (Pure State Idempotency & Cache Protection)**：
-   状态镜像投影文本不输出易逝动态时间（如 `remainingSeconds`、时间差或 `Date.now()`）。过期条目在内存求值时布尔静默过滤。仅当黑板发生离散实体增删改或状态迁移时，投影文本才改变，保证服务端 Prompt KV Cache 命中率。
-2. **Invariant 2 (Strict Workspace Encapsulation)**：
-   状态镜像投影严格基于 `resolveSessionCwd(context.agent)` 过滤当前工作区条目；`session_create` 强制继承创建者的规范化工作区路径，防止跨越工程边界。
-3. **Invariant 3 (Bounded Blast Radius)**：
-   同一工作区活跃 Root Session 硬配额为 10；单会话创建限频 5 次/分钟；平级派生代际深度上限为 2（Generation <= 2，拒绝第 3 代递归衍生），防止 Fork Bomb。
-4. **Invariant 4 (Title Integrity & Anti-Spoofing)**：
-   会话标题强制过滤 `[SYSTEM]`、`[CAPTAIN]`、`[ROOT]` 等特权伪造前缀，禁止重名，未提供时由初始消息提取并规范化为 `Peer: <Summary>`。
-5. **Invariant 5 (Dual-Track Cascaded Cleanup)**：
-   兼备事件监听（`workspaceRegistry.archiveSession`、`dispose`）与状态镜像投影查询时的惰性自愈探针（`ctx.agents.get`），实现分级清理（dismiss 软归档 / purge 物理抹除 / deliverable-retention 成果保留）。
-6. **Invariant 6 (Atomic Fire-and-Forget Ignition)**：
-   `session_create` 完成平级会话创建与首条指令挂载后，通过 `followup()` 异步启动执行，立即返回会话句柄元数据，严禁同步阻塞等待对端执行。
 
 ---
 
@@ -260,4 +262,4 @@ Active Posts (Memory)   Anti-Snapshot-Storm                      Quota & Rate Ch
   - `index.mjs` (SystemPrompt Context Hook, Tool Registration)
   - `lib/board-store.mjs` (Cascade Cleanup, Mirror Projection Formatter)
   - `lib/session-create.mjs` (New Engine: Quota, Title Sanitizer, Fire-and-Forget Ignition)
-  - `lib/session-query.mjs` (Active Quota Calculation & Lifecycle Probes)
+  - `lib/session-query.mjs` (Concurrent Running Quota Calculation & Lifecycle Probes)

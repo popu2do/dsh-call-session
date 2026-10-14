@@ -6,6 +6,12 @@
 - **Consulted**: Code Reviewer, QA Automation Lead
 - **Informed**: All DSH Agent Developers, Tool Authors
 
+
+> **Architecture Evolution Notice**:
+> The multi-stage title event persistence and heuristic deduction described here was superseded by atomic title resolution and single-source lease reservation inside `SessionSafeguard` in [ADR-0028](./0028-deep-admission-safeguard-seam-and-lease-single-source-of-truth.md).
+
+
+**Chosen Decision**: 采纳 Option 3。
 ---
 
 ## 1. Context and Problem Statement
@@ -64,12 +70,6 @@
 ---
 
 ## 4. Decision Outcome
-
-> **Architecture Evolution Notice**:
-> The multi-stage title event persistence and heuristic deduction described here was superseded by atomic title resolution and single-source lease reservation inside `SessionSafeguard` in [ADR-0028](./0028-deep-admission-safeguard-seam-and-lease-single-source-of-truth.md).
-
-
-**Chosen Decision**: 采纳 Option 3。
 
 ### 4.1 核心架构不变式（Architectural Invariants）
 

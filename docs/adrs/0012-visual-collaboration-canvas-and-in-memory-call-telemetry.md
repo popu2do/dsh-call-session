@@ -6,6 +6,7 @@
 - **Consulted**: Frontend Engineering Team, UX Reviewer, Security Auditor
 - **Informed**: All Plugin Consumers, Downstream Subagents, DSH Web Users
 
+
 > **Architecture Evolution Notice**:
 > - **Workspace Scoping**: Superseded by [ADR-0013](./0013-human-canvas-global-transparency-vs-agent-workspace-isolation.md) (Human Canvas Global Transparency vs Agent Workspace Isolation).
 > - **Gutter Routing & Theme**: Standardized by [ADR-0014](./0014-canvas-gutter-routing-and-scoped-theme-parity.md).
@@ -13,7 +14,6 @@
 > - **Channel Split Geometry**: Decoupled by [ADR-0019](./0019-channel-split-routing-and-lineage-on-demand-focus.md).
 > - **Rounded Rectangle Cards**: Refined by [ADR-0026](./0026-canvas-rounded-rect-cards-toolbar-streamlining-and-dual-lineage-modes.md).
 > - **Terminology**: Strictly obeys `CONTEXT.md`: use **看板数据 / Canvas Data** and **调用连线 / Call Connection**, and avoid telemetry or monitoring jargon.
-
 ---
 
 ## 1. Context and Problem Statement

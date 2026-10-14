@@ -6,6 +6,12 @@
 - **Consulted**: Core Contributors, Community Users
 - **Informed**: All Plugin Consumers, Downstream Subagents, DSH Web Interface Users
 
+
+> **Architecture Evolution Notice**:
+> The native in-process context injection, transport payload construction, and post ID sanitization were formally consolidated into the dedicated single-source transport engine in [ADR-0029](./0029-consolidated-native-message-transport-and-bootstrap-facade-folding.md).
+
+
+**Chosen Option**: Option 3 — Pure Native In-Process Direct Lookup + Semantic MessageSource + Dual-Channel Steer/Followup.
 ---
 
 ## 1. Context and Problem Statement
@@ -57,12 +63,6 @@
 ---
 
 ## 4. Decision Outcome
-
-> **Architecture Evolution Notice**:
-> The native in-process context injection, transport payload construction, and post ID sanitization were formally consolidated into the dedicated single-source transport engine in [ADR-0029](./0029-consolidated-native-message-transport-and-bootstrap-facade-folding.md).
-
-
-**Chosen Option**: Option 3 — Pure Native In-Process Direct Lookup + Semantic MessageSource + Dual-Channel Steer/Followup.
 
 ### 4.1 Core Architectural Invariants
 1. **Invariant 1 (Zero-HTTP)**：插件源码内不出现针对宿主自身 prompt API 的 HTTP 调用；
