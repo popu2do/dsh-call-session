@@ -1,6 +1,6 @@
 # ADR-0017: Peer Session Title Event Persistence, Model Parameter Declaration, and Host Alignment Specification
 
-- **Status**: Accepted
+- **Status**: Accepted (Title resolution superseded by ADR-0028)
 - **Date**: 2026-09-12
 - **Deciders**: Architect, Core Maintainers, Multi-Agent Runtime Team
 - **Consulted**: Code Reviewer, QA Automation Lead
@@ -64,6 +64,10 @@
 ---
 
 ## 4. Decision Outcome
+
+> **Architecture Evolution Notice**:
+> The multi-stage title event persistence and heuristic deduction described here was superseded by atomic title resolution and single-source lease reservation inside `SessionSafeguard` in [ADR-0028](./0028-deep-admission-safeguard-seam-and-lease-single-source-of-truth.md).
+
 
 **Chosen Decision**: 采纳 Option 3。
 

@@ -1,6 +1,6 @@
 # ADR-0015: Peer Session Model and Preset Inheritance
 
-- **Status**: Accepted
+- **Status**: Accepted (Gateway creation evolved by ADR-0025)
 - **Date**: 2026-09-10
 - **Deciders**: Architect, Core Maintainers
 - **Informed**: All Agent Users, Multi-Session Operators
