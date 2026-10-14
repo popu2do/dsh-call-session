@@ -1,6 +1,6 @@
 # ADR-0007: Web Slash Command Integration and Visual UX Streamline
 
-- **Status**: Superseded
+- **Status**: Superseded (Retired on 2026-09-10 in favor of ADR-0012)
 - **Date**: 2026-09-04 (Superseded on 2026-09-10)
 - **Deciders**: Architect, Engineering Team, DSH Ecosystem Team
 - **Consulted**: Web Frontend Team, Community Users
