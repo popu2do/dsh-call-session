@@ -147,3 +147,8 @@ export declare function buildTransportPayload(
  * 清洗并去重关联黑板条目 ID 列表
  */
 export declare function sanitizePostIds(postIds?: unknown): string[];
+export declare function sanitizeContextPostIds(postIds?: unknown): string[];
+
+export type { NativeUserMessageOptions } from '../lib/native-message-transport.js';
+
+export declare function buildNativeUserMessage(options: import('../lib/native-message-transport.js').NativeUserMessageOptions): NativeUserMessage;
