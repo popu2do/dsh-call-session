@@ -32,11 +32,13 @@ import {
 } from './lib/session-query.mjs';
 import { SessionDirectory } from './lib/session-directory.mjs';
 import {
-  executeSessionCall,
+  executeSessionCall
+} from './lib/session-call.mjs';
+import {
   dispatchNativeMessage,
   CALL_TYPE_INTENTS,
   buildTransportPayload
-} from './lib/session-call.mjs';
+} from './lib/native-message-transport.mjs';
 import {
   PeerSessionFactory,
   executeSessionCreate,
