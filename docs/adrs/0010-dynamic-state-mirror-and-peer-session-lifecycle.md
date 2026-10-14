@@ -1,6 +1,6 @@
 # ADR-0010: Dynamic Blackboard State Mirror Projection and Controlled Peer Session Lifecycle
 
-- **Status**: Accepted
+- **Status**: Accepted (Peer creation superseded by ADR-0025 and ADR-0028; quota revised by ADR-0021; tool facade evolved by ADR-0027)
 - **Date**: 2026-09-07
 - **Deciders**: Architect (Mirror & Session), Engineering Team, Security Reviewer, DSH Ecosystem Team
 - **Consulted**: Core Contributors, Multi-Agent Teams Reviewers
@@ -69,6 +69,12 @@
 ---
 
 ## 4. Decision Outcome
+
+> **Architecture Evolution Notice**:
+> - **Active Quota**: Revised by [ADR-0021](./0021-concurrent-running-quota-and-model-inheritance-alignment.md) from 10 to 5 concurrent running root sessions.
+> - **Peer Session Creation**: Autonomous root session creation and safeguard leases were decoupled and deepened by [ADR-0025](./0025-peer-session-creation-gateway-safeguard-and-bootstrap-decoupling.md) and [ADR-0028](./0028-deep-admission-safeguard-seam-and-lease-single-source-of-truth.md).
+> - **Tool Facade**: Decoupled from the pure storage engine by [ADR-0027](./0027-deep-module-workspace-isolation-tools-registry-and-canvas-geometry.md) and [ADR-0030](./0030-direct-tool-binding-to-board-tools-adapter.md).
+
 
 **Chosen Decision**: 实施方案 Option 1.3（基于 `systemPrompt.context` 的状态镜像投影与级联清理）与 Option 2.3（基于 `ctx.root.agents.create` 的受控同级会话创建接口）。
 

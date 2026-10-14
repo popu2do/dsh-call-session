@@ -1,6 +1,6 @@
 # ADR-0006: Pure DSH Native In-Process Context Injection and State-Aware Dual Dispatch
 
-- **Status**: Accepted
+- **Status**: Accepted (Transport consolidated by ADR-0029)
 - **Date**: 2026-09-04
 - **Deciders**: Architect, Engineering Team, DSH Ecosystem Team
 - **Consulted**: Core Contributors, Community Users
@@ -57,6 +57,10 @@
 ---
 
 ## 4. Decision Outcome
+
+> **Architecture Evolution Notice**:
+> The native in-process context injection, transport payload construction, and post ID sanitization were formally consolidated into the dedicated single-source transport engine in [ADR-0029](./0029-consolidated-native-message-transport-and-bootstrap-facade-folding.md).
+
 
 **Chosen Option**: Option 3 — Pure Native In-Process Direct Lookup + Semantic MessageSource + Dual-Channel Steer/Followup.
 

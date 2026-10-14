@@ -1,6 +1,6 @@
 # ADR-0002: Built-in Blackboard State Store (Zero External Dep)
 
-- **Status**: Accepted
+- **Status**: Accepted (Storage core evolved by ADR-0027 and ADR-0030)
 - **Date**: 2026-09-03
 - **Deciders**: Architect, Engineer, User
 - **Consulted**: Core DSH Engine Team
@@ -47,6 +47,10 @@
 ---
 
 ## 4. Decision Outcome
+
+> **Architecture Evolution Notice**:
+> The physical separation between the pure storage engine (`BoardStore`) and tool adaptation (`BoardToolsAdapter`) was finalized in [ADR-0027](./0027-deep-module-workspace-isolation-tools-registry-and-canvas-geometry.md) and [ADR-0030](./0030-direct-tool-binding-to-board-tools-adapter.md).
+
 
 ### 方案决策
 **插件内部实现轻量黑板存储引擎（`BoardStore` / `AtomicBoardStore`）**，为跨会话协同提供状态发布与查询能力：
