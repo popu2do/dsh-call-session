@@ -90,6 +90,18 @@ test('NativeMessageTransport - 标准 DSH UserMessage 原子装配与摘要截�
     '[From: session-creator-999 (Creator) | CallType: task_dispatch]\n> Context Ref: #post-root\n\nHello new peer worker'
   );
 
+  // 2.1 针对空白发件人容错回退至 root-session (Spec 011)
+  const bootstrapBlankCaller = buildNativeUserMessage({
+    rawMessage: 'Hello fallback',
+    form: 'session_create',
+    callerSessionId: '   \t  \n  ',
+    callerTitle: ''
+  });
+  assert.equal(
+    bootstrapBlankCaller.content[0].text,
+    '[From: root-session (Session) | CallType: task_dispatch]\n\nHello fallback'
+  );
+
   // 3. 超长正文摘要截断至 120 字符
   const longText = 'A'.repeat(200);
   const truncatedMsg = buildNativeUserMessage({

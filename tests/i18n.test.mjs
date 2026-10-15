@@ -332,13 +332,15 @@ test('ADR-0023: 原生工具执行摘要与双层渲染中英双语输出验证'
   const createZhWithTask = zhMessages.sessionCreateSuccess('p1', 'Worker', 'running', 1, 'running', 'delivered', true);
   assert.ok(createZhWithTask.includes('初始任务已派发，等待目标回传，无需重复轮询'));
   const createZhWithoutTask = zhMessages.sessionCreateSuccess('p1', 'Worker', 'idle', 1, 'unverified', 'delivered', false);
-  assert.ok(createZhWithoutTask.includes('会话已就绪待命'));
+  assert.ok(createZhWithoutTask.includes('就绪待命'));
+  assert.ok(!createZhWithoutTask.includes('；'));
 
   const createEnWithTask = enMessages.sessionCreateSuccess('p1', 'Worker', 'running', 1, 'running', 'delivered', true);
   assert.ok(createEnWithTask.includes('initial task dispatched, await target task_report, no polling needed'));
   assert.ok(!/[\u4e00-\u9fa5]/.test(createEnWithTask));
   const createEnWithoutTask = enMessages.sessionCreateSuccess('p1', 'Worker', 'idle', 1, 'unverified', 'delivered', false);
-  assert.ok(createEnWithoutTask.includes('session ready for tasks'));
+  assert.ok(createEnWithoutTask.includes('idle ready'));
+  assert.ok(!createEnWithoutTask.includes(';'));
   assert.ok(!/[\u4e00-\u9fa5]/.test(createEnWithoutTask));
 });
 

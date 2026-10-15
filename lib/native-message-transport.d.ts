@@ -10,6 +10,7 @@ export interface CallTypeIntents {
 }
 
 export declare const CALL_TYPE_INTENTS: Readonly<CallTypeIntents>;
+export declare const DEFAULT_BOOTSTRAP_CALLER_ID: string;
 
 export declare function generateMessageId(): string;
 

@@ -30,6 +30,11 @@ Cross-session lightweight handshake verification, fail-fast startup crash interc
   - Purged misleading "successfully called" claims in Chinese and English catalogs in favor of truthful queue and execution confirmation notes.
   - Updated tool schemas for `session_call` and `session_create` with `deliveryState`, `executionState`, `error`, and `wait_ms`.
   - Updated `session_query` output schema to validate `status` against `['running', 'idle', 'error']`.
+- **Initial Message Transport Header & Convergence Metadata (ADR-0032, `lib/native-message-transport.mjs`, `lib/peer-bootstrap.mjs`, `lib/locales/`)**:
+  - Aligned `session_create` initial message payload with standard transport semantic headers carrying caller session id, title, and `CallType: task_dispatch`, providing peer sessions with deterministic caller attribution for `task_report` closeouts.
+  - Added fallback defaulting empty or whitespace caller identifiers to `DEFAULT_BOOTSTRAP_CALLER_ID` (`'root-session'`).
+  - Appended objective convergence status hints to `sessionCallSuccess` and `sessionCreateSuccess` across Chinese and English catalogs, suppressing blind polling.
+  - Synchronized `hasInitialMessage` metadata across execution and registry render seams.
 - **Peer Creation Model Synchronization (`lib/dsh-host-gateway.mjs`)**:
   - Synchronized inherited and overridden model options to `sessionController.agents.selectForNextRequest` and fallback `model/selection` event logging, preventing host defaults from overriding peer session configurations.
 - **Adversarial & Destructive Hardening**:

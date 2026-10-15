@@ -821,8 +821,8 @@ test('executeSessionCreate 端到端: 新建会话初始消息严格注入传输
   assert.equal(resWithoutTask.success, true);
   assert.equal(dispatchedPayload, null, '未传初始指令时不应投递 UserMessage');
   assert.ok(
-    resWithoutTask.message.includes('会话已就绪待命') ||
-    resWithoutTask.message.includes('session ready for tasks'),
+    resWithoutTask.message.includes('就绪待命') ||
+    resWithoutTask.message.includes('idle ready'),
     '无初始任务时应提示会话就绪待命'
   );
 
