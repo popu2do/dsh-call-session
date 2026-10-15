@@ -761,3 +761,70 @@ test('executeSessionCreate 边界测试: 极值与异常 wait_ms (0, 负数, 极
 
   resetRateLimits();
 });
+
+test('executeSessionCreate 端到端: 新建会话初始消息严格注入传输层报头与收敛文案 (Spec 011)', async () => {
+  resetRateLimits();
+  const caller = createMockAgent('caller-root-spec011', { title: 'Captain Lead' });
+  let dispatchedPayload = null;
+
+  const mockSvc = {
+    async create(payload) {
+      const agent = {
+        id: payload.sessionId,
+        title: payload.title,
+        status: 'idle',
+        phase: { kind: 'running' },
+        session: { id: payload.sessionId, cwd: payload.cwd, events: [] },
+        followup(msg) {
+          dispatchedPayload = msg;
+        }
+      };
+      return { agent };
+    }
+  };
+
+  const ctx = {
+    root: { agents: mockSvc },
+    agents: mockSvc,
+    logger: () => silentLogger,
+    get: (n) => (n === 'agents' ? mockSvc : undefined)
+  };
+
+  // 1. 携带 initial_message 与 context_post_ids
+  const resWithTask = await executeSessionCreate(ctx, {
+    title: 'Worker Spec 011',
+    initial_message: 'Please complete module refactoring',
+    context_post_ids: ['task-100', 'spec-200']
+  }, { agent: caller });
+
+  assert.equal(resWithTask.success, true);
+  assert.ok(dispatchedPayload, '必须派发初始 UserMessage');
+  assert.equal(dispatchedPayload.source.form, 'session_create');
+  assert.ok(
+    dispatchedPayload.content[0].text.startsWith(
+      `[From: ${caller.id} (${caller.title}) | CallType: task_dispatch]\n> Context Ref: #task-100, #spec-200\n\nPlease complete module refactoring`
+    ),
+    '正文首部必须包含规范传输层报头与 Context Ref 引用行'
+  );
+  assert.ok(
+    resWithTask.message.includes('初始任务已派发，等待目标回传，无需重复轮询') ||
+    resWithTask.message.includes('initial task dispatched, await target task_report, no polling needed'),
+    '成功返回值中必须包含收敛元信息提示'
+  );
+
+  // 2. 未携带 initial_message 时不派发报头且提示待命
+  dispatchedPayload = null;
+  const resWithoutTask = await executeSessionCreate(ctx, {
+    title: 'Standby Peer Spec 011'
+  }, { agent: caller });
+
+  assert.equal(resWithoutTask.success, true);
+  assert.equal(dispatchedPayload, null, '未传初始指令时不应投递 UserMessage');
+  assert.ok(
+    resWithoutTask.message.includes('会话已就绪待命') ||
+    resWithoutTask.message.includes('session ready for tasks'),
+    '无初始任务时应提示会话就绪待命'
+  );
+
+  resetRateLimits();
+});

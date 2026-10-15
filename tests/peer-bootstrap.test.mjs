@@ -48,6 +48,7 @@ test('formatInitialMessage: builds standard UserMessage structure', () => {
   const customIdGen = () => 'msg-custom-id-999';
   const msg = formatInitialMessage({
     initialMessage: 'Analyze system architecture',
+    callerSessionId: 'session-master-1234',
     callerTitle: 'CaptainAgent',
     generateMessageId: customIdGen
   });
@@ -55,25 +56,33 @@ test('formatInitialMessage: builds standard UserMessage structure', () => {
   assert.ok(msg);
   assert.equal(msg.id, 'msg-custom-id-999');
   assert.equal(msg.role, 'user');
-  assert.deepEqual(msg.content, [{ type: 'text', text: 'Analyze system architecture' }]);
+  assert.deepEqual(msg.content, [{
+    type: 'text',
+    text: '[From: session-master-1234 (CaptainAgent) | CallType: task_dispatch]\n\nAnalyze system architecture'
+  }]);
   assert.equal(msg.source.kind, 'plugin:dsh-call-session');
   assert.notEqual(msg.source.kind, 'plugin');
   assert.equal(msg.source.plugin, undefined);
   assert.equal(msg.source.form, 'session_create');
   assert.equal(msg.source.summary, '[Peer Session Bootstrap] from CaptainAgent: Analyze system architecture');
 
-  // Default ID generator
+  // Default ID generator and fallback caller
   const msgDefault = formatInitialMessage({
     initialMessage: 'Hello world'
   });
   assert.ok(msgDefault);
   assert.ok(typeof msgDefault.id === 'string' && msgDefault.id.length > 0);
+  assert.deepEqual(msgDefault.content, [{
+    type: 'text',
+    text: '[From: unknown-caller (Session) | CallType: task_dispatch]\n\nHello world'
+  }]);
   assert.equal(msgDefault.source.summary, '[Peer Session Bootstrap] from Session: Hello world');
 });
 
 test('formatInitialMessage: formats contextPostIds with # and prefix ref', () => {
   const msg = formatInitialMessage({
     initialMessage: 'Investigate deadlock',
+    callerSessionId: 'session-investigator-001',
     contextPostIds: ['post-101', '#post-202', '  #post-303  ', '', null],
     callerTitle: 'Investigator'
   });
@@ -81,7 +90,7 @@ test('formatInitialMessage: formats contextPostIds with # and prefix ref', () =>
   assert.ok(msg);
   assert.equal(
     msg.content[0].text,
-    '> Context Ref: #post-101, #post-202, #post-303\n\nInvestigate deadlock'
+    '[From: session-investigator-001 (Investigator) | CallType: task_dispatch]\n> Context Ref: #post-101, #post-202, #post-303\n\nInvestigate deadlock'
   );
   assert.equal(msg.source.summary, '[Peer Session Bootstrap] from Investigator: Investigate deadlock');
 });

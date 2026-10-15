@@ -305,6 +305,41 @@ test('ADR-0023: 原生工具执行摘要与双层渲染中英双语输出验证'
   assert.ok(clearResEn.message.includes('Cleared 1 blackboard post(s)'));
   assert.ok(clearResEn.message.includes('dismissed'));
   assert.ok(!/[\u4e00-\u9fa5]/.test(clearResEn.message));
+
+  // 3. 跨会话出参收敛元信息双语断言 (Spec 011)
+  const zhMessages = zh.messages;
+  const enMessages = en.messages;
+
+  // sessionCallSuccess
+  const callZhDispatch = zhMessages.sessionCallSuccess('s2', 'followup', 'task_dispatch', 'running', 'delivered');
+  assert.ok(callZhDispatch.includes('已派发任务等待目标回传，无需重复轮询'));
+  const callZhReport = zhMessages.sessionCallSuccess('s2', 'followup', 'task_report', 'running', 'delivered');
+  assert.ok(callZhReport.includes('已完成收口汇报，无需回复'));
+  const callZhNotice = zhMessages.sessionCallSuccess('s2', 'followup', 'notice', 'running', 'delivered');
+  assert.ok(callZhNotice.includes('单向通报阅后即止，无需回复'));
+
+  const callEnDispatch = enMessages.sessionCallSuccess('s2', 'followup', 'task_dispatch', 'running', 'delivered');
+  assert.ok(callEnDispatch.includes('task dispatched, await target task_report, no polling needed'));
+  assert.ok(!/[\u4e00-\u9fa5]/.test(callEnDispatch));
+  const callEnReport = enMessages.sessionCallSuccess('s2', 'followup', 'task_report', 'running', 'delivered');
+  assert.ok(callEnReport.includes('report delivered, no reply needed'));
+  assert.ok(!/[\u4e00-\u9fa5]/.test(callEnReport));
+  const callEnNotice = enMessages.sessionCallSuccess('s2', 'followup', 'notice', 'running', 'delivered');
+  assert.ok(callEnNotice.includes('one-way notice, no reply needed'));
+  assert.ok(!/[\u4e00-\u9fa5]/.test(callEnNotice));
+
+  // sessionCreateSuccess
+  const createZhWithTask = zhMessages.sessionCreateSuccess('p1', 'Worker', 'running', 1, 'running', 'delivered', true);
+  assert.ok(createZhWithTask.includes('初始任务已派发，等待目标回传，无需重复轮询'));
+  const createZhWithoutTask = zhMessages.sessionCreateSuccess('p1', 'Worker', 'idle', 1, 'unverified', 'delivered', false);
+  assert.ok(createZhWithoutTask.includes('会话已就绪待命'));
+
+  const createEnWithTask = enMessages.sessionCreateSuccess('p1', 'Worker', 'running', 1, 'running', 'delivered', true);
+  assert.ok(createEnWithTask.includes('initial task dispatched, await target task_report, no polling needed'));
+  assert.ok(!/[\u4e00-\u9fa5]/.test(createEnWithTask));
+  const createEnWithoutTask = enMessages.sessionCreateSuccess('p1', 'Worker', 'idle', 1, 'unverified', 'delivered', false);
+  assert.ok(createEnWithoutTask.includes('session ready for tasks'));
+  assert.ok(!/[\u4e00-\u9fa5]/.test(createEnWithoutTask));
 });
 
 
