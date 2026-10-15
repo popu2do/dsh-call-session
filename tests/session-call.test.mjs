@@ -714,3 +714,48 @@ test('executeSessionCall: 超时未进入运行态优雅降级为 enqueued 与 p
   assert.equal(res.executionState, 'pending');
   assert.equal(res.targetStatus, 'idle');
 });
+
+test('executeSessionCall 出参元信息: 三种呼叫类别均携带客观收敛状态提示 (Spec 011)', async () => {
+  const caller = createMockAgent('caller-convergence');
+  const target = createMockAgent('target-convergence', { status: 'running' });
+  const ctx = createMockCtx({ agentsList: [caller, target] });
+
+  // 1. task_dispatch
+  const resDispatch = await executeSessionCall({
+    ctx,
+    args: { target_session_id: 'target-convergence', message: 'Do work', call_type: 'task_dispatch' },
+    exec: { agent: caller }
+  });
+  assert.equal(resDispatch.success, true);
+  assert.ok(
+    resDispatch.message.includes('已派发任务等待目标回传，无需重复轮询') ||
+    resDispatch.message.includes('task dispatched, await target task_report, no polling needed'),
+    'task_dispatch 出参必须包含等待回传且无需轮询的说明'
+  );
+
+  // 2. task_report
+  const resReport = await executeSessionCall({
+    ctx,
+    args: { target_session_id: 'target-convergence', message: 'Work done', call_type: 'task_report' },
+    exec: { agent: caller }
+  });
+  assert.equal(resReport.success, true);
+  assert.ok(
+    resReport.message.includes('已完成收口汇报，无需回复') ||
+    resReport.message.includes('report delivered, no reply needed'),
+    'task_report 出参必须包含收口汇报无需回复的说明'
+  );
+
+  // 3. notice
+  const resNotice = await executeSessionCall({
+    ctx,
+    args: { target_session_id: 'target-convergence', message: 'State updated', call_type: 'notice' },
+    exec: { agent: caller }
+  });
+  assert.equal(resNotice.success, true);
+  assert.ok(
+    resNotice.message.includes('单向通报阅后即止，无需回复') ||
+    resNotice.message.includes('one-way notice, no reply needed'),
+    'notice 出参必须包含单向通报无需回复的说明'
+  );
+});

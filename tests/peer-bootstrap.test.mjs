@@ -74,7 +74,7 @@ test('formatInitialMessage: builds standard UserMessage structure', () => {
   assert.ok(typeof msgDefault.id === 'string' && msgDefault.id.length > 0);
   assert.deepEqual(msgDefault.content, [{
     type: 'text',
-    text: '[From: unknown-caller (Session) | CallType: task_dispatch]\n\nHello world'
+    text: '[From: root-session (Session) | CallType: task_dispatch]\n\nHello world'
   }]);
   assert.equal(msgDefault.source.summary, '[Peer Session Bootstrap] from Session: Hello world');
 });

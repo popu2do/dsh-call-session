@@ -1608,3 +1608,65 @@ test('executeSessionCreate: 初始消息正常拉起物理运行确权 (ADR-0031
   assert.equal(res.deliveryState, 'delivered');
   assert.equal(res.executionState, 'running');
 });
+
+test('executeSessionCreate: 首帧消息规范注入传输层报头且出参携带收敛元信息 (Spec 011)', async () => {
+  resetRateLimits();
+  const caller = createMockAgent('caller-create-spec011', { cwd: 'c:/workspace/app', title: 'Caller Architect' });
+  let receivedMsg = null;
+
+  const mockAgentsSvc = {
+    list: () => [caller],
+    get: () => undefined,
+    create: async (payload) => {
+      const mockAgent = {
+        id: payload.sessionId,
+        title: payload.title,
+        status: 'idle',
+        phase: { kind: 'running', turn: 1 },
+        session: {
+          id: payload.sessionId,
+          events: [],
+          header: { cwd: payload.cwd, title: payload.title }
+        },
+        received: [],
+        followup(msg) {
+          receivedMsg = msg;
+          this.received.push(msg);
+        }
+      };
+      return { agent: mockAgent };
+    }
+  };
+
+  const ctx = {
+    root: { agents: mockAgentsSvc },
+    agents: mockAgentsSvc,
+    logger: () => ({ debug() {}, info() {}, warn() {}, error() {} }),
+    get: (n) => (n === 'agents' ? mockAgentsSvc : undefined)
+  };
+
+  const res = await executeSessionCreate({
+    ctx,
+    args: {
+      title: 'Peer Architecture Worker',
+      initial_message: 'Start architecture review',
+      context_post_ids: ['post-init'],
+      wait_ms: 100
+    },
+    exec: { agent: caller }
+  });
+
+  assert.equal(res.success, true);
+  assert.ok(receivedMsg, '必须派发初始 UserMessage');
+  assert.ok(
+    receivedMsg.content[0].text.startsWith(
+      `[From: ${caller.id} (${caller.title}) | CallType: task_dispatch]\n> Context Ref: #post-init\n\nStart architecture review`
+    ),
+    '新会话接收的首帧消息必须规范注入传输层客观报头'
+  );
+  assert.ok(
+    res.message.includes('初始任务已派发，等待目标回传，无需重复轮询') ||
+    res.message.includes('initial task dispatched, await target task_report, no polling needed'),
+    'session_create 出参必须包含收敛元信息说明'
+  );
+});
