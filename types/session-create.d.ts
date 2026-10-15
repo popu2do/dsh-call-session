@@ -1,4 +1,4 @@
-import { SessionStatus } from './session-call.js';
+import { SessionStatus, DeliveryState, ExecutionState } from './session-call.js';
 import { SessionDirectory } from './session-directory.js';
 import type { DshHostGateway } from '../lib/dsh-host-gateway.js';
 import type { SessionSafeguard, AdmissionLease } from '../lib/session-safeguard.js';
@@ -26,6 +26,8 @@ export interface SessionCreateArgs {
   preset?: string;
   /** 可选指定目标工作区路径。默认继承调用方工作区，显式指定时跨工作区创建 (ADR-0010)。 */
   workspace?: string;
+  /** 可选覆盖轻量握手等待毫秒数，默认 300 毫秒 */
+  wait_ms?: number;
 }
 
 export interface SessionCreateResult {
@@ -37,8 +39,12 @@ export interface SessionCreateResult {
   title: string;
   /** 会话所属工作区绝对规范化路径 */
   workspace: string;
-  /** 会话就绪状态：'running' | 'idle' */
+  /** 会话就绪状态：'running' | 'idle' | 'error' */
   status: SessionStatus;
+  /** 投递状态 */
+  deliveryState?: DeliveryState;
+  /** 物理执行确认状态 */
+  executionState?: ExecutionState;
   /** 同级会话代际深度 */
   generation: number;
   /** 就绪公告关联的黑板条目 ID */

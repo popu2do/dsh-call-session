@@ -565,3 +565,152 @@ test('sanitizePostIds: 关联黑板 ID 清洗、去重与边界容错', () => {
   assert.deepEqual(sanitizePostIds(['post-1', 'post-2', 'post-1', '  post-2  ', '#', '']), ['post-1', 'post-2']);
   assert.deepEqual(sanitizePostIds(['#post-a', '#post-b', '#post-a']), ['#post-a', '#post-b']);
 });
+
+test('executeSessionCall: task_dispatch 启动首帧秒崩即时阻断与报错回传 (ADR-0031)', async () => {
+  const caller = createMockAgent('caller-handshake-1');
+  const targetCrash = {
+    id: 'target-crash-agent',
+    title: 'Crashed Worker',
+    status: 'idle',
+    phase: { kind: 'idle', lastTurn: 0 },
+    session: {
+      id: 'target-crash-agent',
+      events: []
+    },
+    received: [],
+    followup(msg) {
+      this.received.push(msg);
+      this.phase = { kind: 'running', turn: 1 };
+      // 模拟 20ms 后首轮执行崩溃
+      setTimeout(() => {
+        this.session.events.push({
+          type: 'turn/end',
+          data: {
+            turn: 1,
+            reason: {
+              kind: 'error',
+              error: { message: 'Plugin hook crash: undefined reference', code: 'HOOK_ERROR' }
+            }
+          }
+        });
+        this.phase = { kind: 'idle', lastTurn: 1 };
+      }, 20);
+    }
+  };
+
+  const ctx = createMockCtx({ agentsList: [caller, targetCrash] });
+  const res = await executeSessionCall({
+    ctx,
+    args: {
+      target_session_id: 'target-crash-agent',
+      message: 'Do critical refactor',
+      call_type: 'task_dispatch',
+      wait_ms: 100
+    },
+    exec: { agent: caller }
+  });
+
+  assert.equal(res.success, false, '发生秒崩时必须返回 success: false');
+  assert.equal(res.deliveryState, 'failed');
+  assert.equal(res.executionState, 'crashed');
+  assert.equal(res.targetStatus, 'error');
+  assert.ok(res.error?.message.includes('Plugin hook crash'));
+  assert.ok(res.message.includes('目标会话启动首帧发生崩溃'));
+});
+
+test('executeSessionCall: task_dispatch 正常拉起物理运行确权 (ADR-0031)', async () => {
+  const caller = createMockAgent('caller-handshake-2');
+  const targetHealthy = {
+    id: 'target-healthy-agent',
+    title: 'Healthy Worker',
+    status: 'idle',
+    phase: { kind: 'idle', lastTurn: 0 },
+    session: {
+      id: 'target-healthy-agent',
+      events: []
+    },
+    received: [],
+    followup(msg) {
+      this.received.push(msg);
+      this.phase = { kind: 'running', turn: 1 };
+      // 维持运行态
+    }
+  };
+
+  const ctx = createMockCtx({ agentsList: [caller, targetHealthy] });
+  const res = await executeSessionCall({
+    ctx,
+    args: {
+      target_session_id: 'target-healthy-agent',
+      message: 'Run healthy task',
+      call_type: 'task_dispatch',
+      wait_ms: 100
+    },
+    exec: { agent: caller }
+  });
+
+  assert.equal(res.success, true);
+  assert.equal(res.deliveryState, 'delivered');
+  assert.equal(res.executionState, 'running');
+  assert.equal(res.targetStatus, 'running');
+});
+
+test('executeSessionCall: notice 与 task_report 保持零等待即时返回 (ADR-0031)', async () => {
+  const caller = createMockAgent('caller-handshake-3');
+  const targetReport = createMockAgent('target-report-agent', { status: 'idle' });
+  const ctx = createMockCtx({ agentsList: [caller, targetReport] });
+
+  const start = Date.now();
+  const reportRes = await executeSessionCall({
+    ctx,
+    args: {
+      target_session_id: 'target-report-agent',
+      message: 'Delivery results',
+      call_type: 'task_report',
+      wait_ms: 500
+    },
+    exec: { agent: caller }
+  });
+  const duration = Date.now() - start;
+
+  assert.equal(reportRes.success, true);
+  assert.equal(reportRes.deliveryState, 'delivered');
+  assert.equal(reportRes.executionState, 'unverified');
+  assert.ok(duration < 30, 'task_report 必须零等待即时返回');
+});
+
+test('executeSessionCall: 超时未进入运行态优雅降级为 enqueued 与 pending (ADR-0031)', async () => {
+  const caller = createMockAgent('caller-handshake-4');
+  const targetDelayed = {
+    id: 'target-delayed-agent',
+    title: 'Delayed Worker',
+    status: 'idle',
+    phase: { kind: 'idle', lastTurn: 0 },
+    session: {
+      id: 'target-delayed-agent',
+      events: []
+    },
+    received: [],
+    followup(msg) {
+      this.received.push(msg);
+      // 不切入 running，模拟排队尚未开始
+    }
+  };
+
+  const ctx = createMockCtx({ agentsList: [caller, targetDelayed] });
+  const res = await executeSessionCall({
+    ctx,
+    args: {
+      target_session_id: 'target-delayed-agent',
+      message: 'Queue task',
+      call_type: 'task_dispatch',
+      wait_ms: 50
+    },
+    exec: { agent: caller }
+  });
+
+  assert.equal(res.success, true);
+  assert.equal(res.deliveryState, 'enqueued');
+  assert.equal(res.executionState, 'pending');
+  assert.equal(res.targetStatus, 'idle');
+});

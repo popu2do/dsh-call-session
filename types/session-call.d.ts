@@ -10,7 +10,13 @@ export type CallType = 'task_dispatch' | 'task_report' | 'notice';
 export type DeliveryMode = 'steer' | 'followup';
 
 /** 会话规范化状态 */
-export type SessionStatus = 'running' | 'idle';
+export type SessionStatus = 'running' | 'idle' | 'error';
+
+/** 投递状态维度 */
+export type DeliveryState = 'delivered' | 'enqueued' | 'failed';
+
+/** 物理执行确认状态维度 */
+export type ExecutionState = 'running' | 'pending' | 'crashed' | 'unverified';
 
 /**
  * 呼叫意图类型映射语义常量
@@ -33,6 +39,8 @@ export interface SessionCallArgs {
   call_type?: CallType;
   /** 引用的公共黑板条目 ID 列表 */
   context_post_ids?: string[];
+  /** 可选覆盖轻量握手等待毫秒数，默认 300 毫秒 */
+  wait_ms?: number;
 }
 
 /**
@@ -45,8 +53,12 @@ export interface SessionCallResult {
   targetSessionId?: string;
   /** 目标会话人类可读标题 */
   targetTitle?: string;
-  /** 目标会话执行状态：'running' | 'idle' */
+  /** 目标会话执行状态：'running' | 'idle' | 'error' */
   targetStatus?: SessionStatus;
+  /** 投递状态 */
+  deliveryState?: DeliveryState;
+  /** 物理执行确认状态 */
+  executionState?: ExecutionState;
   /** 本次采用的原生分发模式：'steer' | 'followup' */
   deliveryMode?: DeliveryMode;
   /** 呼叫意图类型 */

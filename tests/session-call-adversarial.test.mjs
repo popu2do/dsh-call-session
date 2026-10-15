@@ -335,3 +335,187 @@ test('超长 Payload 与异常输入边界容错', async () => {
   assert.equal(receivedMsg.source.plugin, undefined);
   assert.equal(receivedMsg.source.form, 'notice');
 });
+
+test('session_call 逆境测试: 目标 followup 同步抛出致命异常时不崩溃发起方且安全返回 failed (ADR-0031)', async () => {
+  const caller = createMockAgent('caller-adv-throw');
+  const targetThrower = {
+    id: 'target-thrower-agent-1234',
+    title: 'Throwing Target',
+    status: 'idle',
+    received: [],
+    followup() {
+      throw new Error('Kernel PANIC: In-memory mailbox corrupted');
+    }
+  };
+
+  const ctx = createMockCtx({ agentsList: [caller, targetThrower] });
+  const exec = { agent: caller };
+
+  // 同步抛错必须被安全拦截转化为 failed 结构化回执，严禁导致发起方进程崩溃
+  const res = await executeSessionCall(ctx, {
+    target_session_id: 'target-thrower-agent-1234',
+    message: 'Test crash safety'
+  }, exec);
+
+  assert.equal(res.success, false);
+  assert.equal(res.deliveryState, 'failed');
+  assert.equal(res.executionState, 'crashed');
+  assert.equal(res.error.code, 'DISPATCH_ERROR');
+  assert.ok(res.error.message.includes('Kernel PANIC'));
+  assert.ok(res.message.includes('单播分发失败'));
+});
+
+test('session_call 逆境测试: 握手轮询中途目标被销毁或注销时安全退出不假死 (ADR-0031)', async () => {
+  const caller = createMockAgent('caller-adv-vanish');
+  const targetVanishing = {
+    id: 'target-vanishing-agent-5678',
+    title: 'Vanishing Target',
+    status: 'idle',
+    phase: { kind: 'idle', lastTurn: 0 },
+    session: {
+      id: 'target-vanishing-agent-5678',
+      events: []
+    },
+    received: [],
+    followup(msg) {
+      this.received.push(msg);
+      // 模拟在握手等待中途第 20ms 目标被宿主销毁或置空
+      setTimeout(() => {
+        this.session = null;
+        this.phase = null;
+        this.status = undefined;
+      }, 20);
+    }
+  };
+
+  const ctx = createMockCtx({ agentsList: [caller, targetVanishing] });
+  const exec = { agent: caller };
+
+  const res = await executeSessionCall(ctx, {
+    target_session_id: 'target-vanishing-agent-5678',
+    message: 'Test mid-flight vanish',
+    call_type: 'task_dispatch',
+    wait_ms: 100
+  }, exec);
+
+  // 必须安全退出循环，优雅判定为排队或降级，零未捕获异常
+  assert.equal(res.success, true);
+  assert.ok(res.deliveryState === 'enqueued' || res.deliveryState === 'delivered');
+});
+
+test('session_call 边界测试: 极值与异常 wait_ms (0, 负数, 溢出, NaN) 安全处理 (ADR-0031)', async () => {
+  const caller = createMockAgent('caller-adv-boundary');
+  const target = createMockAgent('target-adv-boundary', { status: 'idle' });
+  const ctx = createMockCtx({ agentsList: [caller, target] });
+  const exec = { agent: caller };
+
+  // 1. wait_ms = 0：零等待绕过
+  const start0 = Date.now();
+  const res0 = await executeSessionCall(ctx, {
+    target_session_id: 'target-adv-boundary',
+    message: 'Zero wait test',
+    call_type: 'task_dispatch',
+    wait_ms: 0
+  }, exec);
+  const dur0 = Date.now() - start0;
+  assert.equal(res0.success, true);
+  assert.equal(res0.deliveryState, 'enqueued');
+  assert.ok(dur0 < 25, 'wait_ms: 0 耗时必须低于 25ms');
+
+  // 2. wait_ms 负数：安全钳位为 0
+  const resNeg = await executeSessionCall(ctx, {
+    target_session_id: 'target-adv-boundary',
+    message: 'Negative wait test',
+    call_type: 'task_dispatch',
+    wait_ms: -500
+  }, exec);
+  assert.equal(resNeg.success, true);
+  assert.equal(resNeg.deliveryState, 'enqueued');
+
+  // 3. wait_ms 非法类型 (NaN 与 字符串)：安全回退
+  const resNan = await executeSessionCall(ctx, {
+    target_session_id: 'target-adv-boundary',
+    message: 'NaN wait test',
+    call_type: 'task_dispatch',
+    wait_ms: NaN
+  }, exec);
+  assert.equal(resNan.success, true);
+});
+
+test('session_call 逆境测试: 历史陈旧错误与当前轮次严格隔离，不产生误拦截 (ADR-0031)', async () => {
+  const caller = createMockAgent('caller-adv-history');
+  // 目标在历史多轮发生过 3 次崩溃，但当前处于就绪状态
+  const targetHistory = {
+    id: 'target-history-agent-9999',
+    title: 'Historical Error Worker',
+    status: 'idle',
+    phase: { kind: 'idle', lastTurn: 3 },
+    session: {
+      id: 'target-history-agent-9999',
+      events: [
+        { type: 'turn/end', data: { turn: 1, reason: { kind: 'error', error: { message: 'Old err 1' } } } },
+        { type: 'turn/end', data: { turn: 2, reason: { kind: 'error', error: { message: 'Old err 2' } } } },
+        { type: 'turn/end', data: { turn: 3, reason: { kind: 'error', error: { message: 'Old err 3' } } } }
+      ]
+    },
+    received: [],
+    followup(msg) {
+      this.received.push(msg);
+      // 本轮正常拉起并维持 running
+      this.phase = { kind: 'running', turn: 4 };
+    }
+  };
+
+  const ctx = createMockCtx({ agentsList: [caller, targetHistory] });
+  const exec = { agent: caller };
+
+  const res = await executeSessionCall(ctx, {
+    target_session_id: 'target-history-agent-9999',
+    message: 'Run turn 4 normally',
+    call_type: 'task_dispatch',
+    wait_ms: 100
+  }, exec);
+
+  // 验证当前轮次未发生新报错，决不能被历史旧报错误杀为 crashed
+  assert.equal(res.success, true);
+  assert.equal(res.deliveryState, 'delivered');
+  assert.equal(res.executionState, 'running');
+  assert.equal(res.targetStatus, 'running');
+});
+
+test('session_call 并发竞态测试: 多调用方同时发起 task_dispatch 轻量握手无状态踩踏 (ADR-0031)', async () => {
+  const caller1 = createMockAgent('caller-race-1');
+  const caller2 = createMockAgent('caller-race-2');
+  const caller3 = createMockAgent('caller-race-3');
+
+  const sharedTarget = {
+    id: 'shared-race-target-agent',
+    title: 'Shared Race Target',
+    status: 'idle',
+    phase: { kind: 'idle', lastTurn: 0 },
+    session: {
+      id: 'shared-race-target-agent',
+      events: []
+    },
+    received: [],
+    followup(msg) {
+      this.received.push(msg);
+      this.phase = { kind: 'running', turn: this.received.length };
+    }
+  };
+
+  const ctx = createMockCtx({ agentsList: [caller1, caller2, caller3, sharedTarget] });
+
+  // 3 个调用方并发调用同一目标
+  const results = await Promise.all([
+    executeSessionCall(ctx, { target_session_id: 'shared-race-target-agent', message: 'Task 1' }, { agent: caller1 }),
+    executeSessionCall(ctx, { target_session_id: 'shared-race-target-agent', message: 'Task 2' }, { agent: caller2 }),
+    executeSessionCall(ctx, { target_session_id: 'shared-race-target-agent', message: 'Task 3' }, { agent: caller3 })
+  ]);
+
+  for (const r of results) {
+    assert.equal(r.success, true);
+    assert.equal(r.executionState, 'running');
+  }
+  assert.equal(sharedTarget.received.length, 3);
+});

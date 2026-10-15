@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { SessionDirectory, executeSessionQuery } from '../lib/session-directory.mjs';
+import { SessionDirectory, executeSessionQuery, resolveNativeSessionStatus } from '../lib/session-directory.mjs';
 import { createMockAgent } from './helpers/mock-agent.mjs';
 import { normalizeWorkspace } from '../lib/board-store.mjs';
 
@@ -254,4 +254,224 @@ test('executeSessionQuery 模块函数导出: 兼容对象参数与位置参数�
   assert.equal(posRes.count, 2);
   assert.equal(posRes.activeCount, 1);
   assert.equal(posRes.idleCount, 1);
+});
+
+test('resolveNativeSessionStatus: running 状态判定与原生 phase 优先原则', () => {
+  // 1. phase.kind 为 running
+  const runningAgent = {
+    id: 's-run',
+    status: 'idle',
+    phase: { kind: 'running', turn: 1 }
+  };
+  assert.deepEqual(resolveNativeSessionStatus(runningAgent), { status: 'running', error: null });
+
+  // 2. agent.status 为 running
+  const runningStatusAgent = {
+    id: 's-status-run',
+    status: 'running',
+    phase: { kind: 'idle' }
+  };
+  assert.deepEqual(resolveNativeSessionStatus(runningStatusAgent), { status: 'running', error: null });
+});
+
+test('resolveNativeSessionStatus: 崩溃会话精准推导为 error 并提取原生错误信息', () => {
+  const crashedAgent = {
+    id: 's-crash',
+    status: 'idle',
+    phase: { kind: 'idle', lastTurn: 1 },
+    session: {
+      events: [
+        { type: 'turn/start', data: { turn: 1 } },
+        {
+          type: 'turn/end',
+          data: {
+            turn: 1,
+            reason: {
+              kind: 'error',
+              error: { message: 'Plugin hook threw unhandled exception', code: 'HOOK_CRASH' }
+            }
+          }
+        }
+      ]
+    }
+  };
+
+  const res = resolveNativeSessionStatus(crashedAgent);
+  assert.equal(res.status, 'error');
+  assert.equal(res.error.code, 'HOOK_CRASH');
+  assert.equal(res.error.message, 'Plugin hook threw unhandled exception');
+});
+
+test('resolveNativeSessionStatus: 新轮次顺利结束实现原生事件冲刷自然自愈', () => {
+  const recoveringAgent = {
+    id: 's-recover',
+    status: 'idle',
+    phase: { kind: 'idle', lastTurn: 2 },
+    session: {
+      events: [
+        // 轮次 1: 崩溃
+        {
+          type: 'turn/end',
+          data: {
+            turn: 1,
+            reason: { kind: 'error', error: { message: 'Initial crash', code: 'INIT_FAIL' } }
+          }
+        },
+        // 轮次 2: 修复后正常跑通
+        {
+          type: 'turn/end',
+          data: {
+            turn: 2,
+            reason: { kind: 'completed' }
+          }
+        }
+      ]
+    }
+  };
+
+  const res = resolveNativeSessionStatus(recoveringAgent);
+  assert.equal(res.status, 'idle');
+  assert.equal(res.error, null);
+});
+
+test('SessionDirectory.prototype.query: 准确识别 error 会话并在返回中暴露 error 详情与 errorCount', () => {
+  const ws = 'c:/workspace/proj-status';
+  const aHealthy = createMockAgent({ id: 's-healthy', status: 'idle', cwd: ws });
+  const aRunning = createMockAgent({ id: 's-running', status: 'running', cwd: ws });
+  const aCrashed = {
+    id: 's-crashed',
+    title: 'Crashed Agent',
+    status: 'idle',
+    phase: { kind: 'idle' },
+    session: {
+      id: 's-crashed',
+      title: 'Crashed Agent',
+      header: { cwd: ws, origin: undefined },
+      events: [
+        {
+          type: 'turn/end',
+          data: {
+            turn: 1,
+            reason: { kind: 'error', error: { message: 'Context window overflow', code: 'CONTEXT_OVERFLOW' } }
+          }
+        }
+      ]
+    }
+  };
+
+  const ctx = createMockCordis([aHealthy, aRunning, aCrashed]);
+  const dir = new SessionDirectory(ctx);
+  const caller = createMockAgent({ id: 's-caller', cwd: ws });
+
+  const queryRes = dir.query({}, { agent: caller });
+  assert.equal(queryRes.success, true);
+  assert.equal(queryRes.totalCount, 3);
+  assert.equal(queryRes.activeCount, 1);
+  assert.equal(queryRes.idleCount, 1);
+  assert.equal(queryRes.errorCount, 1);
+
+  const crashedSession = queryRes.sessions.find(s => s.sessionId === 's-crashed');
+  assert.ok(crashedSession);
+  assert.equal(crashedSession.status, 'error');
+  assert.equal(crashedSession.error.code, 'CONTEXT_OVERFLOW');
+  assert.equal(crashedSession.error.message, 'Context window overflow');
+});
+
+test('resolveNativeSessionStatus 逆境测试: 事件账本包含畸变、空项与非法对象时安全容错 (ADR-0031)', () => {
+  // 1. session.events 包含 null、undefined、数字与非对象
+  const corruptedAgent = {
+    id: 's-corrupted',
+    status: 'idle',
+    phase: { kind: 'idle' },
+    session: {
+      events: [
+        null,
+        undefined,
+        12345,
+        'random-string',
+        {},
+        { type: 'session/other' },
+        null
+      ]
+    }
+  };
+  const res1 = resolveNativeSessionStatus(corruptedAgent);
+  assert.equal(res1.status, 'idle');
+  assert.equal(res1.error, null);
+
+  // 2. agent 自身缺少 session 或缺少 events
+  assert.deepEqual(resolveNativeSessionStatus({ id: 'empty-1' }), { status: 'idle', error: null });
+  assert.deepEqual(resolveNativeSessionStatus(null), { status: 'idle', error: null });
+  assert.deepEqual(resolveNativeSessionStatus(undefined), { status: 'idle', error: null });
+});
+
+test('resolveNativeSessionStatus 逆境测试: 异常结构残缺或非标准对象时的格式归一化 (ADR-0031)', () => {
+  // 1. reason.error 为纯字符串
+  const stringErrAgent = {
+    id: 's-str-err',
+    status: 'idle',
+    phase: { kind: 'idle' },
+    session: {
+      events: [
+        {
+          type: 'turn/end',
+          data: {
+            reason: { kind: 'error', error: 'Raw string fatal message' }
+          }
+        }
+      ]
+    }
+  };
+  const res1 = resolveNativeSessionStatus(stringErrAgent);
+  assert.equal(res1.status, 'error');
+  assert.equal(res1.error.message, 'Raw string fatal message');
+  assert.equal(res1.error.code, 'TURN_ERROR');
+
+  // 2. reason.error 为 null 或缺省
+  const nullErrAgent = {
+    id: 's-null-err',
+    status: 'idle',
+    phase: { kind: 'idle' },
+    session: {
+      events: [
+        {
+          type: 'turn/end',
+          data: {
+            reason: { kind: 'error', error: null }
+          }
+        }
+      ]
+    }
+  };
+  const res2 = resolveNativeSessionStatus(nullErrAgent);
+  assert.equal(res2.status, 'error');
+  assert.ok(res2.error.message);
+  assert.equal(res2.error.code, 'TURN_ERROR');
+});
+
+test('resolveNativeSessionStatus 边界测试: 用户主动取消 (reason.kind === "aborted") 判定为 idle 而非 error (ADR-0031)', () => {
+  const abortedAgent = {
+    id: 's-aborted',
+    status: 'idle',
+    phase: { kind: 'idle' },
+    session: {
+      events: [
+        {
+          type: 'turn/end',
+          data: {
+            turn: 1,
+            reason: {
+              kind: 'aborted',
+              reason: { kind: 'user', message: 'User stopped the run' }
+            }
+          }
+        }
+      ]
+    }
+  };
+
+  const res = resolveNativeSessionStatus(abortedAgent);
+  // 人类或系统取消属于正常中途终止，绝不能判定为崩溃误报
+  assert.equal(res.status, 'idle');
+  assert.equal(res.error, null);
 });
