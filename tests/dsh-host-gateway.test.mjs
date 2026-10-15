@@ -439,6 +439,77 @@ test('createRootAgent - 协作元数据挂载至 session.metadata 且与底层�
   assert.equal(agent.session.metadata.agentPreset, 'data-scientist');
 });
 
+test('createRootAgent - 目标模型同步至 sessionController.agents.selectForNextRequest (ADR-0021)', async () => {
+  let selectCalled = false;
+  let selectedTarget = null;
+  let selectedConfig = null;
+
+  const mockSessionController = {
+    agents: {
+      selectForNextRequest: (targetAgent, selection) => {
+        selectCalled = true;
+        selectedTarget = targetAgent;
+        selectedConfig = selection;
+      }
+    }
+  };
+
+  const mockAgentsService = {
+    create: async (payload) => {
+      return createMockAgent({ id: payload.sessionId, frozenHeader: false });
+    }
+  };
+
+  const gateway = new DshHostGateway({ sessionController: mockSessionController });
+  const agent = await gateway.createRootAgent({
+    agentsService: mockAgentsService,
+    sessionId: 'session-model-sync',
+    title: 'Model Sync Agent',
+    agentOptions: {
+      provider: 'custom-provider',
+      model: 'custom-model',
+      reasoningEffort: 'high'
+    }
+  });
+
+  assert.equal(selectCalled, true, '必须调用 sessionController.agents.selectForNextRequest');
+  assert.equal(selectedTarget.id, 'session-model-sync');
+  assert.deepEqual(selectedConfig, {
+    provider: 'custom-provider',
+    model: 'custom-model',
+    reasoningEffort: 'high'
+  });
+});
+
+test('createRootAgent - 无 sessionController 时回退至 session.append model/selection', async () => {
+  const appendedEvents = [];
+  const mockAgentsService = {
+    create: async (payload) => {
+      const agent = createMockAgent({ id: payload.sessionId, frozenHeader: false });
+      agent.session.append = (type, data) => {
+        appendedEvents.push({ type, data });
+      };
+      return agent;
+    }
+  };
+
+  const gateway = new DshHostGateway({});
+  await gateway.createRootAgent({
+    agentsService: mockAgentsService,
+    sessionId: 'session-append-fallback',
+    title: 'Append Fallback',
+    agentOptions: {
+      provider: 'fallback-prov',
+      model: 'fallback-mod'
+    }
+  });
+
+  const event = appendedEvents.find(e => e.type === 'model/selection');
+  assert.ok(event, '必须追加 model/selection 事件');
+  assert.equal(event.data.provider, 'fallback-prov');
+  assert.equal(event.data.model, 'fallback-mod');
+});
+
 // -----------------------------------------------------------------------------
 // 5. 标题持久化 (appendTitleEvent - ADR-0017)
 // -----------------------------------------------------------------------------

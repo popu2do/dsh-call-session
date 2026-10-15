@@ -13,8 +13,10 @@ export interface SessionInfo {
   sessionId: string;
   /** 会话人类可读标题 */
   title: string;
-  /** 规范化状态：'running' | 'idle' */
+  /** 规范化状态：'running' | 'idle' | 'error' */
   status: SessionStatus;
+  /** 错误信息摘要 */
+  error?: { message: string; code?: string } | string | null;
   /** 会话所属工程工作区路径 (ADR-0005) */
   workspace: string;
   /** 向后兼容的工作目录路径 */
@@ -53,6 +55,8 @@ export interface SessionQueryResult {
   activeCount: number;
   /** 处于空闲就绪状态的会话数量 (ADR-0005) */
   idleCount: number;
+  /** 处于异常中断状态的会话数量 (ADR-0031) */
+  errorCount?: number;
   /** 本次查询生效的作用域 */
   scope: string;
   /** 匹配的会话明细列表 */

@@ -1394,3 +1394,217 @@ test('executeSessionCreate: reasoning_effort 与 preset 参数继承与显式覆
   assert.equal(payloadOverridden.agentOptions.reasoningEffort, 'high', '显式传入 reasoning_effort 覆盖 caller 设置');
   assert.equal(capturedPreset, 'custom-override-preset', '显式传入 preset 覆盖 caller 设置');
 });
+
+test('executeSessionCreate: 初始消息派发遇到启动首帧秒崩即时阻断并释放租约 (ADR-0031)', async () => {
+  resetRateLimits();
+  const caller = createMockAgent('caller-create-crash', { cwd: 'c:/workspace/app' });
+
+  // 模拟底层创建的 agent 在初始消息送入后 20ms 秒崩
+  const crashAgentsSvc = {
+    list: () => [caller],
+    get: () => undefined,
+    create: async (payload) => {
+      const mockCrashAgent = {
+        id: payload.sessionId,
+        title: payload.title,
+        status: 'idle',
+        phase: { kind: 'idle', lastTurn: 0 },
+        session: {
+          id: payload.sessionId,
+          events: [],
+          header: { cwd: payload.cwd }
+        },
+        received: [],
+        followup(msg) {
+          this.received.push(msg);
+          this.phase = { kind: 'running', turn: 1 };
+          setTimeout(() => {
+            this.session.events.push({
+              type: 'turn/end',
+              data: {
+                turn: 1,
+                reason: {
+                  kind: 'error',
+                  error: { message: 'Initialization crash: bad prompt format', code: 'BOOT_CRASH' }
+                }
+              }
+            });
+            this.phase = { kind: 'idle', lastTurn: 1 };
+          }, 20);
+        }
+      };
+      return { agent: mockCrashAgent };
+    }
+  };
+
+  const ctx = {
+    root: { agents: crashAgentsSvc },
+    agents: crashAgentsSvc,
+    logger: () => ({ debug() {}, info() {}, warn() {}, error() {} }),
+    get: (n) => (n === 'agents' ? crashAgentsSvc : undefined)
+  };
+
+  const res = await executeSessionCreate({
+    ctx,
+    args: {
+      title: 'Crash On Boot Worker',
+      initial_message: 'Start failing unit',
+      wait_ms: 100
+    },
+    exec: { agent: caller }
+  });
+
+  assert.equal(res.success, false, '启动秒崩时必须返回 success: false');
+  assert.equal(res.status, 'error');
+  assert.equal(res.deliveryState, 'failed');
+  assert.equal(res.executionState, 'crashed');
+  assert.ok(res.error?.message.includes('Initialization crash'));
+  assert.ok(res.message.includes('同级会话启动首帧发生崩溃'));
+});
+
+test('executeSessionCreate: 启动并触发模型无效异常，轻量握手即刻阻断并安全回滚 (ADR-0031 & ADR-0021)', async () => {
+  resetRateLimits();
+  const caller = createMockAgent('caller-create-invalid-model', { cwd: 'c:/workspace/app' });
+
+  // 1. 入参校验拦截：传入非法模型类型或空串，直接阻断抛出 InvalidParameter
+  const mockBaseCtx = createMockCtx({ agentsList: [caller] });
+  await assert.rejects(
+    () => executeSessionCreate({
+      ctx: mockBaseCtx,
+      args: { title: 'Invalid Model Parameter', model: '' },
+      exec: { agent: caller }
+    }),
+    /\[InvalidParameter\] session_create: model must be a non-empty string\./
+  );
+
+  await assert.rejects(
+    () => executeSessionCreate({
+      ctx: mockBaseCtx,
+      args: { title: 'Invalid Model Type', model: 12345 },
+      exec: { agent: caller }
+    }),
+    /\[InvalidParameter\] session_create: model must be a non-empty string\./
+  );
+
+  // 2. 首帧启动模型异常拦截：目标会话在 step 0 尝试解析未配置模型时崩溃 (UNKNOWN_MODEL)
+  const invalidModelAgentsSvc = {
+    list: () => [caller],
+    get: () => undefined,
+    create: async (payload) => {
+      const mockCrashAgent = {
+        id: payload.sessionId,
+        title: payload.title,
+        status: 'idle',
+        phase: { kind: 'idle', lastTurn: 0 },
+        session: {
+          id: payload.sessionId,
+          events: [],
+          header: { cwd: payload.cwd }
+        },
+        received: [],
+        followup(msg) {
+          this.received.push(msg);
+          this.phase = { kind: 'running', turn: 1 };
+          setTimeout(() => {
+            this.session.events.push({
+              type: 'turn/end',
+              data: {
+                turn: 1,
+                reason: {
+                  kind: 'error',
+                  error: {
+                    message: 'pi-ai provider "easy-cliproxyapi" has no configured model "nonexistent-model-xyz"',
+                    code: 'UNKNOWN_MODEL'
+                  }
+                }
+              }
+            });
+            this.phase = { kind: 'idle', lastTurn: 1 };
+          }, 15);
+        }
+      };
+      return { agent: mockCrashAgent };
+    }
+  };
+
+  const ctx = {
+    root: { agents: invalidModelAgentsSvc },
+    agents: invalidModelAgentsSvc,
+    logger: () => ({ debug() {}, info() {}, warn() {}, error() {} }),
+    get: (n) => (n === 'agents' ? invalidModelAgentsSvc : undefined)
+  };
+
+  const res = await executeSessionCreate({
+    ctx,
+    args: {
+      title: 'Invalid Model Startup Worker',
+      model: 'easy-cliproxyapi/nonexistent-model-xyz',
+      initial_message: 'Begin task with invalid model',
+      wait_ms: 100
+    },
+    exec: { agent: caller }
+  });
+
+  assert.equal(res.success, false, '模型无效导致首帧秒崩时必须返回 success: false');
+  assert.equal(res.status, 'error');
+  assert.equal(res.deliveryState, 'failed');
+  assert.equal(res.executionState, 'crashed');
+  assert.equal(res.error?.code, 'UNKNOWN_MODEL');
+  assert.ok(res.error?.message.includes('has no configured model'));
+  assert.ok(res.message.includes('同级会话启动首帧发生崩溃'));
+
+  // 验证准入租约原子回滚：限频配额与并发配额零残留
+  const testNow = Date.now();
+  assert.equal(checkRateLimit('caller-create-invalid-model', testNow), testNow);
+});
+
+test('executeSessionCreate: 初始消息正常拉起物理运行确权 (ADR-0031)', async () => {
+  resetRateLimits();
+  const caller = createMockAgent('caller-create-healthy', { cwd: 'c:/workspace/app' });
+
+  const healthyAgentsSvc = {
+    list: () => [caller],
+    get: () => undefined,
+    create: async (payload) => {
+      const mockHealthyAgent = {
+        id: payload.sessionId,
+        title: payload.title,
+        status: 'idle',
+        phase: { kind: 'idle', lastTurn: 0 },
+        session: {
+          id: payload.sessionId,
+          events: [],
+          header: { cwd: payload.cwd }
+        },
+        received: [],
+        followup(msg) {
+          this.received.push(msg);
+          this.phase = { kind: 'running', turn: 1 };
+        }
+      };
+      return { agent: mockHealthyAgent };
+    }
+  };
+
+  const ctx = {
+    root: { agents: healthyAgentsSvc },
+    agents: healthyAgentsSvc,
+    logger: () => ({ debug() {}, info() {}, warn() {}, error() {} }),
+    get: (n) => (n === 'agents' ? healthyAgentsSvc : undefined)
+  };
+
+  const res = await executeSessionCreate({
+    ctx,
+    args: {
+      title: 'Healthy Boot Worker',
+      initial_message: 'Start healthy unit',
+      wait_ms: 100
+    },
+    exec: { agent: caller }
+  });
+
+  assert.equal(res.success, true);
+  assert.equal(res.status, 'running');
+  assert.equal(res.deliveryState, 'delivered');
+  assert.equal(res.executionState, 'running');
+});

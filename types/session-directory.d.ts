@@ -74,3 +74,4 @@ export declare function getArchivedSessionIds(ctx: any): Set<string>;
 export declare function resolveSessionCwd(agent: any): string;
 export declare function resolveSessionTitle(ctx: any, agent: any): string;
 export declare function resolveAgentsService(ctx: any, exec?: any): any;
+export declare function resolveNativeSessionStatus(agent: any): { status: import('./session-call.js').SessionStatus; error: any | null };

@@ -293,6 +293,41 @@ test('特权前缀过滤、超长参数与换行控制符清洗测试', async ()
     );
   }
 
+  // 5.1 model、reasoning_effort、preset 非法类型与空串参数拦截 (模型无效异常)
+  resetRateLimits();
+  for (const badModel of [12345, true, {}, [], '   ', '']) {
+    await assert.rejects(
+      () => executeSessionCreate({
+        ctx,
+        args: { title: 'Bad Model Worker', model: badModel },
+        exec
+      }),
+      /\[InvalidParameter\] session_create: model must be a non-empty string\./
+    );
+  }
+
+  for (const badEffort of [12345, true, {}, [], '   ', '']) {
+    await assert.rejects(
+      () => executeSessionCreate({
+        ctx,
+        args: { title: 'Bad Effort Worker', reasoning_effort: badEffort },
+        exec
+      }),
+      /\[InvalidParameter\] session_create: reasoning_effort must be a non-empty string\./
+    );
+  }
+
+  for (const badPreset of [12345, true, {}, [], '   ', '']) {
+    await assert.rejects(
+      () => executeSessionCreate({
+        ctx,
+        args: { title: 'Bad Preset Worker', preset: badPreset },
+        exec
+      }),
+      /\[InvalidParameter\] session_create: preset must be a non-empty string\./
+    );
+  }
+
   // 6. context_post_ids 超过 5 个条目时截断至 5 个，并注入至 initial_message
   resetRateLimits();
   for (const a of ctx.agents.list()) a.status = 'idle';
@@ -537,5 +572,192 @@ test('标题追加与重命名服务抛错异常对抗与容错处理 (ADR-0017)
   assert.equal(res.success, true);
   assert.equal(res.title, 'Title Fault Tolerant Worker');
   assert.ok(debugLogged >= 1, '重命名与事件追加失败时安全捕获并记录日志');
+  resetRateLimits();
+});
+
+test('executeSessionCreate 逆境测试: 首帧秒崩触发准入租约原子回滚且限频配额与并发配额零残留 (ADR-0031)', async () => {
+  resetRateLimits();
+  const caller = createMockAgent('caller-create-rollback', { cwd: 'c:/workspace/app' });
+  const exec = { agent: caller };
+
+  // 模拟创建出来的 agent 在首帧发生崩溃
+  const explodingAgentsSvc = {
+    list: () => [caller],
+    get: () => undefined,
+    create: async (payload) => {
+      const crashingAgent = {
+        id: payload.sessionId,
+        title: payload.title,
+        status: 'idle',
+        phase: { kind: 'idle', lastTurn: 0 },
+        session: {
+          id: payload.sessionId,
+          events: [],
+          header: { cwd: payload.cwd }
+        },
+        received: [],
+        followup(msg) {
+          this.received.push(msg);
+          this.phase = { kind: 'running', turn: 1 };
+          setTimeout(() => {
+            this.session.events.push({
+              type: 'turn/end',
+              data: {
+                turn: 1,
+                reason: { kind: 'error', error: { message: 'Crash on boot', code: 'BOOT_CRASH' } }
+              }
+            });
+            this.phase = { kind: 'idle', lastTurn: 1 };
+          }, 15);
+        }
+      };
+      return { agent: crashingAgent };
+    }
+  };
+
+  const ctx = {
+    root: { agents: explodingAgentsSvc },
+    agents: explodingAgentsSvc,
+    logger: () => silentLogger,
+    get: (n) => (n === 'agents' ? explodingAgentsSvc : undefined)
+  };
+
+  const res = await executeSessionCreate(ctx, {
+    title: 'Crashing Startup Peer',
+    initial_message: 'Will crash',
+    wait_ms: 100
+  }, exec);
+
+  assert.equal(res.success, false, '启动秒崩时必须返回 success: false');
+  assert.equal(res.status, 'error');
+  assert.equal(res.executionState, 'crashed');
+
+  // 验证限频配额在 release 后已原子回滚：再次合法创建依然有配额
+  assert.equal(checkRateLimit('caller-create-rollback'), Date.now());
+  resetRateLimits();
+});
+
+test('executeSessionCreate 破坏性压力测试: 连续 10 次恶意崩溃创建请求，验证在途标题与并发配额零泄漏 (ADR-0031)', async () => {
+  resetRateLimits();
+  const caller = createMockAgent('caller-stress-crash', { cwd: 'c:/workspace/stress-app' });
+  const exec = { agent: caller };
+
+  let creationAttempts = 0;
+  const alwaysCrashAgentsSvc = {
+    list: () => [caller],
+    get: () => undefined,
+    create: async (payload) => {
+      creationAttempts++;
+      const agent = {
+        id: payload.sessionId,
+        title: payload.title,
+        status: 'idle',
+        phase: { kind: 'idle', lastTurn: 0 },
+        session: {
+          id: payload.sessionId,
+          events: [],
+          header: { cwd: payload.cwd }
+        },
+        received: [],
+        followup(msg) {
+          this.received.push(msg);
+          this.phase = { kind: 'running', turn: 1 };
+          setTimeout(() => {
+            this.session.events.push({
+              type: 'turn/end',
+              data: {
+                turn: 1,
+                reason: { kind: 'error', error: { message: 'Synthetic crash', code: 'STRESS_CRASH' } }
+              }
+            });
+            this.phase = { kind: 'idle', lastTurn: 1 };
+          }, 10);
+        }
+      };
+      return { agent };
+    }
+  };
+
+  const ctx = {
+    root: { agents: alwaysCrashAgentsSvc },
+    agents: alwaysCrashAgentsSvc,
+    logger: () => silentLogger,
+    get: (n) => (n === 'agents' ? alwaysCrashAgentsSvc : undefined)
+  };
+
+  // 连续执行 10 次同名或相近标题崩溃创建请求
+  for (let i = 1; i <= 10; i++) {
+    const res = await executeSessionCreate(ctx, {
+      title: 'Repeated Crash Candidate',
+      initial_message: `Attempt ${i}`,
+      wait_ms: 50
+    }, exec);
+    assert.equal(res.success, false);
+    assert.equal(res.executionState, 'crashed');
+  }
+
+  assert.equal(creationAttempts, 10);
+
+  // 验证在途标题与租约 100% 被释放，未产生幽灵泄漏
+  const inspected = inspectWorkspaceActiveSessions(alwaysCrashAgentsSvc, 'c:/workspace/stress-app', new Set(), ctx);
+  assert.equal(inspected.count, 0, '崩溃会话不占用运行配额');
+
+  resetRateLimits();
+});
+
+test('executeSessionCreate 边界测试: 极值与异常 wait_ms (0, 负数, 极大值, NaN) 安全处理 (ADR-0031)', async () => {
+  resetRateLimits();
+  const caller = createMockAgent('caller-create-boundary', { cwd: 'c:/workspace/boundary-app' });
+  const exec = { agent: caller };
+
+  const normalAgentsSvc = {
+    list: () => [caller],
+    get: () => undefined,
+    create: async (payload) => {
+      const agent = {
+        id: payload.sessionId,
+        title: payload.title,
+        status: 'idle',
+        session: { id: payload.sessionId, cwd: payload.cwd },
+        received: [],
+        followup(msg) { this.received.push(msg); }
+      };
+      return { agent };
+    }
+  };
+
+  const ctx = {
+    root: { agents: normalAgentsSvc },
+    agents: normalAgentsSvc,
+    logger: () => silentLogger,
+    get: (n) => (n === 'agents' ? normalAgentsSvc : undefined)
+  };
+
+  // 1. wait_ms = 0
+  const res0 = await executeSessionCreate(ctx, {
+    title: 'Zero Wait Peer',
+    initial_message: 'Hi',
+    wait_ms: 0
+  }, exec);
+  assert.equal(res0.success, true);
+  assert.equal(res0.deliveryState, 'enqueued');
+
+  // 2. wait_ms = -50
+  const resNeg = await executeSessionCreate(ctx, {
+    title: 'Negative Wait Peer',
+    initial_message: 'Hi',
+    wait_ms: -50
+  }, exec);
+  assert.equal(resNeg.success, true);
+  assert.equal(resNeg.deliveryState, 'enqueued');
+
+  // 3. wait_ms = NaN
+  const resNan = await executeSessionCreate(ctx, {
+    title: 'NaN Wait Peer',
+    initial_message: 'Hi',
+    wait_ms: NaN
+  }, exec);
+  assert.equal(resNan.success, true);
+
   resetRateLimits();
 });
