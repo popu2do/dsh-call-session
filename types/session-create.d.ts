@@ -47,8 +47,6 @@ export interface SessionCreateResult {
   executionState?: ExecutionState;
   /** 同级会话代际深度 */
   generation: number;
-  /** 是否携带有效初始任务消息 */
-  hasInitialMessage?: boolean;
   /** 就绪公告关联的黑板条目 ID */
   bootstrapPostId?: string | null;
   /** 成功关联挂载的黑板 ID 列表 */

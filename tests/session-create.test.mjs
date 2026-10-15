@@ -1667,9 +1667,23 @@ test('executeSessionCreate: 首帧消息规范注入传输层报头且出参携�
     ),
     '新会话接收的首帧消息必须规范注入传输层客观报头'
   );
-  assert.ok(
-    res.message.includes('初始任务已派发，等待目标回传，无需重复轮询') ||
-    res.message.includes('initial task dispatched, await target task_report, no polling needed'),
-    'session_create 出参必须包含收敛元信息说明'
-  );
+
+  // 1. 中文出参收敛文案端到端断言
+  const resZh = await executeSessionCreate({
+    ctx,
+    args: { title: 'Zh Peer Worker', initial_message: 'Task zh' },
+    exec: { agent: caller },
+    options: { config: { locale: 'zh' } }
+  });
+  assert.ok(resZh.message.includes('初始任务已派发，等待目标回传，无需重复轮询'));
+
+  // 2. 英文出参收敛文案端到端断言
+  const resEn = await executeSessionCreate({
+    ctx,
+    args: { title: 'En Peer Worker', initial_message: 'Task en' },
+    exec: { agent: caller },
+    options: { config: { locale: 'en' } }
+  });
+  assert.ok(resEn.message.includes('initial task dispatched, await target task_report, no polling needed'));
+  assert.ok(!/[\u4e00-\u9fa5]/.test(resEn.message));
 });
