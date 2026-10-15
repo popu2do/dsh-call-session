@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.8] - 2026-10-18
+
+### Summary
+Cross-session lightweight handshake verification, fail-fast startup crash interception, DSH native 3-state status protocol (running | idle | error), and event-stream self-healing release (ADR-0031). Decouples delivery confirmation from physical execution status, provides sub-50ms crash interception for task dispatch and peer creation, exposes DSH native error states in session directory queries, and hardens the runtime against adversarial data corruption and mid-flight session destruction.
+
+### Added
+- **Classified Lightweight Handshake Protocol (ADR-0031, `lib/session-call.mjs`)**:
+  - Added bounded 300ms light handshake verification for core task dispatch (`task_dispatch`) and peer session creation (`session_create`), intercepting startup crashes within 40ms.
+  - Fail-fast structured error return (`deliveryState: 'failed'`, `executionState: 'crashed'`, `targetStatus: 'error'`) carrying normalized error message and code.
+  - Graceful timeout degradation to `deliveryState: 'enqueued'` and `executionState: 'pending'` when queueing without deadlocking.
+  - Zero-wait non-blocking immediate return (0ms) for progress reports (`task_report`) and status notices (`notice`).
+  - Added explicit configurable `wait_ms` parameter (0 to 5000ms) with boundary clamping and type fallback.
+- **Native 3-State Status Resolution & Event Self-Healing (ADR-0031, `lib/session-directory.mjs`)**:
+  - Evolved session status from normalized 2-state (`running | idle`) to native 3-state: `running`, `idle`, and `error`.
+  - Extracted `resolveNativeSessionStatus(agent)` inspecting native `agent.phase` and reverse-scanning `session.events` for the latest `turn/end` event.
+  - Natural event-stream self-healing: subsequent successful turns append normal `turn/end` events that automatically supersede historical errors, restoring `status: 'idle'` without manual cleanup.
+  - Added `errorCount` aggregate counter and per-session structured `error` field to `session_query` output.
+  - Added localized Markdown table formatting with dedicated error counters and warning highlights (`lib/locales/table.mjs`).
+- **Truthful Delivery Semantics & Tool Registry Schemas (`lib/tools-registry.mjs`, `lib/locales/`)**:
+  - Decoupled tool return values by eliminating false `status: 'running'` assertions, introducing explicit `deliveryState` and `executionState` dimensions.
+  - Purged misleading "successfully called" claims in Chinese and English catalogs in favor of truthful queue and execution confirmation notes.
+  - Updated tool schemas for `session_call` and `session_create` with `deliveryState`, `executionState`, `error`, and `wait_ms`.
+  - Updated `session_query` output schema to validate `status` against `['running', 'idle', 'error']`.
+- **Peer Creation Model Synchronization (`lib/dsh-host-gateway.mjs`)**:
+  - Synchronized inherited and overridden model options to `sessionController.agents.selectForNextRequest` and fallback `model/selection` event logging, preventing host defaults from overriding peer session configurations.
+- **Adversarial & Destructive Hardening**:
+  - Hardened `resolveNativeSessionStatus` against malformed events, nulls, missing reasons, and non-object errors.
+  - Distinguished user cancellations (`reason.kind === 'aborted'`) from actual crashes, preventing cancellation false alarms.
+  - Safe error recovery on mid-flight session destruction or synchronous target agent dispatch throws (`DISPATCH_ERROR`).
+  - Stress-tested double-fault peer creation to guarantee zero lease, quota, or rate-limit leakage.
+  - Expanded test suite from 361 to 385 automated tests passing with zero failures.
+
 ## [0.1.7] - 2026-10-10
 
 ### Summary
