@@ -258,7 +258,7 @@ test('ADR-0023: 运行时异常抛出真实路径错误码规范符合性断言'
   );
 
   // 5. [ReservedTopic]
-  const store = new AtomicBoardStore({ debounceMs: 0 });
+  const store = new AtomicBoardStore({ debounceMs: 0, storagePath: path.join(os.tmpdir(), 'i18n-reserved.json') });
   assert.throws(
     () => store.post({ id: 'p1', topic: 'telemetry:test', content: 'c' }),
     /\[ReservedTopic\]/

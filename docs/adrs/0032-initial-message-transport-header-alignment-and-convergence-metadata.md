@@ -50,13 +50,13 @@
 
 **Chosen Option**: Option 3 — 传输层报头对齐与出参客观收敛元信息追加。
 
-### 4.1 初始消息传输层报头规约
+### 4.1 报头规约
 当 `session_create` 传入有效 `initial_message` 时，统一通过 `buildNativeUserMessage` 与 `buildTransportPayload` 组装载荷：
 1. 首行注入标准报头：`[From: <callerSessionId> (<callerTitle>) | CallType: task_dispatch]`
 2. 若附带黑板条目引用，第二行追加：`> Context Ref: #post-xxx`
 3. 报头与正文之间通过双换行符隔离，正文逐字保留。
 
-### 4.2 出参客观收敛元信息规约
+### 4.2 出参规约
 在 `lib/locales/zh.mjs` 与 `lib/locales/en.mjs` 的 `sessionCallSuccess` 与 `sessionCreateSuccess` 中追加客观收敛说明：
 - `session_call(task_dispatch)`: 追加已派发任务等待目标回传，无需重复轮询。
 - `session_call(task_report)`: 追加已完成收口汇报，无需回复。
