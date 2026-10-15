@@ -79,11 +79,16 @@ test('NativeMessageTransport - 标准 DSH UserMessage 原子装配与摘要截�
   const bootstrapMsg = buildNativeUserMessage({
     rawMessage: 'Hello new peer worker',
     form: 'session_create',
+    callerSessionId: 'session-creator-999',
     callerTitle: 'Creator',
     contextPostIds: ['post-root']
   });
   assert.equal(bootstrapMsg.source.form, 'session_create');
   assert.equal(bootstrapMsg.source.summary, '[Peer Session Bootstrap] from Creator: Hello new peer worker');
+  assert.equal(
+    bootstrapMsg.content[0].text,
+    '[From: session-creator-999 (Creator) | CallType: task_dispatch]\n> Context Ref: #post-root\n\nHello new peer worker'
+  );
 
   // 3. 超长正文摘要截断至 120 字符
   const longText = 'A'.repeat(200);

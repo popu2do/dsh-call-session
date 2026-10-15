@@ -6,6 +6,7 @@
 export interface FormatInitialMessageParams {
   initialMessage?: string;
   contextPostIds?: string[];
+  callerSessionId?: string;
   callerTitle?: string;
   generateMessageId?: () => string;
 }
