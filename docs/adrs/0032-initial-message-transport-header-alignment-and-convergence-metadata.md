@@ -80,7 +80,7 @@
 ## 6. Compliance & Validation
 
 - 单元测试：`tests/peer-bootstrap.test.mjs`、`tests/native-message-transport.test.mjs`、`tests/i18n.test.mjs`。
-- 端到端测试：`tests/session-create.test.mjs`、`tests/session-call.test.mjs`。
+- 集成测试：`tests/session-create.test.mjs`、`tests/session-call.test.mjs`。
 - 架构完整性：`tests/adr-integrity.test.mjs` 保证全量 ADR 连续性。
 
 ---

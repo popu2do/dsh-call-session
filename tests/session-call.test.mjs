@@ -720,42 +720,63 @@ test('executeSessionCall 出参元信息: 三种呼叫类别均携带客观收�
   const target = createMockAgent('target-convergence', { status: 'running' });
   const ctx = createMockCtx({ agentsList: [caller, target] });
 
-  // 1. task_dispatch
-  const resDispatch = await executeSessionCall({
+  // 1. task_dispatch (zh & en)
+  const resDispatchZh = await executeSessionCall({
     ctx,
     args: { target_session_id: 'target-convergence', message: 'Do work', call_type: 'task_dispatch' },
-    exec: { agent: caller }
+    exec: { agent: caller },
+    options: { config: { locale: 'zh' } }
   });
-  assert.equal(resDispatch.success, true);
-  assert.ok(
-    resDispatch.message.includes('已派发任务等待目标回传，无需重复轮询') ||
-    resDispatch.message.includes('task dispatched, await target task_report, no polling needed'),
-    'task_dispatch 出参必须包含等待回传且无需轮询的说明'
-  );
+  assert.equal(resDispatchZh.success, true);
+  assert.ok(resDispatchZh.message.includes('已派发任务等待目标回传，无需重复轮询'));
 
-  // 2. task_report
-  const resReport = await executeSessionCall({
+  const resDispatchEn = await executeSessionCall({
+    ctx,
+    args: { target_session_id: 'target-convergence', message: 'Do work', call_type: 'task_dispatch' },
+    exec: { agent: caller },
+    options: { config: { locale: 'en' } }
+  });
+  assert.equal(resDispatchEn.success, true);
+  assert.ok(resDispatchEn.message.includes('task dispatched, await target task_report, no polling needed'));
+  assert.ok(!/[\u4e00-\u9fa5]/.test(resDispatchEn.message));
+
+  // 2. task_report (zh & en)
+  const resReportZh = await executeSessionCall({
     ctx,
     args: { target_session_id: 'target-convergence', message: 'Work done', call_type: 'task_report' },
-    exec: { agent: caller }
+    exec: { agent: caller },
+    options: { config: { locale: 'zh' } }
   });
-  assert.equal(resReport.success, true);
-  assert.ok(
-    resReport.message.includes('已完成收口汇报，无需回复') ||
-    resReport.message.includes('report delivered, no reply needed'),
-    'task_report 出参必须包含收口汇报无需回复的说明'
-  );
+  assert.equal(resReportZh.success, true);
+  assert.ok(resReportZh.message.includes('已完成收口汇报，无需回复'));
 
-  // 3. notice
-  const resNotice = await executeSessionCall({
+  const resReportEn = await executeSessionCall({
+    ctx,
+    args: { target_session_id: 'target-convergence', message: 'Work done', call_type: 'task_report' },
+    exec: { agent: caller },
+    options: { config: { locale: 'en' } }
+  });
+  assert.equal(resReportEn.success, true);
+  assert.ok(resReportEn.message.includes('report delivered, no reply needed'));
+  assert.ok(!/[\u4e00-\u9fa5]/.test(resReportEn.message));
+
+  // 3. notice (zh & en)
+  const resNoticeZh = await executeSessionCall({
     ctx,
     args: { target_session_id: 'target-convergence', message: 'State updated', call_type: 'notice' },
-    exec: { agent: caller }
+    exec: { agent: caller },
+    options: { config: { locale: 'zh' } }
   });
-  assert.equal(resNotice.success, true);
-  assert.ok(
-    resNotice.message.includes('单向通报阅后即止，无需回复') ||
-    resNotice.message.includes('one-way notice, no reply needed'),
-    'notice 出参必须包含单向通报无需回复的说明'
-  );
+  assert.equal(resNoticeZh.success, true);
+  assert.ok(resNoticeZh.message.includes('单向通报阅后即止，无需回复'));
+
+  const resNoticeEn = await executeSessionCall({
+    ctx,
+    args: { target_session_id: 'target-convergence', message: 'State updated', call_type: 'notice' },
+    exec: { agent: caller },
+    options: { config: { locale: 'en' } }
+  });
+  assert.equal(resNoticeEn.success, true);
+  assert.ok(resNoticeEn.message.includes('one-way notice, no reply needed'));
+  assert.ok(!/[\u4e00-\u9fa5]/.test(resNoticeEn.message));
 });
