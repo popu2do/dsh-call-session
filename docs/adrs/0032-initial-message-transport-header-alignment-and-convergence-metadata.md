@@ -32,15 +32,15 @@
 
 ## 3. Considered Options
 
-### Option 1: 保持正文无报头，仅在公共黑板由 session:bootstrap 公告承载来源信息
+### Option 1: 黑板公告
 - **Pros**: 无需调整现有消息对象组装逻辑。
 - **Cons**: 新会话必须主动调用 `board_list` 检索自己的启动记录，增加额外推理轮次与 Token 消耗，且在高并发创建时存在竞态不确定性。
 
-### Option 2: 在初始消息正文末尾拼接主观催促指令
+### Option 2: 正文追加
 - **Pros**: 形式简单直观。
 - **Cons**: 破坏 Zero-Preach 原则，大段主观指令污染正文与模型注意力，容易诱发自动确认风暴。
 
-### Option 3 (Chosen): 传输层报头对齐与出参客观收敛元信息追加
+### Option 3: 报头对齐
 - **Pros**: 严格复用 `buildTransportPayload` 基础设施原语，首行注入发件人编号与 CallType 为 task_dispatch；语言包出参追加客观收敛说明，成本极低且彻底遏制盲目轮询。
 - **Cons**: 需要更新涉及初始消息正文比对的历史单测断言。
 
