@@ -1,7 +1,7 @@
 {
   "name": "dsh-call-session",
   "version": "0.1.8",
-  "description": "DSH Native Cross-Session Collaboration, In-Process Session Call, and Public Blackboard Plugin",
+  "description": "Multi-session collaboration for DeepSeek Harness: peer session calls, a shared blackboard, and a read-only topology canvas.",
   "type": "module",
   "main": "index.mjs",
   "types": "./types/index.d.ts",
@@ -55,7 +55,13 @@
     "inter-agent",
     "unicast",
     "session-call",
-    "subagent"
+    "subagent",
+    "multi-session",
+    "agent-collaboration",
+    "task-handoff",
+    "shared-blackboard",
+    "peer-session",
+    "cordis-plugin"
   ],
   "author": "dsh-call-session Contributors",
   "license": "MIT",
