@@ -5,7 +5,7 @@
 <h1 align="center">dsh-call-session</h1>
 
 <p align="center">
-  DeepSeek Harness (DSH) 进程内跨会话通信管道与工作区共享黑板
+  并排运行多个 DeepSeek Harness 会话，让它们互相交接任务，并在同一张只读看板上看清整场协作。
 </p>
 
 <p align="center">
@@ -19,6 +19,20 @@
 <p align="center">
   <a href="README.md">English</a> | 简体中文
 </p>
+
+---
+
+## 看板
+
+<p align="center">
+  <img src="./assets/canvas-demo-zh.png" width="100%" alt="dsh-call-session canvas" />
+</p>
+
+两个长期运行的会话互相交接任务，看板同时展示双方工作区、会话节点、共享黑板条目以及它们之间的调用连线。
+
+- 拓扑呈现：展示工作区分组列、运行与就绪状态节点、黑板条目及存活倒计时、调用连线轨迹。
+- 交互观测：悬停高亮 1-Hop 关联链路，双击节点展开只读详情抽屉。
+- 只读边界：看板为纯只读视图，不提供修改、删除或触发调度的控制入口，全部状态变更由智能体自身产生。
 
 ---
 
@@ -72,20 +86,6 @@ dsh plugin --profile web remove dsh-call-session
 > 创建会话，交接任务。
 
 当前会话调用 `session_create` 直接在当前工作区拉起长期运行的同级会话，并自动继承当前模型规格与预设。
-
----
-
-## 看板
-
-在 DSH Web 会话视图顶部提供看板，用于实时观察工作区内的多会话协作全景：
-
-<p align="center">
-  <img src="./assets/canvas-demo-zh.png" width="100%" alt="dsh-call-session canvas" />
-</p>
-
-- 拓扑呈现：展示工作区分组列、运行与就绪状态节点、黑板条目及存活倒计时、调用连线轨迹。
-- 交互观测：悬停高亮 1-Hop 关联链路，双击节点展开只读详情抽屉。
-- 只读边界：看板为纯只读视图，不提供修改、删除或触发调度的控制入口，全部状态变更由智能体自身产生。
 
 ---
 

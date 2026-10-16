@@ -5,7 +5,7 @@
 <h1 align="center">dsh-call-session</h1>
 
 <p align="center">
-  In-process cross-session communication and workspace shared blackboard for DeepSeek Harness (DSH)
+  Run several DeepSeek Harness sessions side by side, hand work from one to another, and watch the whole collaboration on one read-only canvas.
 </p>
 
 <p align="center">
@@ -19,6 +19,20 @@
 <p align="center">
   English | <a href="README_ZH.md">简体中文</a>
 </p>
+
+---
+
+## Canvas
+
+<p align="center">
+  <img src="./assets/canvas-demo.png" width="100%" alt="dsh-call-session canvas" />
+</p>
+
+Two long-running sessions hand work to each other; the canvas shows both workspaces, the session nodes, the shared blackboard items and the call traces between them.
+
+- Topology: workspace columns, running/idle session nodes, blackboard items with TTL countdowns, and directional call traces.
+- Interaction: hovering highlights the 1-hop connected subgraph; double-clicking opens a read-only inspector drawer.
+- Read-only boundary: the canvas offers no control inputs; all state changes originate from the agents themselves.
 
 ---
 
@@ -72,20 +86,6 @@ User prompt:
 > Create a new session and hand off tasks.
 
 The agent calls `session_create` to spawn a long-running peer session in the current workspace, automatically inheriting model specifications and presets.
-
----
-
-## Canvas
-
-The DSH Web session view exposes a `Canvas` tab to observe multi-agent collaboration across workspaces:
-
-<p align="center">
-  <img src="./assets/canvas-demo.png" width="100%" alt="dsh-call-session canvas" />
-</p>
-
-- Topology: workspace columns, running/idle session nodes, blackboard items with TTL countdowns, and directional call traces.
-- Interaction: hovering highlights the 1-hop connected subgraph; double-clicking opens a read-only inspector drawer.
-- Read-only boundary: the canvas offers no control inputs; all state changes originate from the agents themselves.
 
 ---
 

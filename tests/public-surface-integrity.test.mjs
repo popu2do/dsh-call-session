@@ -260,3 +260,89 @@ test('documentation invariants: bilingual READMEs stay emoji-free with restraine
       h2Counts.get('README.md') + ' and ' + h2Counts.get('README_ZH.md')
   );
 });
+
+test('positioning copy: each README tagline states the manifest claim for its language', () => {
+  const manifest = requireManifest();
+  const documents = [
+    { language: 'en', relPath: 'README.md' },
+    { language: 'zh', relPath: 'README_ZH.md' },
+  ];
+
+  for (const { language, relPath } of documents) {
+    const positioning = manifest.positioning ? manifest.positioning[language] : undefined;
+    assert.ok(
+      typeof positioning === 'string' && positioning.trim().length > 0,
+      'presence.json positioning.' + language + ' must be a non-empty string (contract: positioning copy)'
+    );
+    assert.ok(
+      readText(relPath).includes(positioning),
+      relPath + ' must state presence.json positioning.' + language + ' verbatim (contract: positioning copy)'
+    );
+  }
+});
+
+test('first screen: each README carries its canvas demonstration within demoMaxLine and keeps its anchor section', () => {
+  const manifest = requireManifest();
+  const firstScreen = manifest.firstScreen || {};
+  const documents = [
+    { language: 'en', relPath: 'README.md' },
+    { language: 'zh', relPath: 'README_ZH.md' },
+  ];
+
+  for (const { language, relPath } of documents) {
+    const entry = firstScreen[language] || {};
+    assert.ok(
+      typeof entry.demoRef === 'string' && entry.demoRef.length > 0,
+      'presence.json firstScreen.' + language + '.demoRef must name the demonstration asset (contract: first-screen demonstration)'
+    );
+    assert.ok(
+      Number.isInteger(entry.demoMaxLine) && entry.demoMaxLine > 0,
+      'presence.json firstScreen.' + language + '.demoMaxLine must be a positive line number (contract: first-screen demonstration)'
+    );
+
+    const lines = readText(relPath).split(/\r?\n/);
+    const demoLine = lines.findIndex((line) => line.includes(entry.demoRef)) + 1;
+    assert.ok(
+      demoLine > 0,
+      relPath + ' must reference ' + entry.demoRef + ' (contract: first-screen demonstration)'
+    );
+    assert.ok(
+      demoLine <= entry.demoMaxLine,
+      relPath + ' must place ' + entry.demoRef + ' at or before line ' + entry.demoMaxLine +
+        ', found line ' + demoLine + ' (contract: first-screen demonstration)'
+    );
+    assert.ok(
+      fs.existsSync(path.join(rootDir, entry.demoRef)),
+      entry.demoRef + ' referenced by ' + relPath + ' must exist at the repository root (contract: first-screen demonstration)'
+    );
+
+    assert.ok(
+      typeof entry.anchor === 'string' && entry.anchor.length > 0,
+      'presence.json firstScreen.' + language + '.anchor must name the first-screen section heading (contract: first-screen anchor)'
+    );
+    assert.ok(
+      lines.some((line) => line.trim() === entry.anchor),
+      relPath + ' must contain the "' + entry.anchor + '" section (contract: first-screen anchor)'
+    );
+  }
+});
+
+test('metadata alignment: package.json description and keywords agree with the presence manifest', () => {
+  const manifest = requireManifest();
+  const pkg = JSON.parse(readText('package.json'));
+
+  assert.equal(
+    pkg.description,
+    manifest.packageDescription,
+    'package.json description must equal presence.json packageDescription (contract: metadata alignment)'
+  );
+
+  const keywords = Array.isArray(pkg.keywords) ? pkg.keywords : [];
+  for (const keyword of manifest.keywords || []) {
+    assert.ok(
+      keywords.includes(keyword),
+      'package.json keywords must include presence.json keyword "' + keyword + '" (contract: metadata alignment)'
+    );
+  }
+});
+
