@@ -16,6 +16,25 @@
     "peer-session",
     "cordis-plugin"
   ],
+  "repository": {
+    "description": "Multi-session collaboration for DeepSeek Harness: peer session calls, a shared blackboard, and a read-only topology canvas.",
+    "topics": [
+      "deepseek-harness",
+      "dsh-plugin",
+      "multi-session",
+      "multi-agent",
+      "agent-collaboration",
+      "task-handoff",
+      "shared-blackboard",
+      "session-call",
+      "peer-session",
+      "cordis-plugin"
+    ],
+    "socialPreview": {
+      "status": "pending",
+      "verifiedOn": "2026-10-16"
+    }
+  },
   "firstScreen": {
     "en": {
       "demoRef": "./assets/canvas-demo.png",

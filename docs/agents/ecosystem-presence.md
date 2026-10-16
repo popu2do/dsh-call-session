@@ -18,6 +18,27 @@ Registration state for every ecosystem catalog that can carry this plugin. `pres
 
 Gate: `tests/public-surface-integrity.test.mjs`. Remote catalog state is never fetched by the build; the maintainer verifies it and records the date.
 
+## Repository Metadata
+
+Host-side settings. They are not versioned, so `presence.json` `repository` holds the intended values and this table records their verification.
+
+| Field | Value |
+| :--- | :--- |
+| Description | `presence.json` `packageDescription`, verbatim. |
+| Topics | `presence.json` `keywords`, verbatim and in the same order. |
+| Social preview | `pending`. Not set on the host yet, pending repository authentication. |
+| Verified | 2026-10-16 |
+
+Intent values, quoted from `presence.json`:
+
+> Multi-session collaboration for DeepSeek Harness: peer session calls, a shared blackboard, and a read-only topology canvas.
+
+> deepseek-harness, dsh-plugin, multi-session, multi-agent, agent-collaboration, task-handoff, shared-blackboard, session-call, peer-session, cordis-plugin
+
+Pending action: set the description, the topic list and a social preview image once repository authentication is available, then record the application date here and in `presence.json` `repository.socialPreview.verifiedOn`.
+
+Two claims in this document are review items, not gate items: the semantic fitness of the discovery terms, namely whether a prospective user would search them, and the parity of the English and Chinese claims. The gate checks only that the terms are unique lowercase hyphenated strings and that both language claims are present verbatim.
+
 ## awesome-dsh-plugin
 
 Curated catalog where this repository is already listed. The category carries several hundred entries, so this one line is effectively the whole discovery surface.

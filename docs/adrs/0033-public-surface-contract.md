@@ -59,11 +59,11 @@ The consequence is measurable: the package is installed more often than the dire
 **Chosen Option**: Option 3 — Versioned Manifest with an Integrity Gate and a Registration Registry.
 
 ### 4.1 Core Architectural Principles & Invariants
-1. **Manifest Single Source Invariant**: `presence.json` is the only authored place for the English and Chinese positioning copy, the discovery keyword set, the package description, first-screen anchors and asset budgets. Catalog copy, repository metadata and the first screen are derived values.
+1. **Manifest Single Source Invariant**: `presence.json` is the only authored place for the English and Chinese positioning copy, the discovery keyword set, the package description, the repository description and topics, the social preview intent, first-screen anchors and asset budgets. Positioning copy, `packageDescription`, the repository metadata, the first-screen values and the asset budgets are strictly derived values and the gate asserts them verbatim. A catalog `submittedCopy` is a different kind of value: it records what is actually published in that catalog, so it may legitimately lag the manifest until the next resubmission, and the gate asserts its structure and its non-emptiness, never its equality with the manifest.
 2. **Integrity Gate Invariant**: one static test module in the existing suite fails the build when a tracked public artifact drifts from the manifest, when an asset violates its byte budget or format signature, or when a tracked file exposes environment-specific information. No production module changes and no runtime seam are introduced.
-3. **Two-Halves Sanitization Invariant**: credential detection is delegated to the existing scanner invoked in whole-repository mode as a subprocess and must exit clean, so credential rules keep one source; the gate additionally enforces the disclosure rules the scanner does not cover, namely absolute home directory paths, Windows user-directory paths, private host names and personal account identifiers in registration records.
+3. **Two-Halves Sanitization Invariant**: credential detection is delegated to the existing scanner invoked in whole-repository mode as a subprocess and must exit clean, so credential rules keep one source. The gate itself enforces exactly four disclosure rule classes: a Unix absolute home directory path; a Windows user-directory path; a private host name, meaning a full four-octet RFC1918 IPv4 address or a host name ending in `.internal` or `.local`; and a personal account identifier, meaning an e-mail address shape or an at-handle mention. The first three classes cover the whole published surface: the nine root documents and manifests, every file under `docs/`, and every file under `.github/`. The fourth covers the two records where an identity would be written, the catalog records in `presence.json` and the registry document. `tests/` and `lib/` are out of the scan set by design: they carry synthetic fixtures, including a fake user directory path, while the gate subject is the published surface rather than the source tree.
 4. **Asset Budget Invariant**: every declared asset declares a format and a byte floor and ceiling. The gate asserts existence, format signature and byte range, so first-screen weight cannot grow silently.
-5. **Registry Operational Invariant**: `docs/agents/ecosystem-presence.md` records, per catalog, the identifier exactly as it appears in the manifest, the submission mechanism and requirement, the verbatim submitted copy, the submission reference, the status, the verification date and the refresh procedure. The manifest's catalog records are asserted structurally by the gate; the registry document and the external submissions are reviewed by hand before publication.
+5. **Registry Operational Invariant**: `docs/agents/ecosystem-presence.md` records, per catalog, the identifier exactly as it appears in the manifest, the submission mechanism and requirement, the verbatim submitted copy, the submission reference, the status, the verification date and the refresh procedure. It also records the intended repository metadata, the description, the topics and the social preview, with their pending state and verification date. The manifest's catalog records are asserted structurally by the gate; the registry document and the external submissions are reviewed by hand before publication.
 6. **Documentation Discipline Invariant**: the ADR-0009 invariants remain in force: zero emoji, Chinese subheadings of at most four characters, strict bilingual structural parity, plain technical language, and the standing recommendation to prefer native single-task delegation before cross-session coordination.
 7. **No Engagement Mechanics Invariant**: paid placement, star solicitation, coordinated voting and multi-account engagement are out of scope. This contract governs discoverability and comprehension only.
 
@@ -79,13 +79,15 @@ tests/public-surface-integrity.test.mjs
       |                                           four-character Chinese subheadings, level-2 parity
       +-- asserts --> package.json               description and keywords agree with the manifest
       +-- asserts --> assets/*                   existence, format signature, byte floor and ceiling
-      +-- asserts --> presence.json              manifest completeness, catalog record structure, dates
+      +-- asserts --> presence.json              manifest completeness, repository metadata intent,
+      |                                           catalog record structure, dates, hero binding
       |
       +-- subprocess --> scripts/scan-secrets.mjs --all   credential rules, one source, clean exit
-      +-- disclosure rules --> absolute home paths, Windows user-directory paths,
-                               private host names, personal account identifiers
+      +-- disclosure rules --> published surface: Unix home paths, Windows user-directory
+                               paths, private host names
+      +-- disclosure rules --> catalog records and registry: personal account identifiers
 
-maintainer --edits--> presence.json --then--> docs/agents/ecosystem-presence.md (status + verification date)
+maintainer --edits--> presence.json --then--> docs/agents/ecosystem-presence.md (status, metadata and verification date)
 ```
 
 ### 4.3 Interface & Protocol Contracts
@@ -96,6 +98,11 @@ maintainer --edits--> presence.json --then--> docs/agents/ecosystem-presence.md 
   "positioning": { "en": "one factual sentence", "zh": "同义中文一句" },
   "packageDescription": "one factual sentence",
   "keywords": ["outcome-term"],
+  "repository": {
+    "description": "the package description, verbatim",
+    "topics": ["every keyword, verbatim"],
+    "socialPreview": { "status": "<pending or set>", "verifiedOn": "YYYY-MM-DD" }
+  },
   "firstScreen": {
     "en": { "demoRef": "./assets/canvas-demo.png", "demoMaxLine": 0, "anchor": "## Canvas" },
     "zh": { "demoRef": "./assets/canvas-demo-zh.png", "demoMaxLine": 0, "anchor": "## 看板" }
@@ -116,11 +123,13 @@ maintainer --edits--> presence.json --then--> docs/agents/ecosystem-presence.md 
 
 Contract rules:
 1. `positioning.en` and `positioning.zh` carry the same claim; neither is a weaker translation.
-2. `keywords` holds at least eight unique lowercase hyphenated outcome terms, not internal vocabulary.
+2. `keywords` holds at least eight unique lowercase hyphenated discovery terms that a prospective user would search for: the outcome, the platform and the tool names. The semantic fitness of those terms and the parity of the two language claims are review items, not gate items; the gate asserts count, shape and uniqueness.
 3. Every entry in `assets` satisfies `0 < minBytes < maxBytes` and names a repository-relative path.
-4. `firstScreen` anchors name the section that must sit within the declared line offset of the rendered document.
-5. Every entry in `catalogs` carries a non-empty identifier, requirement and status, and a `lastVerified` that matches `YYYY-MM-DD` and parses as a date.
-6. `docs/agents/ecosystem-presence.md` carries one section per catalog and repeats the same six fields plus the refresh procedure.
+4. `firstScreen` anchors name the section that must sit at or before `demoMaxLine`, the declared offset, in the rendered document. The gate asserts the placement: it locates the anchor heading line and fails when that line exceeds the offset, so a later section move cannot pass.
+5. Every entry in `catalogs` carries a non-empty identifier, requirement and status, a `submittedCopy` and a `submissionRef` that exist and are strings, and a `lastVerified` that matches `YYYY-MM-DD` and parses as a date. A record whose status is `listed` must carry a non-empty `submittedCopy`.
+6. `repository` holds the host-side metadata intent: `description` equal to `packageDescription`, `topics` equal to `keywords`, and `socialPreview.status` a non-empty string with a `verifiedOn` that matches `YYYY-MM-DD` and parses as a date. These are host-side settings and are not versioned, so the manifest holds the intended values and the registry records the verification.
+7. `README.md` references `./assets/hero.png`, so the hero budget is bound to a document that points at the asset.
+8. `docs/agents/ecosystem-presence.md` carries one section per catalog and repeats the same six fields plus the refresh procedure.
 
 ### 4.4 Amendment to ADR-0009 Section 4.2
 ADR-0009 section 4.2 fixes the user-facing document structure as: Hero & Tagline, Overview, Installation, Scenarios, Canvas, Tools, Comparison, Config, Architecture, Compatibility, License. This record amends the ordering requirement only.
@@ -142,8 +151,8 @@ Everything else stands unchanged. The section inventory, the horizontal divider 
 ### 5.2 Negative Consequences (Tradeoffs & Mitigations)
 - **Tradeoff 1**: A copy change now touches the manifest and must keep the suite green.
   - *Mitigation*: The gate message names the artifact and the violated contract, so the fix does not require reading test source.
-- **Tradeoff 2**: One more tracked artifact and one more test module to maintain.
-  - *Mitigation*: The module reuses the existing static-integrity shape and asserts observable artifacts only, with no production seam.
+- **Tradeoff 2**: One more tracked artifact and one more test module to maintain, and the new module genuinely overlaps the existing canvas asset module: both open the PNG header for the format signature and both assert a byte floor, so a canvas asset change is checked twice against two records.
+  - *Mitigation*: `presence.json` is the single source for asset budgets, including the floors; the older module keeps its own ADR-0023 and ADR-0026 contract, namely the 1440x840 pixel dimensions, the `screenshots.json` registration and its 50000-byte floor. The overlap is recorded here rather than removed, and the new module asserts observable artifacts only, with no production seam.
 - **Tradeoff 3**: The gate can verify agreement and budgets, not persuasion. Copy can be consistent and still weak.
   - *Mitigation*: Catalog entries and the registry are reviewed by hand before publication, and the no-superlative discipline stays in force.
 - **Tradeoff 4**: A tightened asset budget forces recompression of an already published asset.
@@ -160,8 +169,8 @@ Everything else stands unchanged. The section inventory, the horizontal divider 
 ## 6. Compliance, Validation & Verification
 
 ### 6.1 Automated Verification Suite
-- **Static Contract Tests** (`tests/public-surface-integrity.test.mjs`): manifest completeness; asset existence, format signature and byte budget; agreement between the `package.json` description and keywords and the manifest; first-screen anchor placement in both language documents; bilingual parity of the positioning claim; catalog record structure with a parseable verification date.
-- **Sanitization**: `scripts/scan-secrets.mjs --all` invoked as a subprocess and required to exit clean, so credential rules keep one source; plus disclosure rules over tracked documentation and manifests for absolute home paths, Windows user-directory paths, private host names and personal account identifiers.
+- **Static Contract Tests** (`tests/public-surface-integrity.test.mjs`): manifest completeness; asset existence, format signature and byte budget; the hero binding to `README.md`; repository metadata intent, the description, topics and social preview; agreement between the `package.json` description and keywords and the manifest; verbatim positioning copy in both language documents; the demonstration line and the anchor line within `demoMaxLine`; catalog record structure with a parseable verification date.
+- **Sanitization**: `scripts/scan-secrets.mjs --all` invoked as a subprocess and required to exit clean, so credential rules keep one source. The gate adds exactly four disclosure rule classes: a Unix absolute home directory path, a Windows user-directory path and a private host name over the published surface, namely `README.md`, `README_ZH.md`, `AGENTS.md`, `CONTRIBUTING.md`, `CHANGELOG.md`, `DESIGN.md`, `SECURITY.md`, `presence.json`, `package.json`, every file under `docs/` and every file under `.github/`; and a personal account identifier over the catalog records in `presence.json` and `docs/agents/ecosystem-presence.md`. Source and test fixtures are out of scope by design.
 - **Documentation Invariants**: zero emoji, Chinese subheadings of at most four characters, and equal level-2 heading counts across `README.md` and `README_ZH.md`.
 - **ADR Governance** (`tests/adr-integrity.test.mjs`): continuous numbering, index-to-disk one-to-one alignment and template-required sections.
 - **Network Policy**: remote catalog state is deliberately not tested over the network; the build stays deterministic and offline.
@@ -171,8 +180,22 @@ Everything else stands unchanged. The section inventory, the horizontal divider 
 - [ ] Both language claims assert the same thing, with no weaker translation.
 - [ ] Every added asset declares a format and a byte floor and ceiling, and stays inside them.
 - [ ] Catalog records carry an identifier, a mechanism, verbatim submitted copy, a reference when one exists, a status and a fresh verification date.
+- [ ] The repository description, topics and social preview are declared in `presence.json` and their host-side application is recorded in the registry with a verification date.
 - [ ] The registry repeats the manifest values and contains no personal account identifiers or developer-local paths.
 - [ ] No paid placement, star solicitation or coordinated engagement was introduced.
+
+### 6.3 Gate Boundary: Mechanical and Review-Enforced
+The gate enforces mechanically, and nothing beyond this:
+- Manifest completeness, the lowercase hyphenated discovery vocabulary, asset budgets and format signatures, the hero binding, catalog record structure and dates.
+- Repository metadata intent, the description, topics and social preview block shape.
+- Agreement between `package.json` and the manifest, verbatim positioning copy in both READMEs, the demonstration line and the anchor line within `demoMaxLine`.
+- The four disclosure rule classes over the surfaces named in section 4.1 invariant 3, plus a clean `scripts/scan-secrets.mjs --all` exit.
+
+Review enforces by hand, and no section of this record claims a gate for it:
+- The semantic fitness of the discovery terms, namely whether a prospective user would search them, and the parity of the two language claims.
+- The truth of a catalog `submittedCopy` against the remote catalog, and the freshness of `lastVerified`.
+- Whether the host-side repository settings were actually applied; the gate checks the intent values, the registry records the verification.
+- The factual tone of the copy and the absence of engagement mechanics.
 
 ---
 
@@ -180,6 +203,7 @@ Everything else stands unchanged. The section inventory, the horizontal divider 
 
 - **2026-10-16**: Proposed by the maintainer following the ecosystem presence specification.
 - **2026-10-16**: Accepted with the public surface manifest, the integrity gate and the presence registry.
+- **2026-10-16**: Two-axis code review of the merged change. The gate was widened to the published surface and the four disclosure rule classes; the anchor line, the catalog copy and reference fields, the repository metadata block and the hero binding became assertable; and this record was corrected where it claimed more than the gate could check, namely the keyword intent, the catalog copy derivation and the asset-module overlap.
 - **Related ADRs**:
   - Amends: ADR-0009 section 4.2
   - Related to: ADR-0022, ADR-0020, ADR-0012
@@ -188,4 +212,4 @@ Everything else stands unchanged. The section inventory, the horizontal divider 
   - Test suite: `tests/public-surface-integrity.test.mjs`
   - Registry: `docs/agents/ecosystem-presence.md`
   - Reused scanner: `scripts/scan-secrets.mjs`
-  - Note: the metadata and first-screen placement assertions land with the first-screen copy change.
+  - Note: the repository metadata and first-screen assertions have landed; the gate now checks the manifest, both READMEs, `package.json` and the published documentation set.

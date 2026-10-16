@@ -12,9 +12,34 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, '..');
 const manifestPath = path.join(rootDir, 'presence.json');
 
-const ROOT_SURFACE_FILES = ['README.md', 'README_ZH.md', 'presence.json', 'package.json'];
+// Published surface: the nine root documents and manifests, every file under docs/ and
+// every file under .github/. Source and test fixtures are deliberately out of the scan set.
+const ROOT_SURFACE_FILES = [
+  'README.md',
+  'README_ZH.md',
+  'AGENTS.md',
+  'CONTRIBUTING.md',
+  'CHANGELOG.md',
+  'DESIGN.md',
+  'SECURITY.md',
+  'presence.json',
+  'package.json',
+];
+const SURFACE_DIRS = ['docs', '.github'];
+
+// Disclosure rule classes 1 to 3 apply to the whole published surface.
 const UNIX_HOME_PATH = /\/(?:home|Users)\/[A-Za-z0-9._-]+\//;
 const WINDOWS_USER_PATH = /[A-Za-z]:[\\/]{1,2}Users[\\/][^\\/\s"']+/i;
+// A full four-octet RFC1918 address, so a version string such as "10.0.0" is not a match.
+const PRIVATE_HOST = /\b10\.\d{1,3}\.\d{1,3}\.\d{1,3}\b|\b192\.168\.\d{1,3}\.\d{1,3}\b|\b172\.(?:1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}\b|(?<![A-Za-z0-9._-])[A-Za-z0-9][A-Za-z0-9-]*(?:\.[A-Za-z0-9-]+)*\.(?:internal|local)\b/i;
+
+// Disclosure rule classes 1 to 3 cover the published surface; class 4 covers the two
+// records where a contributor identity would be written: the catalog records and the registry.
+const IDENTITY_SURFACE_FILES = ['presence.json', 'docs/agents/ecosystem-presence.md'];
+const EMAIL_SHAPE = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/;
+// A mention starts the word and is not a path segment or a package scope, so
+// 'actions/checkout@v4' and '@scope/package' are not mentions.
+const AT_HANDLE = /(?:^|[^A-Za-z0-9_./@-])@[A-Za-z0-9][A-Za-z0-9_-]{1,38}(?![A-Za-z0-9_/-])/;
 const EMOJI = /\p{Extended_Pictographic}/u;
 const CJK = /[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]/;
 const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
@@ -47,12 +72,34 @@ function readText(relPath) {
   return fs.readFileSync(path.join(rootDir, relPath), 'utf8');
 }
 
-function collectDocsMarkdown(dir) {
+function collectFiles(dir) {
   const collected = [];
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const full = path.join(dir, entry.name);
-    if (entry.isDirectory()) collected.push(...collectDocsMarkdown(full));
-    else if (entry.isFile() && entry.name.endsWith('.md')) collected.push(full);
+    if (entry.isDirectory()) collected.push(...collectFiles(full));
+    else if (entry.isFile()) collected.push(full);
+  }
+  return collected;
+}
+
+function collectSurfaceFiles() {
+  const collected = [];
+  for (const name of ROOT_SURFACE_FILES) {
+    assert.ok(
+      fs.existsSync(path.join(rootDir, name)),
+      name + ' must exist on the published surface (contract: disclosure sanitization)'
+    );
+    collected.push(name);
+  }
+  for (const dir of SURFACE_DIRS) {
+    const full = path.join(rootDir, dir);
+    assert.ok(
+      fs.existsSync(full),
+      dir + '/ must exist on the published surface (contract: disclosure sanitization)'
+    );
+    for (const file of collectFiles(full)) {
+      collected.push(path.relative(rootDir, file).split(path.sep).join('/'));
+    }
   }
   return collected;
 }
@@ -133,9 +180,15 @@ test('presence manifest: positioning, keywords, asset budgets and catalog record
     assert.ok(
       catalog && typeof catalog.id === 'string' && catalog.id.length > 0 &&
         typeof catalog.requirement === 'string' && catalog.requirement.length > 0 &&
+        typeof catalog.submittedCopy === 'string' &&
+        typeof catalog.submissionRef === 'string' &&
         typeof catalog.status === 'string' && catalog.status.length > 0 &&
         typeof catalog.lastVerified === 'string',
-      'presence.json catalogs[' + index + '] must declare id, requirement, status and lastVerified (contract: catalog registry)'
+      'presence.json catalogs[' + index + '] must declare id, requirement, submittedCopy, submissionRef, status and lastVerified (contract: catalog registry)'
+    );
+    assert.ok(
+      catalog.status !== 'listed' || catalog.submittedCopy.trim().length > 0,
+      'presence.json catalogs[' + index + '].submittedCopy must be non-empty while status is "listed" (contract: catalog registry)'
     );
     assert.ok(
       CALENDAR_DATE.test(catalog.lastVerified) && !Number.isNaN(Date.parse(catalog.lastVerified)),
@@ -196,30 +249,44 @@ test('public surface sanitization: the credential scanner reports no findings ac
   );
 });
 
-test('public surface sanitization: tracked documentation and manifests expose no developer-local paths', () => {
-  const targets = [];
-  for (const name of ROOT_SURFACE_FILES) {
-    assert.ok(
-      fs.existsSync(path.join(rootDir, name)),
-      name + ' must exist on the public surface (contract: disclosure sanitization)'
-    );
-    targets.push(name);
-  }
-  for (const full of collectDocsMarkdown(path.join(rootDir, 'docs'))) {
-    targets.push(path.relative(rootDir, full).split(path.sep).join('/'));
-  }
+test('public surface sanitization: the published surface exposes no developer-local path or private host name', () => {
+  const surfaceRules = [
+    { label: 'a Unix absolute home path', pattern: UNIX_HOME_PATH },
+    { label: 'a Windows user-directory path', pattern: WINDOWS_USER_PATH },
+    { label: 'a private host name', pattern: PRIVATE_HOST },
+  ];
 
-  for (const relPath of targets) {
+  for (const relPath of collectSurfaceFiles()) {
     readText(relPath).split(/\r?\n/).forEach((line, index) => {
-      const rules = [
-        { label: 'Unix absolute home path', pattern: UNIX_HOME_PATH },
-        { label: 'Windows user-directory path', pattern: WINDOWS_USER_PATH },
-      ];
-      for (const rule of rules) {
+      for (const rule of surfaceRules) {
         const match = line.match(rule.pattern);
         assert.ok(
           match === null,
-          match === null ? '' : relPath + ':' + (index + 1) + ' exposes a ' + rule.label + ' "' + match[0] +
+          match === null ? '' : relPath + ':' + (index + 1) + ' exposes ' + rule.label + ' "' + match[0] +
+            '" (contract: disclosure sanitization)'
+        );
+      }
+    });
+  }
+});
+
+test('public surface sanitization: the catalog records and the registry expose no personal account identifier', () => {
+  const identityRules = [
+    { label: 'an e-mail address', pattern: EMAIL_SHAPE },
+    { label: 'an at-handle mention', pattern: AT_HANDLE },
+  ];
+
+  for (const relPath of IDENTITY_SURFACE_FILES) {
+    assert.ok(
+      fs.existsSync(path.join(rootDir, relPath)),
+      relPath + ' must exist on the published surface (contract: disclosure sanitization)'
+    );
+    readText(relPath).split(/\r?\n/).forEach((line, index) => {
+      for (const rule of identityRules) {
+        const match = line.match(rule.pattern);
+        assert.ok(
+          match === null,
+          match === null ? '' : relPath + ':' + (index + 1) + ' exposes ' + rule.label + ' "' + match[0] +
             '" (contract: disclosure sanitization)'
         );
       }
@@ -320,11 +387,79 @@ test('first screen: each README carries its canvas demonstration within demoMaxL
       typeof entry.anchor === 'string' && entry.anchor.length > 0,
       'presence.json firstScreen.' + language + '.anchor must name the first-screen section heading (contract: first-screen anchor)'
     );
+    const anchorLine = lines.findIndex((line) => line.trim() === entry.anchor) + 1;
     assert.ok(
-      lines.some((line) => line.trim() === entry.anchor),
+      anchorLine > 0,
       relPath + ' must contain the "' + entry.anchor + '" section (contract: first-screen anchor)'
     );
+    assert.ok(
+      anchorLine <= entry.demoMaxLine,
+      relPath + ' must place the "' + entry.anchor + '" section at or before line ' + entry.demoMaxLine +
+        ', found line ' + anchorLine + ' (contract: first-screen anchor)'
+    );
   }
+
+  const heroRef = './assets/hero.png';
+  assert.ok(
+    Object.keys(manifest.assets || {}).includes('assets/hero.png'),
+    'presence.json assets must declare ' + heroRef + ' (contract: first-screen hero binding)'
+  );
+  assert.ok(
+    readText('README.md').includes(heroRef),
+    'README.md must reference ' + heroRef + ', the bounded hero asset, so no declared budget is unbound (contract: first-screen hero binding)'
+  );
+});
+
+test('repository metadata intent: the manifest declares the host-side description, topics and social preview', () => {
+  const manifest = requireManifest();
+  const repository = manifest.repository;
+
+  assert.ok(
+    repository && typeof repository === 'object' && !Array.isArray(repository),
+    'presence.json repository must declare the host-side metadata intent (contract: repository metadata)'
+  );
+  assert.equal(
+    repository.description,
+    manifest.packageDescription,
+    'presence.json repository.description must equal packageDescription, the single authored description (contract: repository metadata)'
+  );
+
+  assert.ok(
+    Array.isArray(repository.topics),
+    'presence.json repository.topics must be an array of discovery topics (contract: repository metadata)'
+  );
+  assert.deepEqual(
+    repository.topics,
+    manifest.keywords,
+    'presence.json repository.topics must equal the authored keywords (contract: repository metadata)'
+  );
+  const seenTopics = new Set();
+  for (const topic of repository.topics) {
+    assert.ok(
+      typeof topic === 'string' && /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(topic),
+      'presence.json repository topic "' + topic + '" must be a lowercase hyphenated term (contract: repository metadata)'
+    );
+    assert.ok(
+      !seenTopics.has(topic),
+      'presence.json repository topic "' + topic + '" must not repeat (contract: repository metadata)'
+    );
+    seenTopics.add(topic);
+  }
+
+  const socialPreview = repository.socialPreview;
+  assert.ok(
+    socialPreview && typeof socialPreview === 'object' && !Array.isArray(socialPreview),
+    'presence.json repository.socialPreview must record the share card status (contract: repository metadata)'
+  );
+  assert.ok(
+    typeof socialPreview.status === 'string' && socialPreview.status.trim().length > 0,
+    'presence.json repository.socialPreview.status must be a non-empty string (contract: repository metadata)'
+  );
+  assert.ok(
+    CALENDAR_DATE.test(socialPreview.verifiedOn) && !Number.isNaN(Date.parse(socialPreview.verifiedOn)),
+    'presence.json repository.socialPreview.verifiedOn "' + socialPreview.verifiedOn +
+      '" must match YYYY-MM-DD (contract: repository metadata)'
+  );
 });
 
 test('metadata alignment: package.json description and keywords agree with the presence manifest', () => {
