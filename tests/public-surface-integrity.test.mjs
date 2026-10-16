@@ -12,8 +12,9 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, '..');
 const manifestPath = path.join(rootDir, 'presence.json');
 
-// Published surface: the nine root documents and manifests, every file under docs/ and
-// every file under .github/. Source and test fixtures are deliberately out of the scan set.
+// Published surface: the nine root documents and manifests, every tracked file under docs/
+// and .github/. The set is enumerated from the Git index, so an ignored local artifact
+// cannot change it. Source and test fixtures are deliberately out of the scan set.
 const ROOT_SURFACE_FILES = [
   'README.md',
   'README_ZH.md',
@@ -25,7 +26,11 @@ const ROOT_SURFACE_FILES = [
   'presence.json',
   'package.json',
 ];
-const SURFACE_DIRS = ['docs', '.github'];
+const SURFACE_DIR_PREFIXES = ['docs/', '.github/'];
+// Representative members of each part of the surface, used to pin its definition.
+const SURFACE_SAMPLES = ['README.md', 'docs/agents/ecosystem-presence.md', '.github/workflows/ci.yml'];
+// Ignored local artifacts, e.g. rendered visual checks, are never published.
+const IGNORED_LOCAL_ARTIFACT = /\.visual-check\./;
 
 // Disclosure rule classes 1 to 3 apply to the whole published surface.
 const UNIX_HOME_PATH = /\/(?:home|Users)\/[A-Za-z0-9._-]+\//;
@@ -72,36 +77,32 @@ function readText(relPath) {
   return fs.readFileSync(path.join(rootDir, relPath), 'utf8');
 }
 
-function collectFiles(dir) {
-  const collected = [];
-  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-    const full = path.join(dir, entry.name);
-    if (entry.isDirectory()) collected.push(...collectFiles(full));
-    else if (entry.isFile()) collected.push(full);
-  }
-  return collected;
+function listTrackedFiles() {
+  const result = spawnSync('git', ['ls-files', '-z'], { cwd: rootDir, encoding: 'utf8' });
+  const output = ((result.stdout || '') + (result.stderr || '')).trim();
+  assert.equal(
+    result.status,
+    0,
+    'git ls-files must succeed, because the disclosure surface is the tracked published set ' +
+      '(contract: disclosure sanitization); ' + output
+  );
+  return result.stdout.split('\0').filter((entry) => entry.length > 0);
 }
 
 function collectSurfaceFiles() {
+  const tracked = listTrackedFiles();
   const collected = [];
   for (const name of ROOT_SURFACE_FILES) {
     assert.ok(
-      fs.existsSync(path.join(rootDir, name)),
-      name + ' must exist on the published surface (contract: disclosure sanitization)'
+      tracked.includes(name),
+      name + ' must be tracked on the published surface (contract: disclosure sanitization)'
     );
     collected.push(name);
   }
-  for (const dir of SURFACE_DIRS) {
-    const full = path.join(rootDir, dir);
-    assert.ok(
-      fs.existsSync(full),
-      dir + '/ must exist on the published surface (contract: disclosure sanitization)'
-    );
-    for (const file of collectFiles(full)) {
-      collected.push(path.relative(rootDir, file).split(path.sep).join('/'));
-    }
+  for (const relPath of tracked) {
+    if (SURFACE_DIR_PREFIXES.some((prefix) => relPath.startsWith(prefix))) collected.push(relPath);
   }
-  return collected;
+  return collected.sort();
 }
 
 function parseHeadings(text) {
@@ -246,6 +247,43 @@ test('public surface sanitization: the credential scanner reports no findings ac
     result.status,
     0,
     'scripts/scan-secrets.mjs --all must exit 0 for every tracked file (contract: credential sanitization); ' + output
+  );
+});
+
+test('disclosure surface: the scanned set is the tracked published surface and nothing else', () => {
+  const surface = collectSurfaceFiles();
+
+  for (const sample of SURFACE_SAMPLES) {
+    assert.ok(
+      surface.includes(sample),
+      sample + ' must be part of the scanned published surface (contract: disclosure surface definition)'
+    );
+  }
+
+  for (const relPath of surface) {
+    assert.ok(
+      !relPath.startsWith('tests/') && !relPath.startsWith('lib/'),
+      relPath + ' must not be scanned; source and test fixtures are out of scope by design ' +
+        '(contract: disclosure surface definition)'
+    );
+    assert.ok(
+      !IGNORED_LOCAL_ARTIFACT.test(relPath),
+      relPath + ' must not be scanned; an ignored local artifact is never published ' +
+        '(contract: disclosure surface definition)'
+    );
+  }
+
+  // Git's own ignore engine confirms the set cannot contain an unpublished local artifact.
+  const ignored = spawnSync('git', ['check-ignore', '--stdin'], {
+    cwd: rootDir,
+    encoding: 'utf8',
+    input: surface.join('\n') + '\n',
+  });
+  assert.equal(
+    ((ignored.stdout || '') + (ignored.stderr || '')).trim(),
+    '',
+    'no scanned path may be one Git ignores, because an ignored artifact is never published ' +
+      '(contract: disclosure surface definition)'
   );
 });
 
