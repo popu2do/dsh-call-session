@@ -68,17 +68,17 @@
     {
       "id": "awesome-dsh-plugin",
       "requirement": "One YAML entry per plugin under data/plugins; url must match the repository and description.en is required",
-      "submittedCopy": "In-process cross-session communication, peer session creation, and shared blackboard for DeepSeek Harness.",
-      "submissionRef": "",
+      "submittedCopy": "Run several DeepSeek Harness sessions side by side, hand work from one to another, and watch the whole collaboration on one read-only canvas.",
+      "submissionRef": "https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/pull/7593",
       "status": "listed",
       "lastVerified": "2026-10-16"
     },
     {
       "id": "dsh-plugin-radar",
       "requirement": "Community registration through the repository PLUGINS.md form",
-      "submittedCopy": "",
-      "submissionRef": "",
-      "status": "not-registered",
+      "submittedCopy": "并排运行多个 DeepSeek Harness 会话，让它们互相交接任务，并在同一张只读看板上看清整场协作。",
+      "submissionRef": "https://github.com/AdamPlatin123/dsh-plugin-radar/pull/959",
+      "status": "submitted",
       "lastVerified": "2026-10-16"
     }
   ]
