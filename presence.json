@@ -1,0 +1,66 @@
+{
+  "positioning": {
+    "en": "Run several DeepSeek Harness sessions side by side, hand work from one to another, and watch the whole collaboration on one read-only canvas.",
+    "zh": "并排运行多个 DeepSeek Harness 会话，让它们互相交接任务，并在同一张只读看板上看清整场协作。"
+  },
+  "packageDescription": "Multi-session collaboration for DeepSeek Harness: peer session calls, a shared blackboard, and a read-only topology canvas.",
+  "keywords": [
+    "deepseek-harness",
+    "dsh-plugin",
+    "multi-session",
+    "multi-agent",
+    "agent-collaboration",
+    "task-handoff",
+    "shared-blackboard",
+    "session-call",
+    "peer-session",
+    "cordis-plugin"
+  ],
+  "firstScreen": {
+    "en": {
+      "demoRef": "./assets/canvas-demo.png",
+      "demoMaxLine": 30,
+      "anchor": "## Canvas"
+    },
+    "zh": {
+      "demoRef": "./assets/canvas-demo-zh.png",
+      "demoMaxLine": 30,
+      "anchor": "## 看板"
+    }
+  },
+  "assets": {
+    "assets/hero.png": {
+      "format": "png",
+      "minBytes": 51200,
+      "maxBytes": 393216
+    },
+    "assets/canvas-demo.png": {
+      "format": "png",
+      "minBytes": 51200,
+      "maxBytes": 327680
+    },
+    "assets/canvas-demo-zh.png": {
+      "format": "png",
+      "minBytes": 51200,
+      "maxBytes": 327680
+    }
+  },
+  "catalogs": [
+    {
+      "id": "awesome-dsh-plugin",
+      "requirement": "One YAML entry per plugin under data/plugins; url must match the repository and description.en is required",
+      "submittedCopy": "In-process cross-session communication, peer session creation, and shared blackboard for DeepSeek Harness.",
+      "submissionRef": "",
+      "status": "listed",
+      "lastVerified": "2026-10-16"
+    },
+    {
+      "id": "dsh-plugin-radar",
+      "requirement": "Community registration through the repository PLUGINS.md form",
+      "submittedCopy": "",
+      "submissionRef": "",
+      "status": "not-registered",
+      "lastVerified": "2026-10-16"
+    }
+  ]
+}
