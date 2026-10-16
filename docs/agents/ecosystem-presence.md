@@ -24,10 +24,10 @@ Host-side settings. They are not versioned, so `presence.json` `repository` hold
 
 | Field | Value |
 | :--- | :--- |
-| Description | `presence.json` `packageDescription`, verbatim. |
-| Topics | `presence.json` `keywords`, verbatim and in the same order. |
-| Social preview | `pending`. Not set on the host yet, pending repository authentication. |
-| Verified | 2026-10-16 |
+| Description | Applied. `presence.json` `packageDescription`, verbatim. |
+| Topics | Applied. The same ten terms as `presence.json` `keywords`. The host returns them in its own alphabetical order rather than the manifest order, so this row asserts the set, not the sequence. |
+| Social preview | `pending`. The REST API does not set this field; it needs the repository settings page and an uploaded image. |
+| Verified | Description and topics applied and re-read from the host on 2026-10-16. Social preview not yet set. |
 
 Intent values, quoted from `presence.json`:
 
@@ -35,42 +35,50 @@ Intent values, quoted from `presence.json`:
 
 > deepseek-harness, dsh-plugin, multi-session, multi-agent, agent-collaboration, task-handoff, shared-blackboard, session-call, peer-session, cordis-plugin
 
-Pending action: set the description, the topic list and a social preview image once repository authentication is available, then record the application date here and in `presence.json` `repository.socialPreview.verifiedOn`.
+Pending action: set only the social preview image, through the repository settings page, then record its application date here and in `presence.json` `repository.socialPreview.verifiedOn`. `assets/canvas-demo.png` is the natural candidate, since it is the artifact the positioning sentence points at.
 
 Two claims in this document are review items, not gate items: the semantic fitness of the discovery terms, namely whether a prospective user would search them, and the parity of the English and Chinese claims. The gate checks only that the terms are unique lowercase hyphenated strings and that both language claims are present verbatim.
 
 ## awesome-dsh-plugin
 
-Curated catalog where this repository is already listed. The category carries several hundred entries, so this one line is effectively the whole discovery surface.
+Curated catalog where this repository is already listed, in category `session`. The entry file is `data/plugins/popu2do__dsh-call-session.yml`. The catalog holds well over a thousand entries and regenerates both of its READMEs from the entry files, so this one line is effectively the whole discovery surface.
 
 | Field | Value |
 | :--- | :--- |
 | Identifier in `presence.json` | `awesome-dsh-plugin` |
 | Submission mechanism | One YAML entry per plugin in the catalog's `data/plugins` collection. The entry `url` must match this repository and `description.en` is required. |
-| Submitted copy | Recorded verbatim below. |
-| Submission reference | None recorded. |
-| Status | `listed` |
-| Verified | 2026-10-16 |
+| Submitted copy | Recorded verbatim below. The catalog still renders the previous line until the submission below is merged. |
+| Submission reference | https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/pull/7593, open and awaiting review. |
+| Status | `listed`. The entry update is submitted, not yet merged. |
+| Verified | 2026-10-16. The entry file and the open submission were both read from the host on this date. |
 | Refresh | Re-read the listed entry, compare `description.en` with `presence.json` `catalogs[0].submittedCopy`, then update `presence.json` and this row and run `npm run verify`. |
 
-Verbatim copy as recorded in `presence.json`:
+Copy submitted, verbatim, and recorded in `presence.json`:
+
+> Run several DeepSeek Harness sessions side by side, hand work from one to another, and watch the whole collaboration on one read-only canvas.
+
+Line the catalog still renders, which the submitted copy replaces on merge:
 
 > In-process cross-session communication, peer session creation, and shared blackboard for DeepSeek Harness.
 
-Pending action: this listed copy predates the public surface contract and describes mechanism rather than outcome. It is to be rewritten to lead with the outcome and the canvas demonstration, then resubmitted through the same one-file mechanism. `presence.json` and this row are updated together once the new reference exists.
+Pending action: await review of pull request 7593. On merge, the rendered line and the submitted copy become the same sentence, and this row loses the second quotation.
 
 ## dsh-plugin-radar
 
-Ecosystem radar that currently holds no record of this repository.
+Ecosystem radar. It held no record of this repository at the time of writing, and a registration is now under review. The radar collects most of its entries automatically from repositories carrying the `dsh-plugin` topic, so a registration row buys a durable, human-curated entry rather than first discovery.
 
 | Field | Value |
 | :--- | :--- |
 | Identifier in `presence.json` | `dsh-plugin-radar` |
 | Submission mechanism | Community registration through the catalog repository's `PLUGINS.md` form. |
-| Submitted copy | None. `presence.json` records an empty `submittedCopy` because no entry has been submitted. |
-| Submission reference | None. |
-| Status | `not-registered` |
-| Verified | 2026-10-16 |
-| Refresh | Submit the `presence.json` positioning sentence for both languages through the `PLUGINS.md` form, record the resulting reference and date in `presence.json`, mirror them here, then run `npm run verify`. |
+| Submitted copy | Recorded verbatim below, as submitted in the row added to `PLUGINS.md`. |
+| Submission reference | https://github.com/AdamPlatin123/dsh-plugin-radar/pull/959, open and awaiting review. |
+| Status | `submitted`. Nothing is published by this catalog yet. |
+| Verified | 2026-10-16. The open submission and the remote `PLUGINS.md` were both read from the host on this date. |
+| Refresh | Submit the `presence.json` positioning sentence through the `PLUGINS.md` form, record the resulting reference and date in `presence.json`, mirror them here, then run `npm run verify`. |
 
-Pending action: submit the entry. The copy to submit is the manifest positioning sentence, which is the single authored source; it must not be rewritten here.
+Copy submitted, verbatim, from the manifest positioning sentence:
+
+> 并排运行多个 DeepSeek Harness 会话，让它们互相交接任务，并在同一张只读看板上看清整场协作。
+
+Pending action: await review of pull request 959. Its automated classifier returns the fallback category for this repository, because its rules match substrings and no rule covers session coordination, so the submitted category was chosen by hand from the catalog's own boundary rules and the reasoning is stated in the request. On merge, set the status to `listed` and re-read the rendered row.
