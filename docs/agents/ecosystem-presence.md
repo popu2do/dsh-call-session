@@ -41,27 +41,27 @@ Two claims in this document are review items, not gate items: the semantic fitne
 
 ## awesome-dsh-plugin
 
-Curated catalog where this repository is already listed, in category `session`. The entry file is `data/plugins/popu2do__dsh-call-session.yml`. The catalog holds well over a thousand entries and regenerates both of its READMEs from the entry files, so this one line is effectively the whole discovery surface.
+Curated catalog where this repository is listed, in category `session`. The entry file is `data/plugins/popu2do__dsh-call-session.yml`. At verification the catalog held 5065 entry files and its generated README was 1.7 MB, with this row near line 2169, so the row is an existence proof carrying one line of description rather than a discovery channel: a reader arrives by search or by scrolling, not by browsing.
 
 | Field | Value |
 | :--- | :--- |
 | Identifier in `presence.json` | `awesome-dsh-plugin` |
 | Submission mechanism | One YAML entry per plugin in the catalog's `data/plugins` collection. The entry `url` must match this repository and `description.en` is required. |
-| Submitted copy | Recorded verbatim below. The catalog still renders the previous line until the submission below is merged. |
-| Submission reference | https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/pull/7593, open and awaiting review. |
-| Status | `listed`. The entry update is submitted, not yet merged. |
-| Verified | 2026-10-16. The entry file and the open submission were both read from the host on this date. |
+| Submitted copy | Recorded verbatim below, and rendered by the catalog. |
+| Submission reference | https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/pull/7593, merged 2026-10-17. |
+| Status | `listed`. The submitted copy is published. |
+| Verified | 2026-10-17. The merged entry file and the generated catalog README were both read from the host on this date. |
 | Refresh | Re-read the listed entry, compare `description.en` with `presence.json` `catalogs[0].submittedCopy`, then update `presence.json` and this row and run `npm run verify`. |
 
-Copy submitted, verbatim, and recorded in `presence.json`:
+Copy published, verbatim, and recorded in `presence.json`:
 
 > Run several DeepSeek Harness sessions side by side, hand work from one to another, and watch the whole collaboration on one read-only canvas.
 
-Line the catalog still renders, which the submitted copy replaces on merge:
+Line the catalog rendered before the merge, kept only as the record of what the submission replaced:
 
 > In-process cross-session communication, peer session creation, and shared blackboard for DeepSeek Harness.
 
-Pending action: await review of pull request 7593. On merge, the rendered line and the submitted copy become the same sentence, and this row loses the second quotation.
+No pending action.
 
 ## dsh-plugin-radar
 
