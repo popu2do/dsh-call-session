@@ -167,7 +167,7 @@ export interface BoardClearResult {
  * BoardStore 构造配置选项
  */
 export interface BoardStoreOptions {
-  /** 主存储文件路径，默认指向插件目录下的 board.json */
+  /** 主存储文件路径，默认指向 DSH home 下的 dsh-call-session/board.json */
   storagePath?: string;
   /** 备份文件路径，默认为 storagePath 追加 .bak */
   backupPath?: string;
@@ -222,6 +222,38 @@ export declare function isReservedTopic(topic: string | null | undefined): boole
 export declare function getReservedTopicErrorMessage(topic: string): string;
 
 export declare function extractTitle(post: BoardPost | Partial<BoardPost> | null | undefined): string;
+
+/**
+ * 解析 DeepSeek Harness 用户数据根目录：$DSH_HOME 优先，其次 ~/.dsh。
+ * 空白覆盖视为未设置，绝不退化为工作目录。ADR-0035。
+ *
+ * @param env 环境变量来源，默认 process.env
+ * @returns 绝对路径
+ */
+export declare function resolveDshHome(env?: NodeJS.ProcessEnv | Record<string, string | undefined>): string;
+
+/**
+ * 默认黑板存储文件路径：<harness home>/dsh-call-session/board.json。ADR-0035。
+ *
+ * @param env 环境变量来源，默认 process.env
+ * @returns 绝对路径
+ */
+export declare function defaultStoragePath(env?: NodeJS.ProcessEnv | Record<string, string | undefined>): string;
+
+/**
+ * 把旧版留在插件目录内的黑板一次性搬到新位置，不删除旧文件。
+ * 目标已存在时不覆盖；旧主文件缺失但旧备份存在时以备份为准。ADR-0035。
+ *
+ * @param legacyStoragePath 旧版存储路径
+ * @param storagePath 新存储路径
+ * @param logger 日志记录器
+ * @returns 是否执行了拷贝
+ */
+export declare function migrateLegacyStorage(
+  legacyStoragePath: string,
+  storagePath: string,
+  logger?: any
+): boolean;
 
 /**
  * 将作者的未清理活跃条目格式化为纯状态幂等的记名提醒文本。
