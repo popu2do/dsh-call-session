@@ -24,7 +24,7 @@ ADR-0012 建立了可视化协作看板，提出“瞬态调用流动与脉冲�
 我们确立以下四项看板动效与视觉约束规范：
 
 ### 2.1 拓扑边线几何不变式（Geometric Invariant for Edges）
-1. **绝对禁止几何缩放**：任何表示拓扑连线的 SVG `<path>` 元素，严禁在其 CSS 动画或过渡中施加 `transform: scale(...)`、`transform: translate(...)` 或矩阵变换。
+1. **禁止几何缩放**：任何表示拓扑连线的 SVG `<path>` 元素，严禁在其 CSS 动画或过渡中施加 `transform: scale(...)`、`transform: translate(...)` 或矩阵变换。
 2. **动效作用域受敛**：连线的所有动态效果严格限定在纯视觉渲染属性：
    - 流动指示：仅允许改变 `stroke-dashoffset`；
    - 脉冲发光：仅允许改变 `opacity`、`stroke-opacity` 或 `stroke-width`（微幅呼吸 `1.0 ~ 1.2` 倍）。

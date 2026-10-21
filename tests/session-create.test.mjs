@@ -25,7 +25,8 @@ function createMockCtx({
   agentDefaultModel = null,
   agentPresets = null,
   sessionController = null,
-  sessionTitle = null
+  sessionTitle = null,
+  registeredWorkspaces = ['c:/workspace/project-alpha', 'c:/workspace/project-beta']
 } = {}) {
   const archivedSet = new Set(archivedIds);
   const createdAgents = [];
@@ -51,6 +52,14 @@ function createMockCtx({
     }
   };
 
+  const workspaceRegistry = { archivedSessionIds: archivedSet };
+  if (Array.isArray(registeredWorkspaces)) {
+    workspaceRegistry.list = () => registeredWorkspaces.map((p) => ({
+      path: p,
+      attachSession: async () => {}
+    }));
+  }
+
   const mockCtx = {
     logger: () => ({
       debug() {},
@@ -64,7 +73,7 @@ function createMockCtx({
     sessionTitle,
     get(name) {
       if (name === 'workspaceRegistry') {
-        return { archivedSessionIds: archivedSet };
+        return workspaceRegistry;
       }
       if (name === 'sessionTitle') {
         return sessionTitle || {
@@ -335,7 +344,10 @@ test('executeSessionCreate: 工作区隔离（跨工程会话不占用配额，�
 test('executeSessionCreate: 显式跨工作区创建 (ADR-0010: 默认隔离 + 显式选择 Opt-in)', async () => {
   resetRateLimits();
   const caller = createMockAgent('caller-alpha', { cwd: 'c:/workspace/project-alpha' });
-  const ctx = createMockCtx({ agentsList: [caller] });
+  const ctx = createMockCtx({
+    agentsList: [caller],
+    registeredWorkspaces: ['c:/workspace/project-alpha', 'c:/workspace/project-beta']
+  });
   const exec = { agent: caller };
 
   // 显式传入合法目标工作区
@@ -1687,3 +1699,176 @@ test('executeSessionCreate: 首帧消息规范注入传输层报头且出参携�
   assert.ok(resEn.message.includes('initial task dispatched, await target task_report, no polling needed'));
   assert.ok(!/[\u4e00-\u9fa5]/.test(resEn.message));
 });
+
+test('executeSessionCreate: 未注册工作区被拒绝 (ADR-0003 §4.1.5 准入校验)', async () => {
+  resetRateLimits();
+  const caller = createMockAgent('caller-alpha', { cwd: 'c:/workspace/project-alpha' });
+  const ctx = createMockCtx({ agentsList: [caller], registeredWorkspaces: ['c:/workspace/project-beta'] });
+  const exec = { agent: caller };
+
+  await assert.rejects(
+    async () => executeSessionCreate({
+      ctx,
+      args: { title: 'Stray Worker', workspace: 'c:/temp/orphan-tree', initial_message: 'Start' },
+      exec
+    }),
+    /\[WorkspaceNotRegistered\]/
+  );
+});
+
+test('executeSessionCreate: 未注册工作区拒绝发生在创建任何资源之前', async () => {
+  resetRateLimits();
+  const caller = createMockAgent('caller-alpha', { cwd: 'c:/workspace/project-alpha' });
+  const ctx = createMockCtx({ agentsList: [caller], registeredWorkspaces: [] });
+  const exec = { agent: caller };
+
+  await assert.rejects(
+    async () => executeSessionCreate({
+      ctx,
+      args: { title: 'Stray Worker', workspace: 'c:/temp/orphan-tree', initial_message: 'Start' },
+      exec
+    }),
+    /\[WorkspaceNotRegistered\]/
+  );
+
+  assert.equal(ctx._createdAgents.length, 0);
+  assert.equal(ctx._createPayloads.length, 0);
+});
+
+test('executeSessionCreate: 拒绝不消耗限频配额与在途标题', async () => {
+  resetRateLimits();
+  const caller = createMockAgent('caller-reject-quota', { cwd: 'c:/workspace/project-alpha' });
+  const renamed = [];
+  const ctx = createMockCtx({
+    agentsList: [caller],
+    registeredWorkspaces: [],
+    sessionTitle: {
+      get: (s) => ({ title: s?.title || '' }),
+      rename: async (sessionId, title) => { renamed.push({ sessionId, title }); }
+    }
+  });
+  const exec = { agent: caller };
+
+  // 限频上限为每分钟 5 次。拒绝若消耗配额，第六次会变成 [RateLimitExceeded] 而非工作区错误
+  for (let i = 0; i < 6; i++) {
+    await assert.rejects(
+      async () => executeSessionCreate({
+        ctx,
+        args: { title: `Stray Worker ${i}`, workspace: 'c:/temp/orphan-tree', initial_message: 'Start' },
+        exec
+      }),
+      /\[WorkspaceNotRegistered\]/,
+      `第 ${i + 1} 次拒绝必须报工作区未注册而非限频`
+    );
+  }
+
+  assert.deepEqual(renamed, [], '拒绝不得追加标题事件');
+  resetRateLimits();
+});
+
+test('executeSessionCreate: 当前工程路径无需注册即可创建 (同工程直通)', async () => {
+  resetRateLimits();
+  const caller = createMockAgent('caller-alpha', { cwd: 'c:/workspace/project-alpha' });
+  const ctx = createMockCtx({ agentsList: [caller] });
+  const exec = { agent: caller };
+
+  const res = await executeSessionCreate({
+    ctx,
+    args: { title: 'Same Project Worker', workspace: 'C:/workspace/project-alpha/', initial_message: 'Start' },
+    exec
+  });
+
+  assert.equal(res.success, true);
+  assert.equal(res.workspace, 'c:/workspace/project-alpha');
+});
+
+test('executeSessionCreate: 已注册的其他工程放行', async () => {
+  resetRateLimits();
+  const caller = createMockAgent('caller-alpha', { cwd: 'c:/workspace/project-alpha' });
+  const registered = ['c:/workspace/project-alpha', 'c:/workspace/project-gamma'];
+  const ctx = createMockCtx({ agentsList: [caller], registeredWorkspaces: registered });
+  const exec = { agent: caller };
+
+  const res = await executeSessionCreate({
+    ctx,
+    args: { title: 'Registered Cross Worker', workspace: 'c:/workspace/project-gamma', initial_message: 'Start' },
+    exec
+  });
+
+  assert.equal(res.success, true);
+  assert.equal(res.workspace, 'c:/workspace/project-gamma');
+});
+
+test('executeSessionCreate: 宿主未暴露注册表时跨工程失败关闭', async () => {
+  resetRateLimits();
+  const caller = createMockAgent('caller-alpha', { cwd: 'c:/workspace/project-alpha' });
+  const ctx = createMockCtx({ agentsList: [caller], registeredWorkspaces: null });
+  const exec = { agent: caller };
+
+  await assert.rejects(
+    async () => executeSessionCreate({
+      ctx,
+      args: { title: 'Cross Worker', workspace: 'c:/workspace/project-beta', initial_message: 'Start' },
+      exec
+    }),
+    /\[WorkspaceRegistryUnavailable\]/
+  );
+});
+
+test('executeSessionCreate: 宿主未暴露注册表时同工程创建仍成功', async () => {
+  resetRateLimits();
+  const caller = createMockAgent('caller-alpha', { cwd: 'c:/workspace/project-alpha' });
+  const ctx = createMockCtx({ agentsList: [caller], registeredWorkspaces: null });
+  const exec = { agent: caller };
+
+  const res = await executeSessionCreate({
+    ctx,
+    args: { title: 'Local Worker', workspace: 'c:/workspace/project-alpha', initial_message: 'Start' },
+    exec
+  });
+
+  assert.equal(res.success, true);
+  assert.equal(res.workspace, 'c:/workspace/project-alpha');
+});
+
+test('executeSessionCreate: 目标会话创建后若处于异常状态直接阻断任务派发 (Spec 012)', async () => {
+  resetRateLimits();
+  const caller = createMockAgent('caller-preflight-create', { cwd: 'c:/workspace/project-alpha' });
+  const unhealthyAgent = {
+    id: 'unhealthy-created-peer',
+    title: 'Unhealthy Worker',
+    status: 'idle',
+    phase: { kind: 'idle' },
+    lastError: { message: 'prompt variable "{{model}}" missing', code: 'PROMPT_ASSEMBLY_ERROR' },
+    session: { id: 'unhealthy-created-peer', events: [], header: { cwd: 'c:/workspace/project-alpha' } },
+    received: [],
+    followup(msg) { this.received.push(msg); }
+  };
+
+  const mockAgentsSvc = {
+    list: () => [caller],
+    get: () => undefined,
+    create: async () => ({ agent: unhealthyAgent })
+  };
+
+  const ctx = {
+    root: { agents: mockAgentsSvc },
+    agents: mockAgentsSvc,
+    logger: () => ({ debug() {}, info() {}, warn() {}, error() {} }),
+    get: (n) => (n === 'agents' ? mockAgentsSvc : undefined)
+  };
+
+  const res = await executeSessionCreate({
+    ctx,
+    args: { title: 'Unhealthy Peer', initial_message: 'Start task' },
+    exec: { agent: caller }
+  });
+
+  assert.equal(res.success, false, '创建出的目标会话若已带病必须阻断派发并返回 false');
+  assert.equal(res.deliveryState, 'failed');
+  assert.equal(res.executionState, 'crashed');
+  assert.equal(res.error.code, 'PROMPT_ASSEMBLY_ERROR');
+  assert.equal(res.error.category, 'ASSEMBLY');
+  assert.equal(unhealthyAgent.received.length, 0, '阻断时不应向异常目标派发任何初始消息');
+});
+

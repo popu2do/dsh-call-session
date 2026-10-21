@@ -67,6 +67,8 @@ export interface SessionCallResult {
   callerSessionId?: string;
   /** 成功挂载关联的黑板条目 ID 列表 */
   contextPostIds?: string[];
+  /** 目标异常时转存的黑板条目 ID */
+  fallbackPostId?: string | null;
   /** 执行结果描述 */
   message?: string;
   /** 失败原因描述 */

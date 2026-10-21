@@ -30,6 +30,7 @@
 
 | ID | Title | Status | Date | Primary Anchors | Document |
 | :--- | :--- | :--- | :--- | :--- | :--- |
+| **ADR-0035** | Durable Blackboard Storage Outside the Plugin Package | **Accepted** - Current | 2026-10-19 | `lib/board-store.mjs`, `index.mjs` | [0035-durable-blackboard-storage-outside-the-plugin-package.md](./0035-durable-blackboard-storage-outside-the-plugin-package.md) |
 | **ADR-0030** | Direct Tool Binding to BoardToolsAdapter and Pure Storage Engine Alignment | **Accepted** - Current | 2026-10-14 | `lib/tools-registry.mjs`, `lib/board-store.mjs` | [0030-direct-tool-binding-to-board-tools-adapter.md](./0030-direct-tool-binding-to-board-tools-adapter.md) |
 | **ADR-0027** | Deep Module Architecture: Workspace Domain Primitive Isolation, Physical Adapter Seams, and Tools Registry Facade | **Accepted** - Current | 2026-10-10 | `lib/workspace.mjs`, `lib/board-tools-adapter.mjs` | [0027-deep-module-workspace-isolation-tools-registry-and-canvas-geometry.md](./0027-deep-module-workspace-isolation-tools-registry-and-canvas-geometry.md) |
 | **ADR-0011** | Board List Token Governance, Exact ID Retrieval, and Prompt KV Cache Protection | **Accepted** - Current | 2026-09-08 | `lib/board-store.mjs` | [0011-board-list-token-governance-and-exact-retrieval.md](./0011-board-list-token-governance-and-exact-retrieval.md) |
@@ -57,10 +58,11 @@
 
 | ID | Title | Status | Date | Primary Anchors | Document |
 | :--- | :--- | :--- | :--- | :--- | :--- |
+| **ADR-0036** | Target Acceptance Causal Verification, Graceful Fallback Safeguards, and Structured Error Contracts | **Accepted** - Current | 2026-10-20 | `lib/session-call.mjs`, `lib/session-create.mjs` | [0036-target-acceptance-causal-verification-and-structured-error-contract.md](./0036-target-acceptance-causal-verification-and-structured-error-contract.md) |
 | **ADR-0028** | Deep Admission Safeguard Seam, Atomic Title Resolution, and Lease Single Source of Truth | **Accepted** - Current | 2026-10-13 | `lib/session-safeguard.mjs`, `lib/session-create.mjs` | [0028-deep-admission-safeguard-seam-and-lease-single-source-of-truth.md](./0028-deep-admission-safeguard-seam-and-lease-single-source-of-truth.md) |
 | **ADR-0025** | Peer Session Creation Host Gateway, Safeguard Lease, and Bootstrap Decoupling | **Accepted** - Current | 2026-09-23 | `lib/dsh-host-gateway.mjs`, `lib/session-safeguard.mjs` | [0025-peer-session-creation-gateway-safeguard-and-bootstrap-decoupling.md](./0025-peer-session-creation-gateway-safeguard-and-bootstrap-decoupling.md) |
 | **ADR-0021** | Concurrent Running Quota and Model Inheritance Alignment | **Accepted** - Current | 2026-09-20 | `lib/session-safeguard.mjs` | [0021-concurrent-running-quota-and-model-inheritance-alignment.md](./0021-concurrent-running-quota-and-model-inheritance-alignment.md) |
-| **ADR-0031** | Cross-Session Handshake Verification, Classified Wait Contracts, and Native 3-State Status Protocol | **Accepted** - Current | 2026-10-18 | `lib/session-directory.mjs`, `lib/session-call.mjs` | [0031-cross-session-handshake-verification-and-native-3state-status.md](./0031-cross-session-handshake-verification-and-native-3state-status.md) |
+| **ADR-0031** | Cross-Session Handshake Verification, Classified Wait Contracts, and Native 3-State Status Protocol | **Accepted** - Evolved by ADR-0036 | 2026-10-18 | `lib/session-directory.mjs`, `lib/session-call.mjs` | [0031-cross-session-handshake-verification-and-native-3state-status.md](./0031-cross-session-handshake-verification-and-native-3state-status.md) |
 | **ADR-0005** | English Metadata and Normalized Two-State Status Protocol | **Superseded by ADR-0031** | 2026-09-03 | `lib/session-directory.mjs` | [0005-english-metadata-and-two-state-status.md](./0005-english-metadata-and-two-state-status.md) |
 | **ADR-0008** | Zero-Pollution Global Profile Mounting and Reversible Lifecycle Management | **Accepted** - Current | 2026-09-04 | `cordis.patch.yml`, `index.mjs` | [0008-zero-pollution-global-profile-mounting.md](./0008-zero-pollution-global-profile-mounting.md) |
 | **ADR-0017** | Peer Session Title Event Persistence, Model Parameter Declaration, and Host Alignment Specification | **Accepted** - Title resolution superseded by ADR-0028 | 2026-09-12 | `lib/session-create.mjs` | [0017-peer-session-title-event-persistence-and-host-alignment.md](./0017-peer-session-title-event-persistence-and-host-alignment.md) |
@@ -68,10 +70,11 @@
 
 ### 看板
 
-全局拓扑视图、通道分流走线、Gutter 通道与圆角矩形卡片规范。
+全局拓扑视图、通道分流走线、Gutter 通道、输入触发两级钻取与圆角矩形卡片规范。
 
 | ID | Title | Status | Date | Primary Anchors | Document |
 | :--- | :--- | :--- | :--- | :--- | :--- |
+| **ADR-0034** | Two-Level Drill-Down Peer Session Discovery and Pure Slice Reference Contract | **Accepted** - Current | 2026-10-19 | `lib/client.js` | [0034-two-level-drill-down-peer-session-discovery-and-pure-slice-reference.md](./0034-two-level-drill-down-peer-session-discovery-and-pure-slice-reference.md) |
 | **ADR-0026** | Canvas Rounded Rectangle Cards, Toolbar Streamlining, and Dual Lineage Modes | **Accepted** - Current | 2026-10-08 | `lib/client.js`, `types/client.d.ts` | [0026-canvas-rounded-rect-cards-toolbar-streamlining-and-dual-lineage-modes.md](./0026-canvas-rounded-rect-cards-toolbar-streamlining-and-dual-lineage-modes.md) |
 | **ADR-0019** | Channel-Split Routing, Lineage On-Demand Focus, and Port Non-Interference Geometry | **Accepted** - Current | 2026-09-17 | `lib/client.js` | [0019-channel-split-routing-and-lineage-on-demand-focus.md](./0019-channel-split-routing-and-lineage-on-demand-focus.md) |
 | **ADR-0018** | Canvas Motion Token, Geometric Invariant, and Visual Restraint Specification | **Accepted** - Current | 2026-09-17 | `lib/client.js` | [0018-canvas-motion-and-visual-restraint.md](./0018-canvas-motion-and-visual-restraint.md) |
@@ -86,10 +89,11 @@
 
 | ID | Title | Status | Date | Primary Anchors | Document |
 | :--- | :--- | :--- | :--- | :--- | :--- |
+| **ADR-0033** | Public Surface Contract and Ecosystem Presence Registry | **Accepted** - Current | 2026-10-16 | `presence.json`, `docs/agents/ecosystem-presence.md` | [0033-public-surface-contract.md](./0033-public-surface-contract.md) |
 | **ADR-0023** | Bilingual Localization Architecture and Standardized English Error Protocol | **Accepted** - Current | 2026-09-21 | `lib/locales/index.mjs`, `lib/client.js` | [0023-bilingual-localization-and-english-error-standardization.md](./0023-bilingual-localization-and-english-error-standardization.md) |
 | **ADR-0022** | Verifiable Architecture Topology Artifacts and Agent Discipline Decoupling | **Accepted** - Current | 2026-09-18 | `AGENTS.md`, `docs/architecture/` | [0022-verifiable-architecture-topology-and-agent-discipline-decoupling.md](./0022-verifiable-architecture-topology-and-agent-discipline-decoupling.md) |
 | **ADR-0020** | System Performance Specifications, Resource Budgets, and Deterministic SLA Baselines | **Accepted** - Current | 2026-09-18 | `lib/board-store.mjs`, `lib/call-telemetry.mjs` | [0020-system-performance-specifications-and-resource-budgets.md](./0020-system-performance-specifications-and-resource-budgets.md) |
-| **ADR-0009** | Restrained Minimalist Technical Documentation and Anti-AI-Slop Governance | **Accepted** - Current | 2026-09-04 | `README.md`, `AGENTS.md` | [0009-restrained-minimalist-docs-and-anti-ai-slop.md](./0009-restrained-minimalist-docs-and-anti-ai-slop.md) |
+| **ADR-0009** | Restrained Minimalist Technical Documentation and Anti-AI-Slop Governance | **Accepted** - Evolved by ADR-0033 | 2026-09-04 | `README.md`, `AGENTS.md` | [0009-restrained-minimalist-docs-and-anti-ai-slop.md](./0009-restrained-minimalist-docs-and-anti-ai-slop.md) |
 
 ---
 

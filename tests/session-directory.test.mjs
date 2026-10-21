@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { SessionDirectory, executeSessionQuery, resolveNativeSessionStatus } from '../lib/session-directory.mjs';
+import { SessionDirectory, executeSessionQuery, resolveNativeSessionStatus, classifyError } from '../lib/session-directory.mjs';
 import { createMockAgent } from './helpers/mock-agent.mjs';
 import { normalizeWorkspace } from '../lib/board-store.mjs';
 
@@ -474,4 +474,62 @@ test('resolveNativeSessionStatus 边界测试: 用户主动取消 (reason.kind =
   // 人类或系统取消属于正常中途终止，绝不能判定为崩溃误报
   assert.equal(res.status, 'idle');
   assert.equal(res.error, null);
+});
+
+test('resolveNativeSessionStatus 与 classifyError: 解析提示词模板装配错误', () => {
+  // 1. classifyError 纯函数断言
+  const assemblyErr = classifyError('prompt variable "{{model}}" has no value for this assembly (section "deployment:persona-prefix")');
+  assert.equal(assemblyErr.category, 'ASSEMBLY');
+  assert.equal(assemblyErr.code, 'PROMPT_ASSEMBLY_ERROR');
+  assert.ok(assemblyErr.message.includes('prompt variable "{{model}}"'));
+
+  const dispatchErr = classifyError(new Error('Target Agent provides no native dispatch method (followup)'));
+  assert.equal(dispatchErr.category, 'DISPATCH');
+  assert.equal(dispatchErr.code, 'DISPATCH_ERROR');
+
+  const timeoutErr = classifyError({ code: 'TIMEOUT', message: 'Handshake timed out' });
+  assert.equal(timeoutErr.category, 'TIMEOUT');
+
+  const runtimeErr = classifyError(new Error('Model execution stack overflow'));
+  assert.equal(runtimeErr.category, 'RUNTIME');
+
+  // 2. session.events 穿透捕获装配崩溃
+  const agentWithAssemblyEvent = {
+    id: 's-assembly-crashed',
+    status: 'idle',
+    phase: { kind: 'idle' },
+    session: {
+      events: [
+        {
+          type: 'turn/end',
+          data: {
+            turn: 1,
+            reason: {
+              kind: 'error',
+              error: {
+                message: 'prompt variable "{{model}}" has no value for this assembly (section "deployment:persona-prefix")',
+                code: 'UNKNOWN'
+              }
+            }
+          }
+        }
+      ]
+    }
+  };
+  const resEvent = resolveNativeSessionStatus(agentWithAssemblyEvent);
+  assert.equal(resEvent.status, 'error');
+  assert.equal(resEvent.error.category, 'ASSEMBLY');
+  assert.ok(resEvent.error.message.includes('prompt variable'));
+
+  // 3. 宿主直接错误属性 directError 探测
+  const agentWithDirectError = {
+    id: 's-direct-err',
+    status: 'idle',
+    phase: { kind: 'idle' },
+    lastError: { message: 'template compile error in deployment', code: 'ASSEMBLY_FAIL' }
+  };
+  const resDirect = resolveNativeSessionStatus(agentWithDirectError);
+  assert.equal(resDirect.status, 'error');
+  assert.equal(resDirect.error.category, 'ASSEMBLY');
+  assert.equal(resDirect.error.code, 'ASSEMBLY_FAIL');
 });

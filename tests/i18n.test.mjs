@@ -313,6 +313,8 @@ test('ADR-0023: 原生工具执行摘要与双层渲染中英双语输出验证'
   // sessionCallSuccess
   const callZhDispatch = zhMessages.sessionCallSuccess('s2', 'followup', 'task_dispatch', 'running', 'delivered');
   assert.ok(callZhDispatch.includes('已派发任务等待目标回传，无需重复轮询'));
+  const callZhPending = zhMessages.sessionCallSuccess('s2', 'followup', 'task_dispatch', 'pending', 'enqueued');
+  assert.ok(callZhPending.includes('已入信箱等待调度'));
   const callZhReport = zhMessages.sessionCallSuccess('s2', 'followup', 'task_report', 'running', 'delivered');
   assert.ok(callZhReport.includes('已完成收口汇报，无需回复'));
   const callZhNotice = zhMessages.sessionCallSuccess('s2', 'followup', 'notice', 'running', 'delivered');
@@ -321,6 +323,9 @@ test('ADR-0023: 原生工具执行摘要与双层渲染中英双语输出验证'
   const callEnDispatch = enMessages.sessionCallSuccess('s2', 'followup', 'task_dispatch', 'running', 'delivered');
   assert.ok(callEnDispatch.includes('task dispatched, await target task_report, no polling needed'));
   assert.ok(!/[\u4e00-\u9fa5]/.test(callEnDispatch));
+  const callEnPending = enMessages.sessionCallSuccess('s2', 'followup', 'task_dispatch', 'pending', 'enqueued');
+  assert.ok(callEnPending.includes('task enqueued awaiting execution'));
+  assert.ok(!/[\u4e00-\u9fa5]/.test(callEnPending));
   const callEnReport = enMessages.sessionCallSuccess('s2', 'followup', 'task_report', 'running', 'delivered');
   assert.ok(callEnReport.includes('report delivered, no reply needed'));
   assert.ok(!/[\u4e00-\u9fa5]/.test(callEnReport));

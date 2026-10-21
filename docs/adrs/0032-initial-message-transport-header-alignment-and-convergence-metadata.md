@@ -18,7 +18,7 @@
 ### 1.2 Architectural Forces & Constraints
 - **Deep Modules & Minimal Seams**: 消息装配与传输层报头构造应当内聚在单一基础设施接缝背后，杜绝引导层维护平行的拼接分支。
 - **Zero-Envelope & Zero-Preach**: 传输层客观报头只承载结构化元数据，正文原样保留，严禁在正文中注入主观催促话术。
-- **Deterministic Convergence**: 明确分派、汇报与通知的三类交互收敛规则，彻底消除盲目轮询。
+- **Deterministic Convergence**: 明确分派、汇报与通知的三类交互收敛规则，消除盲目轮询。
 
 ---
 
@@ -41,7 +41,7 @@
 - **Cons**: 破坏 Zero-Preach 原则，大段主观指令污染正文与模型注意力，容易诱发自动确认风暴。
 
 ### Option 3: 报头对齐
-- **Pros**: 严格复用 `buildTransportPayload` 基础设施原语，首行注入发件人编号与 CallType 为 task_dispatch；语言包出参追加客观收敛说明，成本极低且彻底遏制盲目轮询。
+- **Pros**: 严格复用 `buildTransportPayload` 基础设施原语，首行注入发件人编号与 CallType 为 task_dispatch；语言包出参追加客观收敛说明，成本极低且有效遏制盲目轮询。
 - **Cons**: 需要更新涉及初始消息正文比对的历史单测断言。
 
 ---

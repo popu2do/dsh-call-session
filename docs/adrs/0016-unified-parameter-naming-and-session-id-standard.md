@@ -38,7 +38,7 @@
 
 ### 1.2 Architectural Forces & Constraints
 
-- **Single Source of Truth (SSOT)**：全插件所有原生工具的参数与返回值必须有且仅有一套绝对权威的命名规范。
+- **Single Source of Truth (SSOT)**：全插件所有原生工具的参数与返回值必须有且仅有一套统一的命名规范。
 - **Zero-Alias Anti-Pollution**：废除内部多重别名兼容逻辑，不在生产代码中保留别名兼容补丁。
 - **Dual-Domain Protocol Boundary**：严格分立 Agent 提示词交互层（入参）与 Machine/Web 消费层（出参）的命名风格，不可任意混淆。
 - **End-to-End Parameter Symmetry**：工具链之间传递核心实体时，语义与词根必须严格对称，确保调用参数一致。
@@ -48,7 +48,7 @@
 ## 2. Decision Drivers
 
 - **Driver 1 (Eliminate Interface Ambiguity)**：确立明确的命名法则，消除 Agent 在选择工具参数时的猜测与幻觉。
-- **Driver 2 (Preserve Web GUI & Machine Runtime)**：维护 ADR-0005 确立的 Machine Layer camelCase JSON Schema 铁律，保护前端协作看板（Canvas）与看板数据管道的绝对稳定。
+- **Driver 2 (Preserve Web GUI & Machine Runtime)**：维护 ADR-0005 确立的 Machine Layer camelCase JSON Schema 铁律，保护前端协作看板（Canvas）与看板数据管道的稳定性。
 - **Driver 3 (Purge Alias Pollution)**：在运行时代码与 `.d.ts` 中移除所有冗余兼容别名（如 `active_only`, `reasoningEffort`, `agentPreset` 等），保持接口简洁。
 - **Driver 4 (Rectify Historical ADR Inconsistencies)**：出具正式修正案，纠正 ADR-0001, ADR-0005, ADR-0006, ADR-0010, ADR-0011, ADR-0015 中与现行统一规范相悖的历史笔误与模糊描述。
 
@@ -136,7 +136,7 @@
 > - `sessionId`: `string`（当前会话全局唯一 ID，严禁 `session_id`）
 > - `title`: `string`（人类可读标题）
 > - `status`: `'running' | 'idle'`（两态规范化状态）
-> - `workspace`: `string`（工作区绝对规范化路径）
+> - `workspace`: `string`（工作区规范化路径）
 > - `cwd`: `string`（工作目录路径，同 workspace）
 > - `isCurrent`: `boolean`（是否为发起查询的当前会话，严禁 `is_current`）
 
@@ -176,7 +176,7 @@
 | **出参** | `success` | `boolean` | 是 | - | 会话创建是否成功 |
 | **出参** | `sessionId` | `string` | 否 | - | 新建平级会话全局唯一 ID（严禁 `session_id`） |
 | **出参** | `title` | `string` | 否 | - | 会话规范化标题 |
-| **出参** | `workspace` | `string` | 否 | - | 规范化工作区绝对路径 |
+| **出参** | `workspace` | `string` | 否 | - | 规范化工作区路径 |
 | **出参** | `status` | `string` | 否 | - | 会话初始状态（`'running' | 'idle'`） |
 | **出参** | `generation` | `number` | 否 | - | 会话代际深度 |
 | **出参** | `bootstrapPostId` | `string | null` (`oneOf`) | 否 | - | 就绪公告关联黑板条目 ID（Schema 遵循 Invariant 5） |

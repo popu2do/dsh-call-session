@@ -71,6 +71,8 @@ Accepted as the definitive localization architecture for `dsh-call-session`.
 ### 4.1 Canonical Error Codes
 
 - `[InvalidParameter]`: Missing, invalid, or out-of-bounds input arguments.
+- `[WorkspaceNotRegistered]`: The requested workspace is not registered on the host, so a session may not be created there (ADR-0003 §4.1.5).
+- `[WorkspaceRegistryUnavailable]`: The host exposes no workspace registry, so cross-workspace creation cannot be validated and fails closed.
 - `[TargetNotFound]`: Target session ID or prefix cannot be matched or resolved.
 - `[SelfCallForbidden]`: Attempting to execute a unicast call targeting the caller session.
 - `[AmbiguousPrefix]`: Session prefix matches multiple active sessions.

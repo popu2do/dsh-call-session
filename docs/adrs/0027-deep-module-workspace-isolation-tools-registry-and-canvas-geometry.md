@@ -37,7 +37,7 @@
 #### 基语
 
 - 提炼 `normalizeWorkspace`、`isSameWorkspace` 纯领域函数至 `lib/workspace.mjs`。
-- `call-telemetry.mjs`、`session-call.mjs`、`session-create.mjs` 等 8 个消费模块直接导入 `workspace.mjs`，彻底阻断对黑板存储的寄生引用。
+- `call-telemetry.mjs`、`session-call.mjs`、`session-create.mjs` 等 8 个消费模块直接导入 `workspace.mjs`，阻断对黑板存储的寄生引用。
 - `board-store.mjs` 保留别名重导出，维持 100% 向后兼容。
 
 #### 适配
@@ -49,7 +49,7 @@
 #### 门面
 
 - 提炼深层工具注册模块 `lib/tools-registry.mjs`，对外暴露单一极简接口 `registerNativeTools(ctx, options)` 与 `buildToolDefinitions`。
-- 入口 `index.mjs` 从 729 行大幅收敛至 261 行，彻底消除 440+ 行重复样板，入口纯化为生命周期胶水。
+- 入口 `index.mjs` 从 729 行大幅收敛至 261 行，消除 440+ 行重复样板，入口纯化为生命周期胶水。
 
 #### 边界
 
@@ -60,7 +60,7 @@
 
 ## 收益
 
-- **架构拓扑纯度大幅提升**：内存环形队列彻底阻断对持久化存储的寄生依赖；
+- **架构拓扑纯度大幅提升**：内存环形队列阻断对持久化存储的寄生依赖；
 - **文件与接口体积剧烈精简**：`index.mjs` 缩减 64%，`board-store.mjs` 缩减 33%；
 - **消除代码异味与重复**：拒绝无构建打通的虚假解耦副本，保持单一真源；
 - **零破坏平滑过渡**：全仓自动化测试 100% 绿灯通过，Lint 与 TypeScript 类型检查零报错。

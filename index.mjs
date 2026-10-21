@@ -9,8 +9,6 @@
  * 2. Lifecycle Disposal:
  *    - Reversible cleanup and state persistence on dispose
  */
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import {
   BoardStore,
   AtomicBoardStore,
@@ -31,7 +29,7 @@ import {
   resolveAgentsService,
   executeSessionQuery
 } from './lib/session-query.mjs';
-import { SessionDirectory } from './lib/session-directory.mjs';
+import { SessionDirectory, resolveWorkspaceRegistry } from './lib/session-directory.mjs';
 import {
   executeSessionCall
 } from './lib/session-call.mjs';
@@ -68,8 +66,6 @@ import {
   registerNativeTools,
   buildToolDefinitions
 } from './lib/tools-registry.mjs';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export const name = 'dsh-call-session';
 export const inject = ['agents', 'tools', 'systemPrompt'];
@@ -175,7 +171,7 @@ export function apply(ctx, config = {}) {
   logger.debug?.('[dsh-call-session] Activating pure DSH Native Collaboration Plugin (zero HTTP, zero envelopes)...');
 
   const boardStore = new AtomicBoardStore({
-    storagePath: config.storagePath || path.resolve(__dirname, 'board.json'),
+    storagePath: config.storagePath,
     debounceMs: config.debounceMs ?? 300,
     maxPosts: config.maxCapacity ?? 200,
     logger,
@@ -206,9 +202,7 @@ export function apply(ctx, config = {}) {
   }
 
   // Session archive cascade cleanup listener
-  const workspaceRegistry = typeof ctx?.get === 'function'
-    ? ctx.get('workspaceRegistry')
-    : (ctx?.workspaceRegistry || ctx?.root?.get?.('workspaceRegistry'));
+  const workspaceRegistry = resolveWorkspaceRegistry(ctx);
   if (workspaceRegistry && typeof workspaceRegistry.on === 'function') {
     workspaceRegistry.on('archiveSession', (sessionId) => {
       callTelemetry.cleanupSession(sessionId);

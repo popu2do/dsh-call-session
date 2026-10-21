@@ -17,7 +17,7 @@
 1. **预提交门禁目录白名单过于死板**：
    `.githooks/pre-commit` 此前配置了仅放行 `docs/(adrs/|agents/|README.md)` 的硬性白名单。由 Archify 生成的可验证架构规范文件与离线交互式 HTML 交付物缺少合法存放路径，导致提交被门禁无条件拦截。
 2. **智能体文风治理规范与加载层级错位**：
-   此前在 `ADR-0009` 中记录了文档防 AI Slop、去表情符号、去伪学术黑话与四字子标题规范。然而依据 Matt Pocock 的信息阶梯理论（Information Hierarchy），ADRs 属于按需惰性读取（Disclosed Reference），智能体在常规会话中根本不会主动加载 `ADR-0009`，导致文风规范在运行态对 LLM 彻底失效。
+   此前在 `ADR-0009` 中记录了文档防 AI Slop、去表情符号、去伪学术黑话与四字子标题规范。然而依据 Matt Pocock 的信息阶梯理论（Information Hierarchy），ADRs 属于按需惰性读取（Disclosed Reference），智能体在常规会话中根本不会主动加载 `ADR-0009`，导致文风规范在运行态对 LLM 失效。
 
 ### 1.2 Architectural Forces & Constraints
 
@@ -50,7 +50,7 @@
 - **Pros**:
   - 架构资产具备完整的 Git 版本追踪与 Showcase 门禁保障。
   - 临时副作用通过 `.gitignore` 干净隔离。
-  - 智能体文风约束即时在根目录 `AGENTS.md` 全局生效，彻底解决 ADR 无法约束模型输出的问题。
+  - 智能体文风约束即时在根目录 `AGENTS.md` 全局生效，解决 ADR 无法约束模型输出的问题。
 
 ---
 
