@@ -13,9 +13,9 @@ dsh-call-session 系统拓扑规范与离线交互式架构图。
 
 ## 验证
 
-执行以下命令校验架构规范并重新生成交付物：
+执行以下命令校验架构规范并重新生成交付物。`<skills-root>` 指用户级技能根目录，即 `~/.agents/skills`：
 
 ```bash
-node /home/dev/.agents/skills/archify/bin/archify.mjs validate architecture docs/architecture/dsh-call-session.architecture.json --quality showcase --json
-node /home/dev/.agents/skills/archify/bin/archify.mjs deliver architecture docs/architecture/dsh-call-session.architecture.json docs/architecture/dsh-call-session-architecture.html --quality showcase --json
+node "<skills-root>/archify/bin/archify.mjs" validate architecture docs/architecture/dsh-call-session.architecture.json --quality showcase --json
+node "<skills-root>/archify/bin/archify.mjs" deliver architecture docs/architecture/dsh-call-session.architecture.json docs/architecture/dsh-call-session-architecture.html --quality showcase --json
 ```
