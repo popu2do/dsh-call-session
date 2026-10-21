@@ -7,17 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.9] - 2026-10-20
+
 ### Summary
-Moves blackboard storage out of the plugin package so upgrades stop destroying collaboration records (ADR-0035), and closes a workspace admission gap in `session_create` so a session can no longer be created at an arbitrary path (ADR-0003 §4.1.5).
+Causal physical execution verification, structured error contract, ecosystem presence manifest, peer session mention trigger, and out-of-package blackboard storage release (ADR-0033 to ADR-0036). Replaces the 40ms heuristic with causal step and event proofs, standardizes structured machine error codes (ASSEMBLY, DISPATCH, PREFLIGHT, RUNTIME, TIMEOUT), intercepts calls to crashed targets before enqueueing, provides deadlock-free task report fallback to the public blackboard, introduces a two-level drill-down mention trigger, moves durable blackboard state outside the plugin package, and tightens cross-workspace admission.
 
 ### Added
-- **Workspace admission for `session_create` (ADR-0003 §4.1.5, `lib/session-create.mjs`)**: an explicit `workspace` outside the caller's own workspace must be registered on the host, otherwise the call is rejected with `[WorkspaceNotRegistered]` before any session, title event, or quota is consumed. A host that exposes no workspace registry fails closed with `[WorkspaceRegistryUnavailable]` instead of falling back to unchecked creation. Same-workspace creation never consults the registry, so it keeps working everywhere.
+- **Causal Physical Execution Verification (ADR-0036, `lib/session-call.mjs`, `lib/session-create.mjs`)**:
+  - Permanently abolished the 40ms heuristic window. Physical execution confirmation requires verifying target phase step advancement (`step >= 1` and incrementing) or a new `step/start` causal event matching the dispatch.
+  - Full handshake window observation: preserves the 300ms monitoring window to reliably catch asynchronous prompt assembly crashes before returning.
+  - Race and concurrent task protection: prevents active tasks from triggering false-positive execution confirmations when queueing secondary calls.
+- **Structured Error Taxonomy & Pre-flight Interception (ADR-0036, `lib/session-directory.mjs`, `lib/session-call.mjs`)**:
+  - Standardized machine error taxonomy across `ASSEMBLY`, `DISPATCH`, `PREFLIGHT`, `RUNTIME`, and `TIMEOUT`.
+  - Losslessly preserves raw error stacks and messages in `error.details`.
+  - Pre-flight health probing: rejects calls targeting sessions in `status === 'error'` before enqueueing with `PREFLIGHT_TARGET_IN_ERROR`.
+  - Report fallback: automatically routes `task_report` calls to `report:fallback` topic on the public blackboard when the target is in error status, returning `fallbackPostId` and preventing worker deadlock.
+  - Zombie session tombstone exemption in workspace inspection: permits re-creating peer sessions that crashed on step 0 without duplicate title collisions.
+- **Two-Level Peer Session Mention Trigger (ADR-0034, `lib/client.js`)**:
+  - Adds two-level drill-down peer session mention selector supporting Level-1 workspace filtering and Level-2 peer session drill list.
+  - Encodes selected peer sessions as pure slice references (`@<title>#<shortId>`).
+- **Public Surface Contract & Ecosystem Presence (ADR-0033, `presence.json`)**:
+  - Establishes machine-verifiable public surface manifest with asset budget and keyword integrity tests.
+- **Workspace admission for `session_create` (ADR-0003 §4.1.5, `lib/session-create.mjs`)**:
+  - An explicit `workspace` outside the caller's own workspace must be registered on the host, otherwise the call is rejected with `[WorkspaceNotRegistered]` before any session, title event, or quota is consumed. A host that exposes no workspace registry fails closed with `[WorkspaceRegistryUnavailable]`. Same-workspace creation never consults the registry.
 
 ### Changed
-- **Blackboard storage location (ADR-0035, `lib/board-store.mjs`)**: the board file now lives at `$DSH_HOME/dsh-call-session/board.json`, defaulting to `~/.dsh/dsh-call-session/board.json`, instead of inside the installed plugin package. The first start after upgrading copies a board left in the old location, and never deletes the legacy file, so rolling back still works.
+- **Blackboard storage location (ADR-0035, `lib/board-store.mjs`)**:
+  - The board file now lives at `$DSH_HOME/dsh-call-session/board.json`, defaulting to `~/.dsh/dsh-call-session/board.json`, instead of inside the installed plugin package. The first start after upgrading copies a board left in the old location without deleting the legacy file.
 
 ### Migration
-- **npm installs must move `board.json` by hand before upgrading.** Installing a new version replaces the package directory outright, so a board stored there is gone before the incoming version runs and no in-process step can recover it. Copy the file out of the installed package directory first. Link installs and source checkouts are migrated automatically. Records lost this way are bounded by the board's own TTL and capacity limit.
+- **npm installs must move `board.json` by hand before upgrading.** Installing a new version replaces the package directory outright. Copy the file out of the installed package directory first. Link installs and source checkouts are migrated automatically.
 
 ## [0.1.8] - 2026-10-18
 
