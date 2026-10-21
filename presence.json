@@ -1,0 +1,95 @@
+{
+  "positioning": {
+    "en": "Run several DeepSeek Harness sessions side by side, hand work from one to another, and watch the whole collaboration on one read-only canvas.",
+    "zh": "并排运行多个 DeepSeek Harness 会话，让它们互相交接任务，并在同一张只读看板上看清整场协作。"
+  },
+  "packageDescription": "Multi-session collaboration for DeepSeek Harness: peer session calls, a shared blackboard, and a read-only topology canvas.",
+  "keywords": [
+    "deepseek-harness",
+    "dsh-plugin",
+    "multi-session",
+    "multi-agent",
+    "agent-collaboration",
+    "task-handoff",
+    "shared-blackboard",
+    "session-call",
+    "peer-session",
+    "cordis-plugin"
+  ],
+  "repository": {
+    "description": "Multi-session collaboration for DeepSeek Harness: peer session calls, a shared blackboard, and a read-only topology canvas.",
+    "topics": [
+      "deepseek-harness",
+      "dsh-plugin",
+      "multi-session",
+      "multi-agent",
+      "agent-collaboration",
+      "task-handoff",
+      "shared-blackboard",
+      "session-call",
+      "peer-session",
+      "cordis-plugin"
+    ],
+    "socialPreview": {
+      "status": "pending",
+      "verifiedOn": "2026-10-16"
+    }
+  },
+  "firstScreen": {
+    "en": {
+      "demoRef": "./assets/canvas-demo.png",
+      "demoMaxLine": 30,
+      "anchor": "## Canvas"
+    },
+    "zh": {
+      "demoRef": "./assets/canvas-demo-zh.png",
+      "demoMaxLine": 30,
+      "anchor": "## 看板"
+    }
+  },
+  "assets": {
+    "assets/hero.png": {
+      "format": "png",
+      "minBytes": 51200,
+      "maxBytes": 393216
+    },
+    "assets/canvas-demo.png": {
+      "format": "png",
+      "minBytes": 51200,
+      "maxBytes": 327680
+    },
+    "assets/canvas-demo-zh.png": {
+      "format": "png",
+      "minBytes": 51200,
+      "maxBytes": 327680
+    },
+    "assets/mention-demo.png": {
+      "format": "png",
+      "minBytes": 51200,
+      "maxBytes": 327680
+    },
+    "assets/mention-demo-zh.png": {
+      "format": "png",
+      "minBytes": 51200,
+      "maxBytes": 327680
+    }
+  },
+  "catalogs": [
+    {
+      "id": "awesome-dsh-plugin",
+      "requirement": "One YAML entry per plugin under data/plugins; url must match the repository and description.en is required",
+      "submittedCopy": "Run several DeepSeek Harness sessions side by side, hand work from one to another, and watch the whole collaboration on one read-only canvas.",
+      "submissionRef": "https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/pull/7593",
+      "status": "listed",
+      "lastVerified": "2026-10-17"
+    },
+    {
+      "id": "dsh-plugin-radar",
+      "requirement": "Community registration through the repository PLUGINS.md form",
+      "submittedCopy": "并排运行多个 DeepSeek Harness 会话，让它们互相交接任务，并在同一张只读看板上看清整场协作。",
+      "submissionRef": "https://github.com/AdamPlatin123/dsh-plugin-radar/pull/959",
+      "status": "submitted",
+      "lastVerified": "2026-10-16"
+    }
+  ]
+}
