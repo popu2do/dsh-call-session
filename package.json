@@ -1,6 +1,6 @@
 {
   "name": "dsh-call-session",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "description": "Multi-session collaboration for DeepSeek Harness: peer session calls, a shared blackboard, and a read-only topology canvas.",
   "type": "module",
   "main": "index.mjs",
