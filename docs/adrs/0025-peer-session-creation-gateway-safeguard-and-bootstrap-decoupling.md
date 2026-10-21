@@ -60,25 +60,25 @@ session_create 作为多智能体进程内协作的核心原语，负责根据�
 
 ### 4.1 三大架构支柱
 
-#### 支柱 1：DshHostGateway 宿主网关层 (lib/dsh-host-gateway.mjs)
+#### 宿主网关
 - 封装 6 项 Cordis 服务探测（agents、agentDefaultModel、sessionController、agentPresets、sessionTitle、workspaceRegistry）。
 - 封装 resolveEffectiveModel（支持调用方运行时请求头、静态选项及宿主默认配置三级级联回退）与 resolvePresetSetup（组合预设与 setup 链）。
 - 封装 createRootAgent：安全处理深冻结对象（Object.isFrozen）、元数据清洗（剔除 parentSession/origin）与归属关联。
 - 封装 appendTitleEvent（优先复用 sessionTitle.rename，回退安全追加 session/title 事件）与 attachWorkspace。
 - 交付单元测试：tests/dsh-host-gateway.test.mjs。
 
-#### 支柱 2：SessionSafeguard 会话准入防护守卫 (lib/session-safeguard.mjs)
+#### 准入守卫
 - 集中收敛滑动窗口限频（5 次/min）、工作区并发运行配额（5 个）、在途并发防超发与代际深度熔断（<= 2 代）。
 - 引入原子租约 AdmissionLease：通过 safeguard.admit() 乐观锁定配额与在途标题；创建成功后调用 lease.commit()，异常时调用 lease.release() 自动无损回滚。
 - 交付单元测试：tests/session-safeguard.test.mjs。
 
-#### 支柱 3：PeerBootstrapper 平级会话启动协同器 (lib/peer-bootstrap.mjs)
+#### 协同启动
 - 封装初始消息装配：formatInitialMessage（换行与连续空白归一化折叠、上下文引用 > Context Ref: #post-xxx 注入、120 字符摘要生成及标准 UserMessage 装配）。
 - 封装消息派发：dispatchInitialMessage（安全调用 dispatchNativeMessage 并确定运行态）。
 - 封装引导公告：publishBootstrapNotice（向公共黑板安全发布 session:bootstrap，设定 1 小时 TTL 与溯源元数据）。
 - 交付单元测试：tests/peer-bootstrap.test.mjs。
 
-#### 支柱 4：PeerSessionFactory 组合化重构 (lib/session-create.mjs)
+#### 会话工厂
 - 工厂类由 923 行过程式代码重构为高内聚协调器（~340 行），通过构造函数组合网关、守卫与协同器。
 - 对外完整保留全部既有静态方法与导出函数，确保 100% 平滑过渡与向后兼容。
 

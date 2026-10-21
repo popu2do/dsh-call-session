@@ -105,9 +105,9 @@ export function apply(ctx, config = {}) {
   const logger = ctx.logger ? ctx.logger('dsh-call-session') : noopLogger;
 
   // 1. 初始化带 300ms 防抖的原子黑板存储
+  // 存储位置由 ADR-0035 修订：默认落在 harness home 下，不再指向插件包目录
   const boardStore = new AtomicBoardStore({
-    storageDir: __dirname,
-    fileName: 'board.json',
+    storagePath: defaultStoragePath(),
     debounceMs: config.debounceMs || 300,
     maxCapacity: config.maxCapacity || 200,
     logger

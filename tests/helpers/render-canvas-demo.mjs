@@ -7,40 +7,30 @@
  * Conforms to ADR-0023 (Bilingual Localization) & ADR-0026 (Rounded Card Canvas).
  */
 
-import fs from 'node:fs';
 import path from 'node:path';
-import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+
+import {
+  ensureCache,
+  FIGURE_SIZE,
+  FONT_DIR,
+  FONT_SOURCES,
+  fontFaceCss,
+  renderFigures,
+  SCRATCH_DIR
+} from './screenshot.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, '..', '..');
 
-const fontDir = path.join(rootDir, '.scratch', 'fonts');
-fs.mkdirSync(fontDir, { recursive: true });
+// Only the canvas figure renders a React component; the two UMD bundles are
+// its alone.
+const SCRIPTS = {
+  'react.production.min.js': 'https://cdn.jsdelivr.net/npm/react@18.3.1/umd/react.production.min.js',
+  'react-dom.production.min.js': 'https://cdn.jsdelivr.net/npm/react-dom@18.3.1/umd/react-dom.production.min.js'
+};
 
-const font400Path = path.join(fontDir, 'noto-sans-sc-400.woff2');
-const font500Path = path.join(fontDir, 'noto-sans-sc-500.woff2');
-const reactPath = path.join(rootDir, '.scratch', 'react.production.min.js');
-const reactDomPath = path.join(rootDir, '.scratch', 'react-dom.production.min.js');
-
-async function ensureAssets() {
-  if (!fs.existsSync(font400Path)) {
-    const res = await fetch('https://cdn.jsdelivr.net/npm/@fontsource/noto-sans-sc@5.0.19/files/noto-sans-sc-chinese-simplified-400-normal.woff2');
-    fs.writeFileSync(font400Path, Buffer.from(await res.arrayBuffer()));
-  }
-  if (!fs.existsSync(font500Path)) {
-    const res = await fetch('https://cdn.jsdelivr.net/npm/@fontsource/noto-sans-sc@5.0.19/files/noto-sans-sc-chinese-simplified-500-normal.woff2');
-    fs.writeFileSync(font500Path, Buffer.from(await res.arrayBuffer()));
-  }
-  if (!fs.existsSync(reactPath)) {
-    const res = await fetch('https://cdn.jsdelivr.net/npm/react@18.3.1/umd/react.production.min.js');
-    fs.writeFileSync(reactPath, Buffer.from(await res.arrayBuffer()));
-  }
-  if (!fs.existsSync(reactDomPath)) {
-    const res = await fetch('https://cdn.jsdelivr.net/npm/react-dom@18.3.1/umd/react-dom.production.min.js');
-    fs.writeFileSync(reactDomPath, Buffer.from(await res.arrayBuffer()));
-  }
-}
+const scriptPath = (name) => path.join(SCRATCH_DIR, name);
 
 function buildHtml(locale) {
   const isZh = locale === 'zh';
@@ -99,30 +89,20 @@ function buildHtml(locale) {
 <html lang="${isZh ? 'zh-CN' : 'en'}">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=1440, height=840, initial-scale=1">
+<meta name="viewport" content="width=${FIGURE_SIZE.width}, height=${FIGURE_SIZE.height}, initial-scale=1">
 <title>dsh-call-session Canvas Demo (${locale})</title>
 <style>
-@font-face {
-  font-family: 'Noto Sans SC';
-  font-weight: 400;
-  src: url('${font400Path}') format('woff2');
-}
-@font-face {
-  font-family: 'Noto Sans SC';
-  font-weight: 500;
-  src: url('${font500Path}') format('woff2');
-}
-* { box-sizing: border-box; margin: 0; padding: 0; }
+${fontFaceCss()}* { box-sizing: border-box; margin: 0; padding: 0; }
 html, body {
-  width: 1440px;
-  height: 840px;
+  width: ${FIGURE_SIZE.width}px;
+  height: ${FIGURE_SIZE.height}px;
   overflow: hidden;
   background: #ffffff;
   font-family: 'Noto Sans SC', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 }
 #root {
-  width: 1440px;
-  height: 840px;
+  width: ${FIGURE_SIZE.width}px;
+  height: ${FIGURE_SIZE.height}px;
   position: relative;
   display: flex;
   flex-direction: column;
@@ -134,8 +114,8 @@ button {
   font-family: 'Noto Sans SC', sans-serif !important;
 }
 </style>
-<script src="${reactPath}"></script>
-<script src="${reactDomPath}"></script>
+<script src="${scriptPath('react.production.min.js')}"></script>
+<script src="${scriptPath('react-dom.production.min.js')}"></script>
 </head>
 <body>
 <div id="root"></div>
@@ -179,36 +159,15 @@ root.render(React.createElement(CanvasView, {
 }
 
 export async function renderAllDemos() {
-  await ensureAssets();
+  await ensureCache(FONT_DIR, FONT_SOURCES);
+  await ensureCache(SCRATCH_DIR, SCRIPTS);
 
-  const scratchDir = path.join(rootDir, '.scratch');
-  fs.mkdirSync(scratchDir, { recursive: true });
-
-  const tasks = [
-    { locale: 'en', out: path.join(rootDir, 'assets', 'canvas-demo.png') },
-    { locale: 'zh', out: path.join(rootDir, 'assets', 'canvas-demo-zh.png') }
-  ];
-
-  for (const task of tasks) {
-    const htmlPath = path.join(scratchDir, `render-${task.locale}.html`);
-    fs.writeFileSync(htmlPath, buildHtml(task.locale), 'utf8');
-
-    execFileSync('chromium', [
-      '--headless',
-      '--no-sandbox',
-      '--disable-gpu',
-      '--window-size=1440,840',
-      '--virtual-time-budget=2000',
-      `--screenshot=${task.out}`,
-      `file://${htmlPath}`
-    ], { stdio: 'pipe' });
-
-    if (!fs.existsSync(task.out)) {
-      throw new Error(`Failed to create screenshot at ${task.out}`);
-    }
-  }
-
-  return tasks.map(t => t.out);
+  return renderFigures(['en', 'zh'].map((locale) => ({
+    name: 'render-' + locale,
+    html: buildHtml(locale),
+    out: path.join(rootDir, 'assets', locale === 'en' ? 'canvas-demo.png' : 'canvas-demo-zh.png'),
+    size: FIGURE_SIZE
+  })));
 }
 
 if (process.argv[1] && process.argv[1].endsWith('render-canvas-demo.mjs')) {

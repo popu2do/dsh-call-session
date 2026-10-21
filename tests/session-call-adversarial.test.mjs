@@ -444,7 +444,7 @@ test('session_call 边界测试: 极值与异常 wait_ms (0, 负数, 溢出, NaN
 
 test('session_call 逆境测试: 历史陈旧错误与当前轮次严格隔离，不产生误拦截 (ADR-0031)', async () => {
   const caller = createMockAgent('caller-adv-history');
-  // 目标在历史多轮发生过 3 次崩溃，但当前处于就绪状态
+  // 目标在历史曾发生过崩溃，但在第 3 轮成功完成实现自愈冲刷，当前处于就绪状态
   const targetHistory = {
     id: 'target-history-agent-9999',
     title: 'Historical Error Worker',
@@ -455,7 +455,7 @@ test('session_call 逆境测试: 历史陈旧错误与当前轮次严格隔离�
       events: [
         { type: 'turn/end', data: { turn: 1, reason: { kind: 'error', error: { message: 'Old err 1' } } } },
         { type: 'turn/end', data: { turn: 2, reason: { kind: 'error', error: { message: 'Old err 2' } } } },
-        { type: 'turn/end', data: { turn: 3, reason: { kind: 'error', error: { message: 'Old err 3' } } } }
+        { type: 'turn/end', data: { turn: 3, reason: { kind: 'completed' } } }
       ]
     },
     received: [],

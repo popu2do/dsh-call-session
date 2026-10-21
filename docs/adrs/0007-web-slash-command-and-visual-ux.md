@@ -63,7 +63,7 @@
 ```javascript
 ctx.commands.register({
   name: 'dsh-call-session',
-  description: '向指定活跃会话发起 DSH 原生跨会话调度呼叫',
+  description: '向指定目标会话发起 DSH 原生跨会话调度呼叫',
   input: {
     hint: '<target_session_id> <message>'
   },

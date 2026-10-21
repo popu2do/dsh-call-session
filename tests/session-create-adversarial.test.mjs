@@ -633,7 +633,8 @@ test('executeSessionCreate 逆境测试: 首帧秒崩触发准入租约原子回
   assert.equal(res.executionState, 'crashed');
 
   // 验证限频配额在 release 后已原子回滚：再次合法创建依然有配额
-  assert.equal(checkRateLimit('caller-create-rollback'), Date.now());
+  const resumedAt = checkRateLimit('caller-create-rollback');
+  assert.equal(typeof resumedAt, 'number', '回滚后必须能再次取得限频配额');
   resetRateLimits();
 });
 

@@ -780,3 +780,53 @@ test('executeSessionCall 出参元信息: 三种呼叫类别均携带客观收�
   assert.ok(resNoticeEn.message.includes('one-way notice, no reply needed'));
   assert.ok(!/[\u4e00-\u9fa5]/.test(resNoticeEn.message));
 });
+
+test('executeSessionCall: 目标处于错误态时阻断 dispatch 并转存 report', async () => {
+  const caller = createMockAgent('caller-preflight');
+  const targetCrashed = {
+    id: 'target-crashed-preflight',
+    title: 'Crashed Agent',
+    status: 'idle',
+    phase: { kind: 'idle' },
+    lastError: { message: 'prompt variable "{{model}}" missing', code: 'PROMPT_ASSEMBLY_ERROR' },
+    session: { id: 'target-crashed-preflight', events: [] },
+    received: [],
+    followup(msg) { this.received.push(msg); }
+  };
+
+  const postedPosts = [];
+  const mockBoardStore = {
+    post(entry) {
+      postedPosts.push(entry);
+      return entry;
+    }
+  };
+
+  const ctx = createMockCtx({ agentsList: [caller, targetCrashed] });
+
+  // 1. task_dispatch 前置阻断
+  const resDispatch = await executeSessionCall({
+    ctx,
+    args: { target_session_id: 'target-crashed-preflight', message: 'Do work', call_type: 'task_dispatch' },
+    exec: { agent: caller }
+  });
+  assert.equal(resDispatch.success, false, '目标处于 error 时 task_dispatch 必须前置阻断');
+  assert.equal(resDispatch.deliveryState, 'failed');
+  assert.equal(resDispatch.executionState, 'crashed');
+  assert.equal(resDispatch.error.code, 'PREFLIGHT_TARGET_IN_ERROR');
+  assert.equal(targetCrashed.received.length, 0, '前置阻断时不应向异常信箱塞入消息');
+  assert.ok(resDispatch.message.includes('错误异常状态') || resDispatch.message.includes('error state'));
+
+  // 2. task_report 转存黑板
+  const resReport = await executeSessionCall({
+    ctx,
+    args: { target_session_id: 'target-crashed-preflight', message: 'Final deliverable content', call_type: 'task_report' },
+    exec: { agent: caller },
+    options: { boardStore: mockBoardStore }
+  });
+  assert.equal(resReport.success, true, 'task_report 目标异常时转存黑板并返回成功');
+  assert.equal(postedPosts.length, 1, '必须向公共黑板写入 1 条转存条目');
+  assert.equal(postedPosts[0].topic, 'report:fallback');
+  assert.ok(postedPosts[0].content.includes('Final deliverable content'));
+  assert.ok(resReport.fallbackPostId, '返回值必须携带转存 post.id');
+});

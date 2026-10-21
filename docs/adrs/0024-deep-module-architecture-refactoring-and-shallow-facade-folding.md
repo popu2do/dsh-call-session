@@ -35,7 +35,7 @@
 
 ## 2. Decision Drivers
 
-- **Driver 1 (Eliminate Fragile DOM-Tied Testing)**：将 Canvas 纯数学几何路由与视口限位算法提炼为纯函数，建立原生测试套件，彻底解除单元测试对 DOM 运行时的束缚。
+- **Driver 1 (Eliminate Fragile DOM-Tied Testing)**：将 Canvas 纯数学几何路由与视口限位算法提炼为纯函数，建立原生测试套件，解除单元测试对 DOM 运行时的束缚。
 - **Driver 2 (Pass the Deletion Test for Shallow Facades)**：折叠无实质抽象深度的 `session-query.mjs`，消除跨层符号重导出，将会话查询与过滤直接内聚于 `SessionDirectory`。
 - **Driver 3 (Pure State Storage vs Tool Adaptation)**：将工具执行逻辑解耦为独立的 `BoardToolsAdapter`，让 `BoardStore` 回归纯粹的进程内持久化存储核心。
 - **Driver 4 (Topological Observer Realignment)**：将全景快照数据汇聚（`getCanvasTelemetry`）重构为 Web 路由协作层的只读观察者，解耦底座环形队列。
@@ -49,7 +49,7 @@
 - **Cons**: `lib/client.js` 的几何与视口测试依然脆弱；查询与存储接口持续越界混杂，架构信噪比不断劣化。
 
 ### Option 2: 激进重构并破坏既有导出路径（删除 session-query.mjs）
-- **Pros**: 彻底消除冗余文件。
+- **Pros**: 消除冗余文件。
 - **Cons**: 破坏现有外部可能依赖的 `import { executeSessionQuery } from './lib/session-query.mjs'` 路径及历史测试引用，违背平滑演进原则。
 
 ### Option 3 (Chosen): 四大支柱深层模块提炼 + 零破坏向后兼容重导出
@@ -64,21 +64,21 @@
 
 ### 4.1 四大重构架构支柱
 
-#### 支柱 1：Canvas 纯数学几何路由与视口限位控制器 (lib/client.js)
+#### 几何路由
 - 提炼椭圆外切点方程（半轴 a=96, b=26）、自环调用顶部出入（y-75）、同列双通道分流走线（下行右出右进、上行左出左进，区间 [106, 126]px）、跨列三段复合贝塞尔通道横跨（y<=130）及黑板外轨专属通道（[130, 136]px）为无状态纯计算实现。
 - 提炼视口自适应双向 padding (48px)、定位取景双向夹紧（[0.80, 1.20]）、水平首列对齐与垂直黑板优先保护算法。
 - 交付专属测试套件：`tests/canvas-geometry-routing.test.mjs`（10 项）与 `tests/canvas-viewport-clamping.test.mjs`（5 项）。
 
-#### 支柱 2：SessionDirectory 查询折叠与浅层门面收拢 (lib/session-directory.mjs)
+#### 目录折叠
 - `SessionDirectory` 新增 `.query(args, exec)` 原生实例方法与 `executeSessionQuery` 顶层导出，原生封装入参规范化、作用域隔离、归档过滤与状态汇总。
-- `lib/session-query.mjs` 彻底折叠为自 `session-directory.mjs` 的转发重导出，实现删除测试中的逻辑收口，消除双重跳转。
+- `lib/session-query.mjs` 折叠为自 `session-directory.mjs` 的转发重导出，实现删除测试中的逻辑收口，消除双重跳转。
 
-#### 支柱 3：BoardStore 存储纯化与 BoardToolsAdapter 门面解耦 (lib/board-store.mjs)
+#### 存储纯化
 - `BoardStore` 纯化为仅关注内存 Map、FIFO 淘汰、原子防抖落盘与备份恢复的纯存储引擎。
 - 抽离 `BoardToolsAdapter` 承载参数规范化（`normalizeExecParams`）、保留主题拦截（`isReservedTopic`）、作者工作区上下文解析与多语言文案拼接。
 - `BoardStore` 内部持有默认适配器实例，保持既有 `store.executePost/executeList/executeClear` 方法签名向后兼容。
 
-#### 支柱 4：全景拓扑快照聚合逻辑剥离 (lib/web-telemetry-route.mjs)
+#### 快照聚合
 - `getCanvasTelemetry` 汇聚实现移入 `lib/web-telemetry-route.mjs`，作为观察者协同消费会话目录、黑板存储与单播调用记录。
 - `lib/call-telemetry.mjs` 纯化为零业务依赖的内存 FIFO 环形缓冲区，并保留向后兼容的只读符号重导出。
 

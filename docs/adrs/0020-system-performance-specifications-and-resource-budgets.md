@@ -22,7 +22,7 @@
 
 ### 1.2 Architectural Forces & Constraints
 
-- **Single Event Loop Discipline**: 所有纯内存操作必须在个位数毫秒内完成，绝对不得霸占 Node.js 事件循环。
+- **Single Event Loop Discipline**: 所有纯内存操作必须在个位数毫秒内完成，不得阻塞 Node.js 事件循环。
 - **Bounded Resource Footprint**: 进程内各级缓存与状态结构必须具备明确上限，长期常驻内存（RSS）增量严格可控。
 - **Non-Intrusive Observability**: Web 看板与遥测聚合必须严格保持只读，其自身开销不得扰动核心调度业务。
 - **Zero-Flake CI Reliability**: 性能门禁测试必须在兼顾严格量化的同时，具备对慢速 CI 环境的防抖动冗余。
@@ -51,7 +51,7 @@
 
 ### Option 3 (Chosen): 全链路工程务实性能预算与三倍防抖容差验证
 - **Description**: 确立工程务实、可测量的分级延迟与容量基准；CI 门禁采用预热加中位数采样，并预留三倍防抖阈值。
-- **Pros**: 既提供了清晰严格的架构设计红线，又保障了工程验证的绝对确定性与稳定性。
+- **Pros**: 既提供了清晰严格的架构设计红线，又保障了工程验证的确定性与稳定性。
 
 ---
 

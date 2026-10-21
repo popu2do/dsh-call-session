@@ -1,6 +1,6 @@
 # ADR-0031: Cross-Session Handshake Verification, Classified Wait Contracts, and Native 3-State Status Protocol
 
-- **Status**: Accepted
+- **Status**: Accepted - Verification heuristics and output contracts evolved by ADR-0036
 - **Date**: 2026-10-18
 - **Deciders**: Architect, Engineering Team, Core Contributors
 - **Consulted**: Plugin Developers, Runtime Ops, Agent Authors
@@ -110,5 +110,6 @@ Caller Tool Call (task_dispatch)
 ## 7. Status History & Related Artifacts
 
 - **2026-10-18**: Accepted.
+- **2026-10-20**: Verification heuristics and output contracts evolved by ADR-0036.
 - **Supersedes**: ADR-0005 (Normalized Two-State Status Protocol).
-- **Related to**: ADR-0001, ADR-0006, ADR-0010, ADR-0016, ADR-0023, ADR-0025, ADR-0029.
+- **Related to**: ADR-0001, ADR-0006, ADR-0010, ADR-0016, ADR-0023, ADR-0025, ADR-0029, ADR-0036.
