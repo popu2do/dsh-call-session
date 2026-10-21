@@ -12,7 +12,8 @@ import {
   formatAuthorReminderText,
   isReservedTopic,
   RESERVED_TOPIC_PREFIXES,
-  getReservedTopicErrorMessage
+  getReservedTopicErrorMessage,
+  defaultStoragePath
 } from '../lib/board-store.mjs';
 import { apply } from '../index.mjs';
 import { createMockAgent } from './helpers/mock-agent.mjs';
@@ -538,17 +539,14 @@ test('BoardStore.hydratePosts: 启动水合历史脏数据过滤与持久化恢�
   assert.deepEqual(diskIds.sort(), ['post-valid-alpha', 'post-valid-beta'].sort());
 });
 
-test('工作区根目录无临时文件与备份残留', () => {
-  // 检查根目录下无 board.json、board.json.bak 或 board.json.tmp.* 残留
-  const testFileDir = path.dirname(fileURLToPath(import.meta.url));
-  const pluginRoot = path.resolve(testFileDir, '..');
-  
-  const rootFiles = readdirSync(pluginRoot);
-  const boardArtifacts = rootFiles.filter(f => /^board\.json(\..*)?$/i.test(f));
+test('插件包目录不残留黑板文件', () => {
+  const pluginRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
-  assert.deepEqual(
-    boardArtifacts,
-    [],
-    `工作区根目录发现残留黑板文件: ${boardArtifacts.join(', ')}`
+  assert.ok(
+    !defaultStoragePath({}).startsWith(pluginRoot + path.sep),
+    '默认存储文件绝不能落在插件包目录内，升级会替换整个包目录'
   );
+
+  const leftovers = readdirSync(pluginRoot).filter((name) => /^board\.json(\..*)?$/i.test(name));
+  assert.deepEqual(leftovers, [], `插件包目录发现残留黑板文件: ${leftovers.join(', ')}`);
 });
