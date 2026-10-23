@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Host service probing (all host modules)**:
+  - Cordis 4.0.5 throws `cannot get property "<name>" without inject` when an undeclared service property is read through the context proxy. `resolveWorkspaceRegistry` performed that read during `apply`, which aborted activation with `cannot get property "workspaceRegistry" without inject` and left every tool unregistered. The same crash reproduces on dsh 0.2.0 with Cordis 4.0.4, so the defect shipped latent in 0.1.9 rather than arriving with 0.2.1.
+  - Every optional service lookup now goes through `readHostService`: it tries `ctx.get(name, false)` on the root context and then the local context, and falls back to a guarded property read. Affected services: `workspaceRegistry`, `agents`, `boardStore`, `callTelemetry`, `agentDefaultModel`, `sessionController`, `agentPresets`, `sessionTitle`, `sessionProjections`.
+  - `getArchivedSessionIds` kept a second bare read of `ctx.archivedSessionIds` and `ctx.archivedSessions` that the first repair pass missed; `session_query` and `session_call` aborted at call time under the same error class until live tool exercise exposed it. Both reads now route through the guarded property probe.
+  - Resolution order for `agents` and `workspaceRegistry` is preserved; a missing service still degrades to the previous undefined or null result.
+
+### Added
+- **Activation tests against the real Cordis runtime** (`tests/cordis-activation.test.mjs`): every other suite drives a hand-written mock context, which cannot observe the proxy traps Cordis applies to an undeclared service read. Three cases mount the plugin in a real Cordis app providing only the injected services and assert all six tools register, both provided services stay visible, and a missing optional service degrades instead of aborting. The suite reports zero registered tools against 0.1.9, so it catches the regression the fix addresses.
+
+### Changed
+- **Runtime requirement moved to the field dsh actually reads**: `engines.dsh` now sits beside `engines.node` as `>=0.2.0-rc.2 <0.3.0-0`. The previous nested `dsh.engines.dsh` was read by nothing, so 0.1.9 shipped with no enforceable runtime requirement: 0.2.1 and later resolve a plugin's dsh range from `engines.dsh` and ignore the dsh peer ranges when it is present, while 0.2.0 scans dsh peer ranges, of which this package declares none. The bound keeps the 0.2 line open and refuses future host majors up front instead of failing at runtime.
+- Compatibility matrix now lists DeepSeek Harness `0.2.0-rc.2` and `0.2.1-rc.2` as verified across the Cordis `4.0.2` to `4.0.5` range.
+
 ## [0.1.9] - 2026-10-20
 
 ### Summary
