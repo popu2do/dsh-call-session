@@ -89,6 +89,7 @@
 
 | ID | Title | Status | Date | Primary Anchors | Document |
 | :--- | :--- | :--- | :--- | :--- | :--- |
+| **ADR-0037** | Host Runtime Compatibility Contract, Non-Strict Service Probing, and the Authoritative Engine Range | **Accepted** - Current | 2026-10-23 | `lib/host-services.mjs`, `package.json`, `tests/cordis-activation.test.mjs` | [0037-host-runtime-compatibility-contract.md](./0037-host-runtime-compatibility-contract.md) |
 | **ADR-0033** | Public Surface Contract and Ecosystem Presence Registry | **Accepted** - Current | 2026-10-16 | `presence.json`, `docs/agents/ecosystem-presence.md` | [0033-public-surface-contract.md](./0033-public-surface-contract.md) |
 | **ADR-0023** | Bilingual Localization Architecture and Standardized English Error Protocol | **Accepted** - Current | 2026-09-21 | `lib/locales/index.mjs`, `lib/client.js` | [0023-bilingual-localization-and-english-error-standardization.md](./0023-bilingual-localization-and-english-error-standardization.md) |
 | **ADR-0022** | Verifiable Architecture Topology Artifacts and Agent Discipline Decoupling | **Accepted** - Current | 2026-09-18 | `AGENTS.md`, `docs/architecture/` | [0022-verifiable-architecture-topology-and-agent-discipline-decoupling.md](./0022-verifiable-architecture-topology-and-agent-discipline-decoupling.md) |
