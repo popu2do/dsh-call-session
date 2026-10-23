@@ -12,7 +12,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { buildHtml, VIEWPORT, figureModel } from './helpers/render-mention-demo.mjs';
+import { buildHtml, VIEWPORT, figureModel, buildArchivedHtml, archivedFigureModel } from './helpers/render-mention-demo.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, '..');
@@ -230,5 +230,38 @@ test('mention documentation: the scenario shows the @ path and the plain-languag
       /Ask the|让\S*智能体/.test(section),
       figure.readme + ' reference scenario must also show the plain-language alternative to @ (contract: scenario coverage)'
     );
+  }
+});
+
+test('mention archived figure: the fixed scenario keeps rostered rows and dead workspaces out of the rendered menu (spec 013 ticket 06)', () => {
+  for (const locale of ['en', 'zh']) {
+    const model = archivedFigureModel(locale);
+    const html = buildArchivedHtml(locale, VIEWPORT);
+
+    // 场景固化：名单、归档行与死工作区确实在场景数据里
+    assert.ok(model.roster.length >= 1, locale + ' archived figure scenario must carry a native roster (contract: archived evidence)');
+    assert.equal(model.archivedSessions.length, 2, locale + ' archived figure scenario must carry the two archived rows (contract: archived evidence)');
+    assert.equal(model.deadWorkspaces.length, 1, locale + ' archived figure scenario must carry the dead workspace (contract: archived evidence)');
+
+    // 归档行缺失：名单内会话的标题与短 ID 都不出现在渲染产物
+    for (const archived of model.archivedSessions) {
+      assert.ok(!html.includes(archived.title), locale + ' archived figure must not render rostered row ' + archived.title + ' (contract: archived exclusion)');
+      assert.ok(!html.includes(archived.shortId), locale + ' archived figure must not render the short ID of ' + archived.title + ' (contract: archived exclusion)');
+    }
+
+    // 死工作区入口缺失：仅剩归档会话的工作区不出现在一级
+    for (const dead of model.deadWorkspaces) {
+      assert.ok(!html.includes(dead.name), locale + ' archived figure must not render dead workspace ' + dead.name + ' (contract: dead workspace exclusion)');
+    }
+    assert.ok(!model.workspaces.some((ws) => model.deadWorkspaces.some((dead) => dead.name === ws.name)), 'the rendered workspace list must not contain the dead workspace (contract: dead workspace exclusion)');
+
+    // 存活行照常渲染
+    for (const session of model.sessions) {
+      assert.ok(html.includes(session.title), locale + ' archived figure must render live row ' + session.title + ' (contract: live rows kept)');
+    }
+
+    // 共存标识：一级区块文案呈现 协同工作区 / Collaboration Workspaces
+    assert.ok(html.includes('>' + model.sectionWorkspaces + '<'), locale + ' archived figure section head must carry ' + model.sectionWorkspaces + ' (contract: coexistence copy)');
+    assert.equal(model.sectionWorkspaces, locale === 'zh' ? '协同工作区' : 'Collaboration Workspaces', locale + ' archived figure must use the plugin-owned coexistence word (contract: coexistence copy)');
   }
 });
