@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.10] - 2026-10-23
+
+### Summary
+Host runtime compatibility contract (ADR-0037): optional host services are probed non-strictly instead of read through bare context property access, activation is verified by mounting the real Cordis runtime, and the supported dsh range is declared once in `engines.dsh`, bounded to the 0.2 line. Fixes 0.1.9 activating with zero tools registered on dsh 0.2.0 and 0.2.1 alike, and a second bare read aborting `session_query` and `session_call` at call time.
+
 ### Fixed
 - **Host service probing (all host modules)**:
   - Cordis 4.0.5 throws `cannot get property "<name>" without inject` when an undeclared service property is read through the context proxy. `resolveWorkspaceRegistry` performed that read during `apply`, which aborted activation with `cannot get property "workspaceRegistry" without inject` and left every tool unregistered. The same crash reproduces on dsh 0.2.0 with Cordis 4.0.4, so the defect shipped latent in 0.1.9 rather than arriving with 0.2.1.
