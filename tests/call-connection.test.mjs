@@ -244,6 +244,27 @@ test('session_call 端到端集成：执行单播时自动记录调用轨迹快�
   assert.ok(typeof record.durationMs === 'number');
 });
 
+test('session_call 记录调用时按顶层判据落存端点来源 (ADR-0013 §2.2.7)', async () => {
+  const caller = createMockAgent('caller-blank', { cwd: 'c:/workspace/main', title: 'Blank', blank: true });
+  const target = createMockAgent('target-worker', { cwd: 'c:/workspace/main', title: 'Worker', status: 'running', isSubagent: true });
+
+  const ringBuffer = new CallTelemetryRingBuffer(50);
+  const ctx = createMockCtx({
+    agentsList: [caller, target],
+    callTelemetry: ringBuffer
+  });
+
+  await executeSessionCall({
+    ctx,
+    args: { target_session_id: 'target-worker', message: 'ping', call_type: 'task_dispatch' },
+    exec: { agent: caller }
+  });
+
+  const [record] = ringBuffer.query({ crossWorkspace: true });
+  assert.equal(record.callerNonTopLevel, true, '空白会话必须落存为非顶层端点');
+  assert.equal(record.targetNonTopLevel, true, 'subagent 端点必须落存为非顶层');
+});
+
 test('getCanvasTelemetry: 零被动唤醒验证 (ADR-0012 Invariant 2 & Gate 2)', async () => {
   let wakeCount = 0;
   const countWake = () => { wakeCount++; };
@@ -724,13 +745,18 @@ test('getCanvasTelemetry: 多 Agent 拓扑聚合与并发查询不唤醒 Agent',
   }
   const snapshots = await Promise.all(promises);
 
-  // 验证快照一致性与工作区全量会话上屏契约（所有未归档存活会话均如实上屏）
+  // 验证快照一致性与顶层会话上屏契约（两个 subagent 会话不上屏，统计同步按可见集合收缩）
   assert.equal(snapshots.length, 200);
   const snap = snapshots[0];
-  assert.equal(snap.sessions.length, 12);
-  assert.equal(snap.metrics.totalSessions, 12);
+  assert.equal(snap.sessions.length, 10);
+  assert.equal(snap.metrics.totalSessions, 10);
   assert.equal(snap.metrics.runningSessions, 4);
   assert.equal(snap.metrics.activeCalls, 1);
+  assert.equal(
+    snap.sessions.some((s) => s.id === 'node-agent-11' || s.id === 'node-agent-12'),
+    false,
+    'subagent 会话不得上屏'
+  );
 
   // 验证被动唤醒次数为 0
   assert.equal(wakeEvents, 0, '并发看板数据查询不产生被动唤醒');

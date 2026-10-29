@@ -506,3 +506,303 @@ test('Web Canvas Route: 快照聚合器独立性与全景数据协同验证', as
   assert.equal(snapshot.metrics.totalSessions, 2);
   assert.equal(snapshot.metrics.activeCalls, 1);
 });
+
+test('Web Canvas Route: 非顶层会话、其连线与相关计数在出站前收窄 (ADR-0013)', async () => {
+  const telemetry = new CallTelemetryRingBuffer(20);
+  const record = (targetSessionId, targetTitle) => telemetry.record({
+    callerSessionId: 'session-lead',
+    callerTitle: 'Lead',
+    callerWorkspace: 'c:/workspace/proj-main',
+    targetSessionId,
+    targetTitle,
+    targetWorkspace: 'c:/workspace/proj-main',
+    callType: 'task_dispatch',
+    deliveryMode: 'followup',
+    durationMs: 5,
+    contextPostIds: [],
+    messageSnippet: 'dispatch',
+    messagePayload: 'payload',
+    status: 'active'
+  });
+  record('session-subagent', 'Worker');
+  record('session-partner', 'Partner');
+
+  const agents = [
+    {
+      id: 'session-lead',
+      status: 'running',
+      title: 'Lead',
+      session: { id: 'session-lead', title: 'Lead', cwd: 'c:/workspace/proj-main' }
+    },
+    {
+      id: 'session-partner',
+      status: 'idle',
+      title: 'Partner',
+      session: { id: 'session-partner', title: 'Partner', cwd: 'c:/workspace/proj-peers' }
+    },
+    {
+      id: 'session-subagent',
+      status: 'running',
+      title: 'Worker',
+      session: {
+        id: 'session-subagent',
+        title: 'Worker',
+        cwd: 'c:/workspace/proj-main',
+        header: { origin: 'subagent' }
+      }
+    },
+    {
+      id: 'session-blank',
+      status: 'idle',
+      title: 'Blank',
+      blank: true,
+      session: { id: 'session-blank', title: 'Blank', cwd: 'c:/workspace/proj-empty' }
+    }
+  ];
+
+  const ctx = createMockCtx({ agentsList: agents });
+  ctx.callTelemetry = telemetry;
+  const baseGet = ctx.get;
+  ctx.get = (name) => (name === 'callTelemetry' ? telemetry : baseGet(name));
+
+  const snapshot = await getCanvasTelemetry(ctx, { workspace: 'c:/workspace/proj-main', crossWorkspace: true });
+  const ids = snapshot.sessions.map((s) => s.id);
+
+  assert.deepEqual(ids.slice().sort(), ['session-lead', 'session-partner'], '非顶层会话不得下发到看板');
+  assert.equal(snapshot.metrics.totalSessions, 2, '会话总数必须按可见集合统计');
+  assert.equal(snapshot.metrics.runningSessions, 1, '运行中会话数必须按可见集合统计');
+  assert.equal(snapshot.metrics.activeCalls, 1, '活动调用数必须按可见集合统计');
+  assert.equal(snapshot.calls.length, 1, '端点为隐藏会话的调用不得下发');
+  assert.deepEqual(
+    snapshot.workspaces.map((ws) => ws.id).slice().sort(),
+    ['c:/workspace/proj-main', 'c:/workspace/proj-peers'],
+    '只含隐藏会话的工作区不得下发空列'
+  );
+
+  const lead = snapshot.sessions.find((s) => s.id === 'session-lead');
+  assert.deepEqual(
+    { outbound: lead.stats.outboundCalls, inbound: lead.stats.inboundCalls },
+    { outbound: 1, inbound: 0 },
+    '会话统计必须排除通往隐藏会话的调用'
+  );
+});
+test('Web Canvas Route: 离开 roster 的隐藏端点沿用记录来源，只剩隐藏会话的当前工作区不留列 (ADR-0013 §2.2.7)', async () => {
+  const telemetry = new CallTelemetryRingBuffer(20);
+  const record = (targetSessionId, targetTitle, targetNonTopLevel) => telemetry.record({
+    callerSessionId: 'session-lead',
+    callerTitle: 'Lead',
+    callerWorkspace: 'c:/workspace/proj-main',
+    targetSessionId,
+    targetTitle,
+    targetWorkspace: 'c:/workspace/proj-workers',
+    callType: 'task_dispatch',
+    deliveryMode: 'followup',
+    durationMs: 3,
+    contextPostIds: [],
+    messageSnippet: 'dispatch',
+    messagePayload: 'payload',
+    callerNonTopLevel: false,
+    targetNonTopLevel,
+    status: 'settled'
+  });
+  record('session-worker', 'Worker', true);
+  record('session-partner', 'Partner', false);
+
+  // worker 离开 roster 后 agents.list 只剩两个顶层会话，它只能靠调用记录合成端点
+  const agents = [
+    {
+      id: 'session-lead',
+      status: 'running',
+      title: 'Lead',
+      session: { id: 'session-lead', title: 'Lead', cwd: 'c:/workspace/proj-main' }
+    },
+    {
+      id: 'session-partner',
+      status: 'idle',
+      title: 'Partner',
+      session: { id: 'session-partner', title: 'Partner', cwd: 'c:/workspace/proj-main' }
+    }
+  ];
+
+  const ctx = createMockCtx({ agentsList: agents });
+  ctx.callTelemetry = telemetry;
+  const baseGet = ctx.get;
+  ctx.get = (name) => (name === 'callTelemetry' ? telemetry : baseGet(name));
+
+  const snapshot = await getCanvasTelemetry(ctx, { workspace: 'c:/workspace/proj-workers', crossWorkspace: true });
+  const ids = snapshot.sessions.map((s) => s.id);
+
+  assert.deepEqual(ids.slice().sort(), ['session-lead', 'session-partner'], '合成端点必须沿用调用记录里的来源，隐藏 worker 不得回流');
+  assert.equal(snapshot.calls.length, 1, '通往隐藏端点的调用不得下发');
+  assert.deepEqual(
+    snapshot.workspaces.map((ws) => ws.id),
+    ['c:/workspace/proj-main'],
+    '只剩隐藏会话的当前工作区不得下发空列'
+  );
+  assert.equal(snapshot.metrics.totalSessions, 2, '合成端点不得计入会话总数');
+});
+
+test('Web Canvas Route: 归档到 archivedSessionIds 的隐藏端点不得凭 settled 记录回流 (ADR-0013 §2.2.7)', async () => {
+  const telemetry = new CallTelemetryRingBuffer(20);
+  telemetry.record({
+    callerSessionId: 'session-lead',
+    callerTitle: 'Lead',
+    callerWorkspace: 'c:/workspace/proj-main',
+    targetSessionId: 'session-worker',
+    targetTitle: 'Worker',
+    targetWorkspace: 'c:/workspace/proj-main',
+    callType: 'task_dispatch',
+    deliveryMode: 'followup',
+    durationMs: 4,
+    contextPostIds: [],
+    messageSnippet: 'dispatch',
+    messagePayload: 'payload',
+    callerNonTopLevel: false,
+    targetNonTopLevel: true,
+    status: 'settled'
+  });
+
+  const agents = [
+    {
+      id: 'session-lead',
+      status: 'running',
+      title: 'Lead',
+      session: { id: 'session-lead', title: 'Lead', cwd: 'c:/workspace/proj-main' }
+    }
+  ];
+
+  const ctx = createMockCtx({ agentsList: agents });
+  ctx.callTelemetry = telemetry;
+  // 真实归档路径：worker 在归档名单里，故不会合成会话行，只剩记录上的来源标记可用
+  ctx.archivedSessionIds = new Set(['session-worker']);
+  const baseGet = ctx.get;
+  ctx.get = (name) => (name === 'callTelemetry' ? telemetry : baseGet(name));
+
+  const snapshot = await getCanvasTelemetry(ctx, { workspace: 'c:/workspace/proj-main', crossWorkspace: true });
+
+  assert.deepEqual(snapshot.sessions.map((s) => s.id), ['session-lead'], '归档端点不得回流成会话行');
+  assert.equal(snapshot.calls.length, 0, '端点已归档的 settled 调用不得下发');
+  assert.equal(snapshot.metrics.totalSessions, 1, '归档端点不得计入会话总数');
+  assert.equal(snapshot.metrics.activeCalls, 0, '归档端点不得计入活动调用');
+  const lead = snapshot.sessions.find((s) => s.id === 'session-lead');
+  assert.equal(lead.stats.outboundCalls, 0, '会话统计必须排除通往归档端点的调用');
+});
+
+test('Web Canvas Route: 黑板作者不在 roster 时不合成会话 (ADR-0013 §2.2.3)', async () => {
+  const agents = [
+    {
+      id: 'session-lead',
+      status: 'running',
+      title: 'Lead',
+      session: { id: 'session-lead', title: 'Lead', cwd: 'c:/workspace/proj-main' }
+    }
+  ];
+  const boardStore = {
+    list() {
+      return [
+        { id: 'post-1', topic: 'worker-note', content: 'from a worker', authorSessionId: 'session-worker', authorTitle: 'Worker', status: 'active' }
+      ];
+    }
+  };
+
+  const ctx = createMockCtx({ agentsList: agents });
+  ctx.boardStore = boardStore;
+  const baseGet = ctx.get;
+  ctx.get = (name) => (name === 'boardStore' ? boardStore : baseGet(name));
+
+  const snapshot = await getCanvasTelemetry(ctx, { workspace: 'c:/workspace/proj-main', crossWorkspace: true });
+
+  assert.equal(snapshot.posts.length, 1, '条目本身必须照常下发');
+  assert.deepEqual(snapshot.sessions.map((s) => s.id), ['session-lead'], '不在 roster 的作者不得合成为会话节点');
+  assert.equal(snapshot.metrics.totalSessions, 1, '合成作者不得计入会话总数');
+});
+
+test('Web Canvas Route: 整张看板无可见会话时保留当前工作区空列 (ADR-0013 §2.2.4)', async () => {
+  const agents = [
+    {
+      id: 'session-worker',
+      status: 'running',
+      title: 'Worker',
+      session: {
+        id: 'session-worker',
+        title: 'Worker',
+        cwd: 'c:/workspace/proj-main',
+        header: { origin: 'subagent' }
+      }
+    }
+  ];
+
+  const ctx = createMockCtx({ agentsList: agents });
+  const snapshot = await getCanvasTelemetry(ctx, { workspace: 'c:/workspace/proj-main', crossWorkspace: true });
+
+  assert.equal(snapshot.sessions.length, 0, '只剩非顶层会话时不得下发会话');
+  assert.deepEqual(snapshot.workspaces.map((ws) => ws.id), ['c:/workspace/proj-main'], '零可见会话时保留当前工作区作为锚点');
+  assert.deepEqual(snapshot.workspaces[0].sessionIds, [], '锚点列不含节点');
+  assert.equal(snapshot.metrics.totalSessions, 0, '零可见会话时总数为 0');
+});
+
+test('Web Canvas Route: 全顶层载荷下无会话的当前工作区仍占空列 (ADR-0013 §2.2.4)', async () => {
+  const agents = [
+    {
+      id: 'session-peer',
+      status: 'running',
+      title: 'Peer',
+      session: { id: 'session-peer', title: 'Peer', cwd: 'c:/workspace/proj-peer' }
+    }
+  ];
+
+  const ctx = createMockCtx({ agentsList: agents });
+  const snapshot = await getCanvasTelemetry(ctx, { workspace: 'c:/workspace/proj-main', crossWorkspace: true });
+
+  assert.deepEqual(
+    snapshot.workspaces.map((ws) => ws.id),
+    ['c:/workspace/proj-main', 'c:/workspace/proj-peer'],
+    '收窄没有隐藏任何会话，当前工作区列必须与收窄前一样保留'
+  );
+  assert.deepEqual(snapshot.workspaces[0].sessionIds, [], '当前工作区本来就没有存活会话，列内无节点');
+  assert.equal(snapshot.workspaces[0].isCurrent, true, '保留的当前列仍带当前标记');
+});
+
+test('Web Canvas Route: 出站会话必带 isTopLevel 标记 (ADR-0013 §2.2.1)', async () => {
+  const telemetry = new CallTelemetryRingBuffer(20);
+  telemetry.record({
+    callerSessionId: 'session-lead',
+    callerTitle: 'Lead',
+    callerWorkspace: 'c:/workspace/proj-main',
+    targetSessionId: 'session-departed',
+    targetTitle: 'Departed',
+    targetWorkspace: 'c:/workspace/proj-main',
+    callType: 'task_dispatch',
+    deliveryMode: 'followup',
+    durationMs: 2,
+    contextPostIds: [],
+    messageSnippet: 'dispatch',
+    messagePayload: 'payload',
+    callerNonTopLevel: false,
+    targetNonTopLevel: false,
+    status: 'active'
+  });
+
+  const agents = [
+    {
+      id: 'session-lead',
+      status: 'running',
+      title: 'Lead',
+      session: { id: 'session-lead', title: 'Lead', cwd: 'c:/workspace/proj-main' }
+    }
+  ];
+
+  const ctx = createMockCtx({ agentsList: agents });
+  ctx.callTelemetry = telemetry;
+  const baseGet = ctx.get;
+  ctx.get = (name) => (name === 'callTelemetry' ? telemetry : baseGet(name));
+
+  const snapshot = await getCanvasTelemetry(ctx, { workspace: 'c:/workspace/proj-main', crossWorkspace: true });
+
+  assert.deepEqual(snapshot.sessions.map((s) => s.id).sort(), ['session-departed', 'session-lead']);
+  for (const session of snapshot.sessions) {
+    assert.equal(typeof session.isTopLevel, 'boolean', `会话 ${session.id} 必须带 isTopLevel 标记`);
+  }
+  const departed = snapshot.sessions.find((s) => s.id === 'session-departed');
+  assert.equal(departed.isTopLevel, true, '合成端点沿用记录里的顶层来源，客户端不得因缺标记而误判');
+});
