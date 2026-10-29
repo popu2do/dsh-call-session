@@ -717,7 +717,7 @@ test('Web Canvas Route: 黑板作者不在 roster 时不合成会话 (ADR-0013 �
   assert.equal(snapshot.metrics.totalSessions, 1, '合成作者不得计入会话总数');
 });
 
-test('Web Canvas Route: 整张看板无可见会话时保留当前工作区空列 (ADR-0013 §2.2.4)', async () => {
+test('Web Canvas Route: 整张看板无顶层会话时保留当前工作区空列 (ADR-0013 §2.2.4)', async () => {
   const agents = [
     {
       id: 'session-worker',
@@ -736,9 +736,9 @@ test('Web Canvas Route: 整张看板无可见会话时保留当前工作区空�
   const snapshot = await getCanvasTelemetry(ctx, { workspace: 'c:/workspace/proj-main', crossWorkspace: true });
 
   assert.equal(snapshot.sessions.length, 0, '只剩非顶层会话时不得下发会话');
-  assert.deepEqual(snapshot.workspaces.map((ws) => ws.id), ['c:/workspace/proj-main'], '零可见会话时保留当前工作区作为锚点');
+  assert.deepEqual(snapshot.workspaces.map((ws) => ws.id), ['c:/workspace/proj-main'], '零顶层会话时保留当前工作区作为锚点');
   assert.deepEqual(snapshot.workspaces[0].sessionIds, [], '锚点列不含节点');
-  assert.equal(snapshot.metrics.totalSessions, 0, '零可见会话时总数为 0');
+  assert.equal(snapshot.metrics.totalSessions, 0, '零顶层会话时总数为 0');
 });
 
 test('Web Canvas Route: 全顶层载荷下无会话的当前工作区仍占空列 (ADR-0013 §2.2.4)', async () => {
