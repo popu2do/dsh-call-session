@@ -26,7 +26,7 @@ In multi-agent collaborative workflows orchestrated by DeepSeek Harness (DSH), a
 Historically, multi-agent frameworks often conflate these two communication paradigms into a single monolithic messaging bus or reactive event pub/sub mechanism. In our initial iterations and legacy MCP setups, publishing a status update or milestone entity to shared memory automatically dispatched notifications or triggered regex-based listeners across the runtime.
 
 This architectural coupling produced severe operational failures in production:
-- **Notification Storms ("All-Hands Awakening")**: When an agent published a progress update or intermediate milestone, every active session received an unsolicited event or prompt, causing all agents to wake up simultaneously.
+- **Notification Storms ("All-Hands Awakening")**: When an agent published a progress update or intermediate milestone, every live session received an unsolicited event or prompt, causing all agents to wake up simultaneously.
 - **Context Poisoning & Token Drain**: Unrelated agents had their LLM context windows flooded with irrelevant task notices, degrading reasoning quality and multiplying API token expenditures exponentially.
 - **Deadlocks and Contention**: Agents competing to acknowledge broadcast messages entered infinite ping-pong loops or triggered conflicting responses.
 - **Self-Loop Whispers**: Agents posting task updates frequently matched their own outbound broadcast hooks, waking themselves up in a recursive, self-referential hallucination loop.
@@ -82,7 +82,7 @@ This architectural coupling produced severe operational failures in production:
    - Wildcards such as `*`, `all`, `broadcast`, or empty strings are rejected with immediate failure (`DISPATCHER_CONSTANTS.TARGET_WILDCARDS`).
 3. **Anti-Ambiguity Fuse**:
    - Target session prefix matching requires a minimum length of 8 characters (`DISPATCHER_CONSTANTS.LIMITS.MIN_PREFIX_LENGTH = 8`).
-   - If a prefix resolves to more than one active session, the dispatch aborts immediately with an ambiguous resolution error, listing colliding candidates.
+   - If a prefix resolves to more than one live session, the dispatch aborts immediately with an ambiguous resolution error, listing colliding candidates.
 4. **Self-Call Guard**:
    - An agent is strictly forbidden from calling its own `callerSessionId`. Self-directed calls throw `DispatchError: Self-call prohibited`.
 
@@ -177,3 +177,7 @@ This architectural coupling produced severe operational failures in production:
 - **Implementation Artifacts**:
   - Primary source: `index.mjs` (Line 376-750)
   - Call routing: `lib/session-call.mjs` (Line 20, 80-140)
+
+## Revision
+
+- 2026-10-29: Wording only — the living-session noun uses the canonical 存活会话 / live session naming; no decision changed.

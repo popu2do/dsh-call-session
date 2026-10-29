@@ -21,17 +21,17 @@
 3. As a developer searching files, I want native file and folder search to remain completely functional, so that my existing file reference habits are never broken.
 4. As an engineer entering a workspace, I want the secondary session list to strictly exclude all internal subagents and review tasks, so that only genuine independent root sessions appear.
 5. As an engineer inspecting a project, I want the secondary session list to completely filter out archived or finished sessions, so that dead tasks never clutter my active view.
-6. As a multi-agent collaborator, I want peer sessions registered with call-session to be prioritized at the top of the workspace list, so that active collaborators are reachable first.
-7. As a multi-session user, I want secondary sessions with the same priority sorted strictly by latest update recency, so that recently active sessions appear ahead of older ones.
+6. As a multi-agent collaborator, I want peer sessions registered with call-session to be prioritized at the top of the workspace list, so that live collaborators are reachable first.
+7. As a multi-session user, I want secondary sessions with the same priority sorted strictly by latest update recency, so that sessions updated most recently appear ahead of older ones.
 8. As a developer managing parallel tasks with identical titles, I want candidate rows to display an 8-character short ID badge, so that I can tell duplicate names apart instantly.
 9. As a system observer, I want candidate rows to display real-time three-state status indicators, so that I know whether each peer session is running, idle, or in an error state.
 10. As a keyboard-first user, I want Tab or Enter on a workspace row to enter it smoothly and Escape to cancel without altering my text, so that I never have to touch the mouse.
-11. As a multi-workspace user, I want a breadcrumb trail at the top of the list showing Workspace Root / <workspace-name>, so that I can return to the top list with one click.
+11. As a multi-workspace user, I want a drill header at the top of the list showing Workspace Root / <workspace-name>, so that I can return to the top list with one click.
 12. As a composer user, I want picking a session to insert a clean inline chip showing only the chat icon and title, so that my prompt stays readable.
 13. As an engineer verifying targets, I want hovering over an inserted chip to reveal a tooltip displaying workspace path, short ID, session ID, and status, so that I can check details before sending.
 14. As an architect enforcing performance baselines, I want the entire workspace session lookup to run strictly in local memory within 5 milliseconds, so that the UI never stutters or re-refreshes two seconds later.
 15. As an architect enforcing boundary constraints, I want text references to deliver pure read-only session state text to the model without triggering agent wakeups, so that collaboration canvas edges stay strictly at 0.
-16. As a bilingual developer, I want all workspace labels, breadcrumbs, and status tags localized symmetrically in Simplified Chinese and English, so that interface copy matches my language.
+16. As a bilingual developer, I want all workspace labels, drill headers, and status tags localized symmetrically in Simplified Chinese and English, so that interface copy matches my language.
 
 ## Implementation Decisions
 
@@ -54,7 +54,10 @@
 
 对二级展开的会话实体实施多维清洗：
 - 排除子会话：凡包含 parentSessionId、parentId、parentSession、拥有 subagent 标记、或标题包含审查与临时任务特征的条目，一律直接忽略；
-- 排除归档会话：凡标记为 archived 或状态为 archived、dismissed、deleted 的会话，一律直接忽略。
+- 排除归档会话：凡标记为 archived 或状态为 archived、dismissed、deleted 的会话，一律直接忽略；
+- 排除原生归档名单会话：归档名单来自原生 workspaces 服务的列表快照字段（archivedSessionIds），命中名单的会话在二级展开与一级汇聚中一并忽略；
+- 退化契约：workspaces 服务缺失、快照无归档名单字段或读取抛出异常时，名单按空处理，清洗退化为上述快照字段判定，候选输出与无服务基线一致；
+- 一级收敛：仅剩名单归档会话的工作区不再作为工作区入口出现在一级列表，仍有存活会话的工作区照常出现，当前工作区保持无条件置顶。
 
 ### 确定排序
 
@@ -68,7 +71,7 @@
 ### 质量标准
 
 测试面向真实外部表现，运行于 Node VM 沙箱隔离环境中。必须验证：
-- 一级列表仅展示工作区，当前工作区自动置顶；
+- 一级列表仅展示工作区入口，区块文案为平文「工作区」（Workspaces），当前工作区自动置顶；
 - 二级列表排除子代理与已归档会话，仅展示活跃同级根会话；
 - 协同会话优先置顶，同组内按最新时间倒序；
 - 8 位规范短 ID 徽标排布整齐；

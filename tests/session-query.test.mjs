@@ -372,7 +372,7 @@ test('session_query Dual-Layer Render: 符合 ADR-0005 标准 Markdown 结构化
     scope: 'd:/repo',
     sessions: []
   });
-  assert.ok(emptyRendered[0].text.includes('No active sessions found.') || emptyRendered[0].text.includes('未找到匹配的会话'));
+  assert.ok(emptyRendered[0].text.includes('No live sessions found.') || emptyRendered[0].text.includes('未找到匹配的会话'));
   assert.ok(emptyRendered[0].text.includes('0'));
 });
 

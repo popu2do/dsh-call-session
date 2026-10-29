@@ -12,7 +12,7 @@
 
 ### 1.1 Background & Problem Context
 
-随着 `dsh-call-session` 演进为覆盖前端画布、进程内单播分发、公共黑板状态存储与宿主会话调度的多子系统架构，团队需要对全局拓扑进行端到端可视化与架构归档。在此过程中暴露出两项结构性阻抗：
+随着 `dsh-call-session` 演进为覆盖前端看板、进程内单播分发、公共黑板状态存储与宿主端会话调度的多子系统架构，团队需要对全局拓扑进行端到端可视化与架构归档。在此过程中暴露出两项结构性阻抗：
 
 1. **预提交门禁目录白名单过于死板**：
    `.githooks/pre-commit` 此前配置了仅放行 `docs/(adrs/|agents/|README.md)` 的硬性白名单。由 Archify 生成的可验证架构规范文件与离线交互式 HTML 交付物缺少合法存放路径，导致提交被门禁无条件拦截。
@@ -72,3 +72,11 @@
 
 ### Neutral
 - 架构变更时需同步重新运行 Archify 校验并交付 HTML 产物。
+
+---
+
+## 8. Revision
+
+### 8.1 Revision 2026-10-29: 看板与会话措辞
+
+Wording only: replace retired jargon with 看板 and adjust host session phrasing to avoid false substrings; no decision, invariant, or budget changed.

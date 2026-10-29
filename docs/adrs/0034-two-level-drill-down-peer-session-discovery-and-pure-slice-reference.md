@@ -23,7 +23,7 @@ Under previous single-level mention designs, typing the trigger character `@` di
 - **Zero Cross-Boundary Telemetry Invariant**: A composer mention is purely an editorial reference. It must never trigger physical agent wakeups, must never dispatch unicast calls, and must leave canvas activeCalls strictly equal to zero.
 - **Pure Slice Reference Integrity**: The referenced session artifact passed to the LLM must consist solely of standard public session metadata and read-only text history, completely decoupled from private host runtime probes.
 - **Visual Simplicity & Keyboard Usability**: The candidate menu must remain responsive, keyboard-navigable via Tab, Enter, and Escape, and avoid deeply nested micro-sections that impede rapid scanning.
-- **Bilingual Localization Parity**: In accordance with ADR-0023, all menu sections, descriptions, and breadcrumb labels must be 100% symmetrically localized in Simplified Chinese and English.
+- **Bilingual Localization Parity**: In accordance with ADR-0023, all menu sections, descriptions, and drill header labels must be 100% symmetrically localized in Simplified Chinese and English.
 
 ---
 
@@ -33,7 +33,7 @@ Under previous single-level mention designs, typing the trigger character `@` di
 - Driver 2: Eliminate candidate ambiguity using canonical 8-character short ID badges alongside native 3-state execution status indicators.
 - Driver 3: Preserve rapid keyboard scanning by flattening session candidates inside drilled workspaces ordered strictly by native update recency.
 - Driver 4: Guarantee zero cross-boundary side effects: zero agent wakeups, zero blackboard mutations, and zero collaboration canvas connection lines.
-- Driver 5: Provide seamless breadcrumb navigation enabling immediate return to root workspace selection without closing the trigger menu.
+- Driver 5: Provide a seamless drill header enabling immediate return to root workspace selection without closing the trigger menu.
 
 ---
 
@@ -50,7 +50,7 @@ Under previous single-level mention designs, typing the trigger character `@` di
 - **Cons**: High visual noise; breaks unified temporal recency sorting; creates keyboard navigation friction; causes empty placeholder headers when categories have no items.
 
 ### Option 3 (Chosen): Two-Level Drill-Down with Flat Recency-Ordered Sessions and Pure Slice Reference Contract
-- **Description**: Level 1 exposes only workspace roots with drill flags enabled and current workspace pinned at top. Selecting a workspace drills down to Level 2, presenting a flat session list sorted strictly by latest update recency with 8-character short ID badges and native 3-state status. A breadcrumb header allows instant return to the root workspace menu. Picking a session inserts an atomic read-only chip referencing `dsh-session:<sessionId>` with zero side effects on canvas telemetry or blackboard state.
+- **Description**: Level 1 exposes only workspace roots with drill flags enabled and current workspace pinned at top. Selecting a workspace drills down to Level 2, presenting a flat session list sorted strictly by latest update recency with 8-character short ID badges and native 3-state status. A drill header allows instant return to the root workspace menu. Picking a session inserts an atomic read-only chip referencing `dsh-session:<sessionId>` with zero side effects on canvas telemetry or blackboard state.
 - **Pros**: Clean workspace boundaries; minimal visual cognitive load; unambiguous short ID identification; zero cross-boundary side effects; fluid keyboard navigation.
 - **Cons**: Requires two-step navigation for cross-workspace session references.
 
@@ -65,7 +65,7 @@ Under previous single-level mention designs, typing the trigger character `@` di
 1. **Two-Level Drill-Down State Machine Invariant**:
    The input trigger source registered under trigger `@` and name `peer-session` operates in two distinct phases:
    - *Level 1 (Undrilled)*: Exposes solely workspace directories with folder icons, grouped under section `section.workspaces` (Chinese: 工作区, English: Workspaces). Each candidate declares `drill: true`. The current workspace is automatically pinned to index 0 with description `workspace.current` (Chinese: 当前, English: Current). Session entities are strictly forbidden from appearing at Level 1.
-   - *Level 2 (Drilled)*: Triggered by user drill action or query path match. Renders a flat session list within the selected workspace without micro-sections (`section: undefined`). The current active session is strictly excluded from candidate proposals.
+   - *Level 2 (Drilled)*: Triggered by user drill action or query path match. Renders a flat session list within the selected workspace without micro-sections (`section: undefined`). The current live session is strictly excluded from candidate proposals.
 
 2. **Two-Tier Prioritization & Subagent/Archived Exclusion Invariant**:
    - *Subagent & Archived Exclusion*: In accordance with ADR-0010 and ADR-0024, subagents (sessions with `origin: 'subagent'`, parentSession/parentId references, delegation depth > 0, or internal pipeline task titles) and archived/terminated sessions are strictly excluded from Level 2 proposals. Only independent, active top-level root sessions are admitted.
@@ -76,8 +76,8 @@ Under previous single-level mention designs, typing the trigger character `@` di
 3. **Canonical 8-Character Short ID Badge Invariant**:
    Every session candidate displays a canonical short ID formatted as `#xxxxxxxx` (exactly 9 characters beginning with `#` followed by 8 lowercase alphanumeric characters). The label presents the session title, gracefully falling back to `Agent #xxxxxxxx` if the title is absent. The candidate description presents the native 3-state execution status (`session.running`, `session.idle`, `session.error`, or `session.offline`).
 
-4. **Breadcrumb Return Navigation Invariant**:
-   When drilled, the source header hook publishes a two-crumb trail: `crumb.root` (Chinese: 工作区根目录, English: Workspace Root) and the drilled workspace name. Activating the root crumb returns `@` with `continue: true`, cleanly resetting the trigger back to Level 1.
+4. **Drill Header Return Navigation Invariant**:
+   When drilled, the source header hook publishes a two-level drill header: `header.root` (Chinese: 工作区根目录, English: Workspace Root) and the drilled workspace name. Activating the root entry returns `@` with `continue: true`, cleanly resetting the trigger back to Level 1.
 
 5. **Zero Cross-Boundary Side-Effect Invariant**:
    Throughout candidate discovery, drill-down, query filtering, session selection, chip insertion, and codec serialization:
@@ -91,7 +91,7 @@ Under previous single-level mention designs, typing the trigger character `@` di
    Session selection produces an insert action referencing `dsh-session:<sessionId>` with appearance `session`. The text delivered to the language model consists strictly of public session status and read-only message history slices. No private host objects, internal tokens, or unverified memory contexts are probed or leaked.
 
 7. **Bilingual Localization Invariant**:
-   In strict compliance with ADR-0023, all dictionary keys (`section.workspaces`, `crumb.root`, `workspace.current`, `session.running`, `session.idle`, `session.error`, `session.offline`) are defined symmetrically across Chinese and English dictionaries with zero missing keys.
+   In strict compliance with ADR-0023, all dictionary keys (`section.workspaces`, `header.root`, `workspace.current`, `session.running`, `session.idle`, `session.error`, `session.offline`) are defined symmetrically across Chinese and English dictionaries with zero missing keys. `section.workspaces` carries the plain word (Chinese: 工作区, English: Workspaces); the coexistence wording introduced by spec 013 ticket 04 was reverted by user decision, so the plugin block shares the native vocabulary.
 
 8. **UI Frame Budget & Deterministic Performance SLA Invariant**:
    In accordance with ADR-0020, candidate resolution executes 100% in-memory with zero disk I/O and zero network fetch during keystroke autocomplete. Level 1 workspace discovery latency P99 <= 2ms; Level 2 session filtering and two-tier ranking latency P99 <= 5ms. Returned candidate sets are strictly clamped to a maximum of 50 items to ensure butter-smooth 60fps rendering without UI frame drops.
@@ -113,7 +113,7 @@ Level 1: Workspace Discovery
         ▼
 Level 2: Drilled Workspace Sessions
 ┌──────────────────────────────────────────────────────────┐
-│ Crumb: [工作区根目录 / Workspace Root] / current-repo    │
+│ Header: [工作区根目录 / Workspace Root] / current-repo   │
 ├──────────────────────────────────────────────────────────┤
 │ #a1b2c3d4  Architecture Coordinator (运行中 / Running)  │
 │ #e5f67890  Automated Test Runner    (就绪 / Idle)        │
@@ -149,4 +149,9 @@ Invariant Verification:
 
 ### 5.2 Negative Consequences & Mitigations
 - Referencing a session in another workspace requires drilling into that workspace first.
-  - *Mitigation*: The root breadcrumb and query-based filtering allow rapid switching and instantaneous keyboard completion.
+  - *Mitigation*: The root drill header entry and query-based filtering allow rapid switching and instantaneous keyboard completion.
+
+### 5.3 Revision 2026-10-29: Drill Header Terminology
+
+1. Wording only: the navigation strip is named 下钻标题 / Drill Header and its dictionary key is `header.root`; the retired key is renamed in code and in tests.
+2. The retired synonyms are registered in the CONTEXT.md avoid list and enforced by the repository-wide vocabulary gate.
