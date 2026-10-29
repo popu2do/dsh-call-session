@@ -1,44 +1,50 @@
 name: "Feature Request"
-description: "Propose an enhancement for dsh-call-session"
+description: "Propose a capability enhancement or contract change for dsh-call-session"
 title: "[Feature]: "
-labels: ["enhancement"]
+labels: ["enhancement", "needs-triage"]
 
 body:
   - type: markdown
     attributes:
       value: |
-        Submit proposals with concrete technical rationale and expected behavior.
+        Consult [`CONTEXT.md`](https://github.com/popu2do/dsh-call-session/blob/main/CONTEXT.md) and [`docs/adrs/`](https://github.com/popu2do/dsh-call-session/tree/main/docs/adrs) to check existing domain vocabulary and architectural decisions before proposing a change.
+
+  - type: dropdown
+    id: surface
+    attributes:
+      label: "Target Surface"
+      description: "Which area of the plugin does this proposal touch?"
+      options:
+        - "Collaboration Tools (session_*, board_*)"
+        - "Collaboration Canvas (/session-canvas)"
+        - "Peer Session Mention (@ composer trigger)"
+        - "Host Gateway / Governance & Quotas"
+        - "Documentation / Ecosystem Presence"
+    validations:
+      required: true
 
   - type: textarea
     id: problem
     attributes:
-      label: "Problem or Motivation"
-      description: "Describe the operational limitation or constraint this addresses."
-      placeholder: "A clear and concise description of the problem..."
+      label: "Problem / Multi-Session Scenario"
+      description: "Describe the real-world multi-session workflow limitation or constraint this proposal addresses."
+      placeholder: "When coordinating peer sessions across multiple workspaces..."
     validations:
-      required: false
+      required: true
 
   - type: textarea
     id: proposal
     attributes:
       label: "Proposed Solution"
-      description: "Describe the functionality or change you would like to see."
-      placeholder: "Add support for..."
+      description: "Describe the desired behavior, tool schema, or UI change using canonical terms from CONTEXT.md."
     validations:
       required: true
 
   - type: textarea
-    id: alternatives
+    id: adr_impact
     attributes:
-      label: "Alternative Solutions"
-      description: "Describe any alternative solutions or workarounds considered."
-    validations:
-      required: false
-
-  - type: textarea
-    id: additional_context
-    attributes:
-      label: "Additional Context"
-      description: "Any extra information, mockups, or API examples."
+      label: "ADR & Invariant Impact"
+      description: "Does this proposal affect existing ADRs, the 5-running-session quota, in-process storage, or read-only canvas constraints?"
+      placeholder: "No conflict with existing ADRs / Reopens ADR-00XX because..."
     validations:
       required: false

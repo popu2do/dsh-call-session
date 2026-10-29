@@ -1,28 +1,27 @@
-# Issue tracker: GitHub
+# Issue Tracker: GitHub
 
-Issues and specs for this repo live as GitHub issues. Use the `gh` CLI for all operations.
+Issues and specs live in GitHub Issues. Run `gh` inside the repository clone so it resolves the remote automatically.
 
-## Conventions
+## Operations
 
-- **Create**: `gh issue create --title "..." --body "..."` (heredoc for multi-line).
-- **Read**: `gh issue view <number> --comments`
-- **List**: `gh issue list --state open` with appropriate `--label` filters.
-- **Comment**: `gh issue comment <number> --body "..."`
-- **Label**: `gh issue edit <number> --add-label "..."` / `--remove-label "..."`
-- **Close**: `gh issue close <number> --comment "..."`
-
-Infer the repo from `git remote -v`; `gh` resolves it automatically.
+- **Create**: `gh issue create --title "..." --body "..."` (use a heredoc for multi-line bodies).
+- **Read**: `gh issue view <number> --comments`.
+- **List**: `gh issue list --state open --json number,title,body,labels,comments` with `--label` filters.
+- **Comment**: `gh issue comment <number> --body "..."`.
+- **Label**: `gh issue edit <number> --add-label "..." --remove-label "..."`.
+- **Close**: `gh issue close <number> --comment "..."`.
 
 ## Triage Surface
 
-- **PRs as request surface**: **no**. External PRs are not treated as feature requests.
+- **PRs as a request surface: no.** Triage operates exclusively on GitHub Issues; external pull requests implement existing triaged issues.
 
 ## Wayfinding Operations
 
-Used by `/wayfinder`. The **map** is a single issue with **child** issues as tickets.
+Used by `/wayfinder`. The **map** is a single issue with **child** issues as decision tickets.
 
-- **Map**: Single issue labelled `wayfinder:map`.
-- **Child ticket**: Sub-issue linked to map with label `wayfinder:<type>` (`research`/`prototype`/`grilling`/`task`).
-- **Blocking**: Native GitHub dependencies via `gh api repos/<owner>/<repo>/issues/<child>/dependencies/blocked_by`. Fall back to `Blocked by: #<n>` header.
-- **Frontier query**: Open children with zero open blockers and no assignee.
-- **Claim & Resolve**: `gh issue edit <n> --add-assignee @me` to claim; close and append decision to map upon resolve.
+- **Map**: Issue labelled `wayfinder:map`, holding Destination, Notes, Decisions so far, Not yet specified, and Out of scope.
+- **Child ticket**: Sub-issue linked to the map (or listed in the map task list with `Part of #<map>` in the child body), labelled `wayfinder:<type>` (`research`, `prototype`, `grilling`, `task`).
+- **Blocking**: Native GitHub issue dependencies via `gh api --method POST repos/<owner>/<repo>/issues/<child>/dependencies/blocked_by -F issue_id=<blocker-db-id>` (numeric database id from `gh api repos/<owner>/<repo>/issues/<n> --jq .id`), or `Blocked by: #<n>` at the top of the child body.
+- **Frontier query**: Open child issues of the map with zero open blockers and no assignee, in map order.
+- **Claim**: `gh issue edit <n> --add-assignee @me`.
+- **Resolve**: Post the answer with `gh issue comment <n> --body "<answer>"`, close with `gh issue close <n>`, and append a one-line gist with link to the map's `Decisions so far` section.

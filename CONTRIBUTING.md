@@ -1,187 +1,77 @@
 # Contributing to dsh-call-session
 
-Guidelines for contributing to `dsh-call-session`, the native cross-session collaboration, in-process agent unicast calling, and public blackboard plugin for DeepSeek Harness (DSH).
+Thanks for looking at this. Bug reports with a reproducible session state, host service compatibility fixes, and canvas layout or routing tests are the most useful contributions.
 
-## 1. Engineering Principles & Guidelines
+## Set up
 
-Engineering principles and standards:
+Requires Node.js `>= 20.0.0`, npm `>= 10.0.0`, and Git `>= 2.30.0`.
 
-- **Zero-Trace Principle**: Code changes must look deliberately designed from day one. Avoid dead code, commented-out experiments, or extraneous temporary markers. Diff and commit history should reflect only the clean, final state.
-- **Fail Fast & Root-Cause Fixes**: Never silently swallow errors; always detect boundary violations early and fix the root cause rather than patching symptoms with fragile workarounds.
-- **SOLID, KISS, DRY, YAGNI**: Keep designs modular, cohesive, and minimal. Do not add speculative features or unnecessary abstractions.
-- **Zero External Subprocesses**: Keep the plugin native within the DSH Node.js runtime. Avoid heavy binary dependencies, external child process spawns, or background daemon sidecars.
-- **Bilingual Documentation Sync**: Any user-facing feature, configuration change, or tool parameter modification **must** be documented in both **`README.md` (English)** and **`README_ZH.md` (Simplified Chinese)**.
-- **Architecture Decision Records (ADRs)**: Non-trivial architectural, concurrency, storage, or protocol changes **must** include an ADR in `docs/adrs/`.
-
-## 2. Architecture Decision Records (ADRs)
-
-Before making or proposing architectural changes:
-1. Consult the existing records in [`docs/adrs/`](./docs/adrs/README.md) to understand current design choices and invariants.
-2. If your change modifies or introduces:
-   - Tool parameter schemas or return contracts,
-   - In-process dispatching or lifecycle hooks (`dispose`, `inject`),
-   - Atomic persistence, locking, or self-healing strategies,
-   - Public blackboard capacity or cleanup policies;
-3. Copy [`docs/adrs/template.md`](./docs/adrs/template.md) to `docs/adrs/NNNN-<short-imperative-title>.md`.
-4. Fill out the context, alternatives considered, tradeoffs, and compliance checks.
-5. Update the ADR status matrix in `docs/adrs/README.md` and link your Pull Request to the ADR.
-
-## 3. Development Environment & Setup
-
-### Prerequisites
-- **Node.js**: `>= 20.0.0` (LTS recommended)
-- **npm**: `>= 10.0.0`
-- **Git**: `>= 2.30.0`
-
-### Repository Setup
 ```bash
-# Clone the repository
 git clone https://github.com/popu2do/dsh-call-session.git
 cd dsh-call-session
-
-# Install development dependencies
 npm install
 ```
 
-### Directory Structure
-```
-dsh-call-session/
-├── .github/                  # GitHub Actions CI/CD workflows & issue/PR templates
-│   ├── workflows/
-│   │   ├── ci.yml            # Multi-OS & multi-Node test matrix
-│   │   └── release.yml       # Release & NPM publishing workflow
-│   ├── ISSUE_TEMPLATE/       # Structured issue forms
-│   └── PULL_REQUEST_TEMPLATE.md
-├── docs/                     # Architecture Decision Records (ADRs)
-│   └── adrs/                 # ADR records
-├── lib/                      # Core runtime modules
-│   ├── board-store.mjs       # Debounced atomic storage & self-healing
-│   ├── call-telemetry.mjs    # In-memory call trace ring buffer
-│   ├── client.js             # Visual collaboration canvas client component
-│   ├── session-call.mjs      # Strict unicast dispatch & anti-ambiguity fuse
-│   ├── session-create.mjs    # Peer session creation & lifecycle control
-│   ├── session-directory.mjs # Workspace session directory & running quota
-│   ├── session-query.mjs     # Workspace-scoped two-state session query
-│   └── web-telemetry-route.mjs # Canvas data HTTP route
-├── types/                    # TypeScript ambient declarations
-│   └── index.d.ts            # Public API & tool parameter contracts
-├── tests/                    # Native Node.js test suites
-│   ├── board-store.test.mjs  # Atomic persistence & backup recovery tests
-│   ├── session-call.test.mjs # Unicast dispatch, prefix fuses & safety tests
-│   ├── session-query.test.mjs# Query scoping & status normalization tests
-│   └── lifecycle.test.mjs    # Cordis inject, Config schema & dispose tests
-├── cordis.patch.yml          # Declarative Cordis profile patch
-├── index.mjs                 # Plugin entry, Schemastery Config & tool registration
-├── index.d.ts                # Root re-export for TypeScript consumers
-├── tsconfig.json             # TypeScript configuration for declaration verification
-├── package.json              # Package metadata, exports, and verification scripts
-├── CHANGELOG.md              # Keep a Changelog & SemVer release history
-├── CONTRIBUTING.md           # This contribution guide
-├── SECURITY.md               # Security policy & vulnerability reporting
-├── LICENSE                   # MIT License
-├── README.md                 # English documentation
-└── README_ZH.md              # Chinese documentation
-```
-
-## 4. Development & Verification Workflow
-
-Always verify your changes locally before opening a pull request:
+`npm install` runs `scripts/install-hooks.mjs`, binding `core.hooksPath` to `.githooks/`.
 
 ```bash
-# 1. Check syntax across all ESM files
-npm run lint
+npm run verify      # Combined syntax check (npm run lint) and full test suite (npm test)
+npm run typecheck   # TypeScript declaration contract check against types/index.d.ts
+npm pack --dry-run  # Verify published tarball matches package.json#files
+```
 
-# 2. Verify TypeScript types and contracts
-npm run typecheck
+The test suite (`tests/run-all.mjs`) executes every `tests/*.test.mjs` file via `node --test`. It verifies real Cordis container activation against `@deepseek-ai/dsh` (`tests/cordis-activation.test.mjs`), bilingual locale parity (`tests/i18n.test.mjs`), ADR numbering and index bidirectional alignment (`tests/adr-integrity.test.mjs`), domain vocabulary compliance (`tests/context-vocabulary.test.mjs`), and public surface sanitization (`tests/public-surface-integrity.test.mjs`).
 
-# 3. Run full automated unit test suites
-npm test
+To test in a live DeepSeek Harness instance, register the local checkout in `cordis.patch.yml` and restart `dsh web` after changing backend ESM modules (`index.mjs`, `lib/*.mjs`).
 
-# 4. Run test suites with coverage report
-npm run test:coverage
+`assets/canvas-demo.gif` and `assets/mention-demo.png` are deterministic showcase artifacts rendered by `tests/helpers/render-canvas-demo.mjs` and `tests/helpers/render-mention-demo.mjs`, guarded by byte budgets in `presence.json`.
 
-# 5. Execute unified pre-flight verification (lint + test)
+## What a good change looks like
+
+- **Adding or changing a collaboration tool (`session_*`, `board_*`)**:
+  1. Update the JSON Schema and handler registration in `lib/tools-registry.mjs`.
+  2. Keep runtime state transitions in `lib/session-gateway.mjs`, `lib/blackboard-store.mjs`, or `lib/call-ledger.mjs`.
+  3. Export matching TypeScript definitions in `types/index.d.ts`.
+  4. Add unit and contract tests in `tests/` and verify `npm run typecheck` passes.
+
+- **Adapting to DSH host services or lifecycle hooks**:
+  1. Route all Cordis container service lookups through `readHostService` and `readProperty` in `lib/host-services.mjs`, and session operations through `lib/session-gateway.mjs`.
+  2. Add a regression test in `tests/cordis-activation.test.mjs` or `tests/session-gateway.test.mjs` covering both active host services and graceful degradation when optional services are absent.
+
+- **Changing the Collaboration Canvas or `@` Peer Session Mention UI**:
+  1. Update the client bundle (`lib/client.js`, `lib/mention-picker.js`) and keep styles scoped to the plugin container.
+  2. Add `zh-CN` and `en-US` strings to `lib/locales/table.mjs` so `tests/i18n.test.mjs` passes with zero missing keys.
+  3. Run `tests/canvas-ui.test.mjs`, `tests/peer-session-mention.test.mjs`, and the demo asset tests (`tests/canvas-demo-asset.test.mjs`, `tests/mention-demo-asset.test.mjs`).
+
+- **Updating public documentation or positioning copy**:
+  1. `presence.json` is the single source of truth for positioning claims, discovery keywords, and asset byte budgets (ADR-0033).
+  2. Keep `README.md` and `README_ZH.md` structurally aligned: identical level-2 (`##`) heading counts, zero emoji, and Chinese subheadings of at most 4 characters (ADR-0009).
+  3. Avoid synonyms listed under `_Avoid_` in `CONTEXT.md` (enforced by `tests/context-vocabulary.test.mjs`).
+
+## Rules that keep the plugin honest
+
+- **Non-strict host probing (ADR-0037)**: Never access `ctx[name]` directly on a Cordis context proxy when probing optional services (`agent`, `web`, `tools`, `chatHistory`). Direct indexing triggers `Context Strict Probing` warnings; always use `Reflect.get` via `lib/host-services.mjs`.
+- **In-process native runtime**: The plugin runs inside the DSH Node.js process (`>= 20.0.0`) with zero external binary dependencies or child daemon processes.
+- **Transport semantic header**: Cross-session calls prepend an objective metadata header (`lib/semantic-header.mjs`) and preserve the caller payload verbatim without injecting directive prompt wrappers.
+- **Pure slice reference**: Selecting a session via `@` inserts a read-only `dsh-session` context slice without waking the target session or recording a call connection on the canvas.
+- **Public surface sanitization**: Tracked files on the published surface (`README.md`, `README_ZH.md`, `AGENTS.md`, `CONTRIBUTING.md`, `CHANGELOG.md`, `DESIGN.md`, `SECURITY.md`, `presence.json`, `package.json`, `docs/`, and `.github/`) must never contain credentials, Unix/Windows home directory paths, or RFC1918/internal hostnames (enforced by `scripts/scan-secrets.mjs` and `tests/public-surface-integrity.test.mjs`).
+- **Architectural Decision Records**: Changes that alter tool schemas, persistence formats, or host integration contracts require a numbered ADR in `docs/adrs/` created from `docs/adrs/template.md` and indexed in `docs/adrs/README.md` (enforced by `tests/adr-integrity.test.mjs`).
+
+## Before you open a pull request
+
+```bash
 npm run verify
-
-# 6. Verify packaging output purity (confirm only in-scope files are packed)
+npm run typecheck
+node scripts/scan-secrets.mjs --all
 npm pack --dry-run
 ```
 
-All CI checks must pass before a pull request can be merged.
+- **Commit format**: `.githooks/commit-msg` (`scripts/check-commit-msg.mjs`) enforces Conventional Commits `<type>(<scope>): <subject>` with a 72-character header limit and no trailing period. Allowed types: `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `build`, `ci`, `chore`, `revert`.
+- **Pre-commit guards**: `.githooks/pre-commit` blocks accidental edits to `README.md` / `README_ZH.md` (override with `ALLOW_README=1`), `package.json` version bumps (override with `ALLOW_VERSION_BUMP=1`), and non-standard subdirectories under `docs/`.
+- **Quality scorecard compatibility**: Keep `package.json` fields `dsh`, `engines.dsh` (`>=0.2.0-rc.2 <0.3.0-0`), and `peerDependencies["@deepseek-ai/dsh"]` aligned so community quality and recommendation indexers resolve the plugin cleanly.
 
-## 5. Git & Commit Guidelines
+## Reporting issues & security
 
-### Branch Naming Conventions
-- `feat/<feature-name>`: New features or enhancements (e.g. `feat/batch-post-support`)
-- `fix/<issue-name>`: Bug fixes (e.g. `fix/windows-lock-retry`)
-- `docs/<doc-name>`: Documentation improvements (e.g. `docs/bilingual-sync`)
-- `refactor/<scope>`: Code refactoring without behavioral changes
-- `test/<test-name>`: Adding or improving test cases
-- `chore/<chore-name>`: Tooling, dependency, or workflow maintenance
-
-### Commit Message Convention (Conventional Commits)
-We enforce the [Conventional Commits](https://www.conventionalcommits.org/) standard:
-
-```
-<type>(<scope>): <short imperative summary>
-
-[optional body explaining motivation and context]
-
-[optional footer referencing issues, e.g. Fixes #12]
-```
-
-**Allowed Types:**
-- `feat`: A new feature
-- `fix`: A bug fix
-- `docs`: Documentation only changes
-- `style`: Changes that do not affect the meaning of the code (formatting, white-space)
-- `refactor`: A code change that neither fixes a bug nor adds a feature
-- `perf`: A code change that improves performance
-- `test`: Adding missing tests or correcting existing tests
-- `build`: Changes that affect the build system or external dependencies
-- `ci`: Changes to our CI configuration files and scripts
-- `chore`: Other changes that do not modify `src` or test files
-- `revert`: Reverts a previous commit
-
-**Example:**
-```
-feat(call): add strict anti-ambiguity prefix fuse for unicast dispatch
-
-Enforce target session IDs to have a minimum length of 8 hex characters
-and refuse ambiguous matches across concurrent sessions.
-
-Fixes #24
-```
-
-### Local Git Hooks
-
-`npm install` points `core.hooksPath` at `.githooks/`, which installs two hooks:
-
-- `pre-commit` scans the staged content for credentials, then runs `npm run verify`.
-- `commit-msg` enforces the commit message convention above.
-
-The credential scanner (`scripts/scan-secrets.mjs`) matches issuer-specific key
-formats and credential-shaped assignments. It also accepts explicit file paths
-and `--all`, which is how CI scans the whole tree. A genuine false positive is
-waived with a trailing `secret-scan:allow` comment on the offending line.
-
-Both hooks are advisory: `--no-verify` bypasses them, and a contributor can
-unset `core.hooksPath` at will. They exist to fail in seconds rather than after
-a CI round trip. The enforced boundary is the CI secret scan plus branch
-protection on `master`, neither of which can be bypassed from a clone.
-
-## 6. Submitting a Pull Request (PR)
-
-1. **Keep PRs Focused**: One PR should address one well-defined concern or feature. Avoid large, omnibus PRs.
-2. **Follow the Template**: Complete all sections in the provided [Pull Request Template](.github/PULL_REQUEST_TEMPLATE.md).
-3. **Verify Documentation**: Ensure both `README.md` and `README_ZH.md` are kept up to date.
-4. **Clean Git History**: Rebase against the target branch (`master` or `main`) and squash intermediate "WIP" commits before review.
-5. **Quality Gates**: Ensure `npm run verify` passes with zero warnings or errors.
-
-## 7. Security Disclosures
-
-If you find a security vulnerability, please do **NOT** open a public issue. Follow the reporting guidelines outlined in **[SECURITY.md](./SECURITY.md)**.
-
-## 8. Licensing
-
-By submitting a contribution to `dsh-call-session`, you agree that your contributions will be licensed under the project's **[MIT License](./LICENSE)**.
+- **Bugs and enhancements**: Open a GitHub Issue using the [Bug Report](.github/ISSUE_TEMPLATE/bug_report.yml) or [Feature Request](.github/ISSUE_TEMPLATE/feature_request.yml) form. External pull requests should link an existing triaged issue.
+- **Security vulnerabilities**: Report privately via [GitHub Security Advisories](./SECURITY.md) rather than a public issue.
+- **Code of Conduct & License**: Participation is governed by the [Code of Conduct](./CODE_OF_CONDUCT.md). Contributions are licensed under the [MIT License](./LICENSE).

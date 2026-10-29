@@ -1,14 +1,13 @@
 # Domain Docs
 
-How engineering skills consume this repo's domain documentation.
-
 ## Primary Sources
 
-- **`CONTEXT.md`**: Single source of truth for domain concepts and forbidden terms (`Avoid` list).
-- **`docs/adrs/`**: Immutable technical decisions. If an approach contradicts an ADR, surface it explicitly:
-  > _Contradicts ADR-XXXX (...), but worth reopening because…_
+- **`CONTEXT.md`**: Authoritative glossary of domain terms and their `Avoid` lists. Use these exact terms in issue titles, specs, code, and tests.
+- **`docs/adrs/`**: Architectural decision records (`0001` through `0034`), indexed in `docs/adrs/README.md` and verified by `tests/adr-integrity.test.mjs`. When a proposal conflicts with an accepted ADR, surface the conflict explicitly:
+  > _Contradicts ADR-XXXX (...), worth reopening because..._
 
-## Host & Distribution Lifecycles
+## Runtime & Distribution Constraints
 
-- **Backend ESM caching**: Backend plugins (`lib/*.mjs`, `index.mjs`) are loaded into memory at `dsh web` startup. Live verification of backend changes requires restarting `dsh web`.
-- **Marketplace release sync**: The plugin marketplace probes GitHub Release bodies daily. Releases must carry complete markdown notes in the GitHub Release body.
+- **In-process native runtime**: The plugin runs inside the DSH Node.js process (`>= 20.0.0`) with zero external binary dependencies or child daemon processes.
+- **Backend ESM reload**: Backend modules (`index.mjs`, `lib/*.mjs`) load into memory when `dsh web` starts. Restart `dsh web` before running live verification of backend changes.
+- **Marketplace release sync**: The plugin marketplace scrapes GitHub Release bodies daily. Include complete markdown release notes in every GitHub Release body.
