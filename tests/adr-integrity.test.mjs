@@ -113,34 +113,3 @@ test('ADR 替代关系有效性：标记为 Superseded 的记录必须包含有�
     }
   }
 });
-
-test('ADR 领域词汇规范性：ADR 标题严禁使用 CONTEXT.md 禁用词', async () => {
-  const forbiddenTerms = [
-    '全局事件总线',
-    '广播信道',
-    '消息队列',
-    '广播消息',
-    '事件通知',
-    '多播',
-    '提示词信封',
-    '调度引导词',
-    '消息包装器',
-    '遥测大屏',
-    '监控面板',
-    '泳道',
-    'Swimlane',
-    '边缘走线',
-    '留白槽'
-  ];
-
-  const contents = await getFileContents();
-  for (const [file, content] of contents.entries()) {
-    const firstLines = content.split('\n').slice(0, 10).join(' ');
-    for (const term of forbiddenTerms) {
-      assert.ok(
-        !firstLines.includes(term),
-        `${file} 标题与头部禁止包含禁用词：${term}`
-      );
-    }
-  }
-});

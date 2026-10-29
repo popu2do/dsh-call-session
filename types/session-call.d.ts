@@ -116,7 +116,7 @@ export declare function dispatchNativeMessage(
  *
  * 校验规则与流程：
  * 1. 校验目标 Session ID，不支持通配符与自身调用，前缀至少 8 位且唯一
- * 2. 检索目标活跃会话
+ * 2. 检索目标存活会话
  * 3. 根据目标状态分发，running 使用 steer，idle 使用 followup
  *
  * @param ctxOrOptions Cordis 根上下文或包裹参数对象

@@ -22,7 +22,7 @@
    原 `lib/session-query.mjs` 仅 80 行，接口与内部实现近乎 1:1，其本质只是重新导出 `lib/session-directory.mjs` 的内部函数并包裹一层计数统计。调用方与测试在两个文件间反复跳跃，割裂了会话发现与查询的局部性。
 3. **黑板存储引擎与工具执行门面耦合 (lib/board-store.mjs)**：
    `BoardStore` 原本设计为内存 Map、FIFO 淘汰与原子防抖落盘的纯存储引擎，但直接混入了 `executePost`、`executeList`、`executeClear`、`getAuthorReminder` 等 Cordis 工具调用参数解包与多语言文案渲染逻辑，职责外溢。
-4. **环形缓冲区遥测倒置依赖全局业务数据源 (lib/call-telemetry.mjs)**：
+4. **环形缓冲区调用记录倒置依赖全局业务数据源 (lib/call-telemetry.mjs)**：
    `CallTelemetryRingBuffer` 作为高性能有限内存 FIFO 队列，却在同文件中承载了 300+ 行全景拓扑数据聚合逻辑（`getCanvasTelemetry`），反向引入对 `board-store` 与 `session-directory` 的倒置依赖。
 
 ### 1.2 Architectural Forces & Constraints
@@ -108,3 +108,11 @@ node --test tests/call-telemetry.test.mjs tests/web-telemetry-route.test.mjs
 # 全工程验证
 npm run verify
 ```
+
+---
+
+## 6. Revision
+
+### 6.1 Revision 2026-10-29: 调用记录措辞
+
+仅改措辞：正文中该缓冲区的历史易混用词统一为「调用记录」；模块路径、容量与倒置依赖的结论均未改动。被替换的用词登记在 CONTEXT.md 的 _Avoid_ 列表。

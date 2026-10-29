@@ -108,13 +108,13 @@ test('Peer Session Reference: Dictionary entries in zh and en are symmetrical an
 
   assert.ok(plugin.zh['section.workspaces'], 'zh dictionary must contain section.workspaces');
   assert.ok(plugin.en['section.workspaces'], 'en dictionary must contain section.workspaces');
-  assert.equal(plugin.zh['section.workspaces'], '协同工作区');
-  assert.equal(plugin.en['section.workspaces'], 'Collaboration Workspaces');
+  assert.equal(plugin.zh['section.workspaces'], '工作区');
+  assert.equal(plugin.en['section.workspaces'], 'Workspaces');
 
-  assert.ok(plugin.zh['crumb.root'], 'zh dictionary must contain crumb.root');
-  assert.ok(plugin.en['crumb.root'], 'en dictionary must contain crumb.root');
-  assert.equal(plugin.zh['crumb.root'], '工作区根目录');
-  assert.equal(plugin.en['crumb.root'], 'Workspace Root');
+  assert.ok(plugin.zh['header.root'], 'zh dictionary must contain header.root');
+  assert.ok(plugin.en['header.root'], 'en dictionary must contain header.root');
+  assert.equal(plugin.zh['header.root'], '工作区根目录');
+  assert.equal(plugin.en['header.root'], 'Workspace Root');
 
   assert.equal(plugin.zh['workspace.current'], '当前');
   assert.equal(plugin.en['workspace.current'], 'Current');
@@ -177,7 +177,7 @@ test('Peer Session Reference: Level 1 workspace discovery, drill contract, and c
   assert.equal(level1.length, 3, 'Level 1 must deduplicate workspaces and contain exactly 3 workspaces');
   assert.ok(level1.every(item => item.drill === true), 'All Level 1 items must declare drill: true');
   assert.ok(level1.every(item => item.icon === 'folder'), 'All Level 1 items must use folder icon');
-  assert.ok(level1.every(item => item.section === '协同工作区'), 'All Level 1 items must carry the plugin-owned 协同工作区 section');
+  assert.ok(level1.every(item => item.section === '工作区'), 'All Level 1 items must carry the plugin-owned 工作区 section');
   assert.ok(level1.every(item => item.icon !== 'session'), 'Zero session entities may be exposed at Level 1');
 
   // 当前工作区置顶
@@ -193,9 +193,9 @@ test('Peer Session Reference: Level 1 workspace discovery, drill contract, and c
   assert.equal(level1[2].name, 'dsh-gateway');
   assert.equal(level1[2].description, undefined);
 
-  // 一级状态下顶栏面包屑恒为 undefined
+  // 一级状态下顶栏下钻标题恒为 undefined
   const header = src.header({ sessionId: 'session-curr' }, { query: '', drilled: false });
-  assert.equal(header, undefined, 'Level 1 must have no header breadcrumbs');
+  assert.equal(header, undefined, 'Level 1 must have no drill header');
 });
 
 test('Peer Session Reference: Level 1 query filtering and workspace selection formatting', async () => {
@@ -429,7 +429,7 @@ test('Peer Session Reference: Canonical 8-character short ID badge and title dis
   assert.ok(list[3].description.startsWith('会话已离线 · '), 'Offline session must display offline status prefix with relative time');
 });
 
-test('Peer Session Reference: Breadcrumb navigation, root switching, and workspace header', () => {
+test('Peer Session Reference: Drill header, root switching, and workspace header', () => {
   const { plugin } = loadClientInSandbox();
   const { getRegisteredSource } = setupMockContext(plugin);
   const src = getRegisteredSource();
@@ -438,27 +438,27 @@ test('Peer Session Reference: Breadcrumb navigation, root switching, and workspa
   assert.equal(src.header({ sessionId: 'session-curr' }, { query: '', drilled: false }), undefined);
   assert.equal(src.header({ sessionId: 'session-curr' }, null), undefined);
 
-  // 已下钻时返回二级面包屑
+  // 已下钻时返回二级下钻标题
   const header = src.header({ sessionId: 'session-curr' }, { query: CURRENT_WS, drilled: true });
   assert.ok(Array.isArray(header));
   assert.equal(header.length, 2);
 
-  // 根面包屑
+  // 根条目
   assert.equal(header[0].label, '工作区根目录');
   const rootVal = JSON.parse(header[0].value);
   assert.equal(rootVal.kind, 'workspace-root');
 
-  // 当前工作区面包屑
+  // 当前工作区条目
   assert.equal(header[1].label, 'dsh-call-session');
   assert.equal(header[1].current, true);
   const wsVal = JSON.parse(header[1].value);
   assert.equal(wsVal.kind, 'workspace');
   assert.equal(wsVal.path, CURRENT_WS);
 
-  // 验证搜索词输入时面包屑名称不被过滤词污染
+  // 验证搜索词输入时下钻标题名称不被过滤词污染
   const headerWithQuery = src.header({ sessionId: 'session-curr' }, { query: CURRENT_WS + ' 过滤关键词', drilled: true });
   assert.ok(Array.isArray(headerWithQuery));
-  assert.equal(headerWithQuery[1].label, 'dsh-call-session', 'Breadcrumb must remain workspace name without query filter text');
+  assert.equal(headerWithQuery[1].label, 'dsh-call-session', 'Drill header must remain the workspace name without query filter text');
 
   // 点击或回车选定工作区：无论 action 为 pick 还是 drill 均触发下钻
   const clickPick = src.onPick({
@@ -468,7 +468,7 @@ test('Peer Session Reference: Breadcrumb navigation, root switching, and workspa
   assert.equal(clickPick.text, '@' + CURRENT_WS);
   assert.equal(clickPick.continue, true);
 
-  // 点击面包屑根节点：返回 @ 且 continue: true 切回一级工作区列表
+  // 点击下钻标题根条目：返回 @ 且 continue: true 切回一级工作区列表
   const rootPick = src.onPick({
     action: 'drill',
     candidate: header[0]
@@ -535,7 +535,7 @@ test('Peer Session Reference: Zero cross-boundary and zero board orchestration i
   const drillPick = src.onPick({ action: 'drill', candidate: l1[0] });
   assert.ok(drillPick.continue);
 
-  // 3. 读取面包屑
+  // 3. 读取下钻标题
   const header = src.header({ sessionId: 'session-curr' }, { query: CURRENT_WS, drilled: true });
   assert.equal(header.length, 2);
 
@@ -551,7 +551,7 @@ test('Peer Session Reference: Zero cross-boundary and zero board orchestration i
   const sessionPick = src.onPick({ action: 'pick', candidate: l2Filtered[0] });
   assert.ok(sessionPick.insert);
 
-  // 7. 点击面包屑切回根目录
+  // 7. 点击下钻标题切回根目录
   const backPick = src.onPick({ action: 'drill', candidate: header[0] });
   assert.equal(backPick.text, '@');
 
@@ -586,12 +586,12 @@ test('Peer Session Reference: English locale end-to-end symmetry across discover
 
   // 一级菜单英文词条断言
   const l1 = await src.candidates({ sessionId: 'session-curr' }, { query: '', drilled: false });
-  assert.equal(l1[0].section, 'Collaboration Workspaces', 'Level 1 section must be Collaboration Workspaces in English');
+  assert.equal(l1[0].section, 'Workspaces', 'Level 1 section must be Workspaces in English');
   assert.equal(l1[0].description, 'Current', 'Current workspace description must be Current in English');
 
-  // 面包屑英文词条断言
+  // 下钻标题英文词条断言
   const header = src.header({ sessionId: 'session-curr' }, { query: CURRENT_WS, drilled: true });
-  assert.equal(header[0].label, 'Workspace Root', 'Root crumb must be Workspace Root in English');
+  assert.equal(header[0].label, 'Workspace Root', 'Root entry must be Workspace Root in English');
 
   // 二级会话列表英文三态描述断言
   const l2 = await src.candidates({ sessionId: 'session-curr' }, { query: CURRENT_WS, drilled: true });
@@ -977,15 +977,11 @@ test('Peer Session Reference: level 1 keeps workspaces with live sessions and pr
   assert.equal(JSON.parse(level1[2].value).isCurrent, false, 'Non-current workspaces must stay unflagged');
 });
 
-test('Peer Session Reference: coexistence section copy is bilingual symmetric and distinct from native wording (ADR-0034 bilingual localization)', async () => {
+test('Peer Session Reference: section copy is plain and bilingual symmetric (ADR-0034 bilingual localization)', async () => {
   const { plugin } = loadClientInSandbox();
 
-  assert.equal(plugin.zh['section.workspaces'], '协同工作区');
-  assert.equal(plugin.en['section.workspaces'], 'Collaboration Workspaces');
-
-  // 共存标识：文案带插件自有归属词，与原生工作区块的 平文 工作区/Workspaces 可区分
-  assert.notEqual(plugin.zh['section.workspaces'], '工作区');
-  assert.notEqual(plugin.en['section.workspaces'], 'Workspaces');
+  assert.equal(plugin.zh['section.workspaces'], '工作区');
+  assert.equal(plugin.en['section.workspaces'], 'Workspaces');
 
   // 双语对称：同一词典键在中英两侧都存在且非空
   assert.ok(plugin.zh['section.workspaces'].length > 0);
@@ -998,5 +994,5 @@ test('Peer Session Reference: coexistence section copy is bilingual symmetric an
   const { getRegisteredSource } = setupMockContext(plugin, { sessionsById });
   const src = getRegisteredSource();
   const level1 = await src.candidates({ sessionId: 'session-curr' }, { query: '', drilled: false });
-  assert.equal(level1[0].section, '协同工作区');
+  assert.equal(level1[0].section, '工作区');
 });

@@ -50,11 +50,11 @@ const CANDIDATES = [
 
 // The plugin-owned level-1 section word (ADR-0034): copy shared by every
 // figure so the rendered menus cannot drift from the shipped dictionary.
-const COEXISTENCE_SECTION = { zh: '协同工作区', en: 'Collaboration Workspaces' };
+const SECTION_WORKSPACES = { zh: '工作区', en: 'Workspaces' };
 
 const COPY = {
   zh: {
-    sectionWorkspaces: COEXISTENCE_SECTION.zh,
+    sectionWorkspaces: SECTION_WORKSPACES.zh,
     current: '当前',
     pathRoot: '工作区根目录',
     workspaceLabel: 'dsh-call-session',
@@ -62,7 +62,7 @@ const COPY = {
     composerTail: '再核一遍。'
   },
   en: {
-    sectionWorkspaces: COEXISTENCE_SECTION.en,
+    sectionWorkspaces: SECTION_WORKSPACES.en,
     current: 'Current',
     pathRoot: 'Workspace Root',
     workspaceLabel: 'dsh-call-session',
@@ -265,7 +265,7 @@ if (process.argv[1] && process.argv[1].endsWith('render-mention-demo.mjs')) {
 /**
  * Archived-filter evidence figure backing the ADR-0034 contract. Same three-panel
  * cadence as the gesture demo, but the menu shows the post-013 state: the
- * section carries the plugin-owned coexistence word, rostered archived
+ * section carries the plugin-owned plain word, rostered archived
  * sessions and the dead workspace appear in the model yet never in the
  * markup, so tests can assert the exclusion against the scenario data.
  * Copy and live rows derive from the shared gesture constants, so the two

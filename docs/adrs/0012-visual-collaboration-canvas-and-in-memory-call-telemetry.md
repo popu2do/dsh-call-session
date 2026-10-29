@@ -30,21 +30,21 @@
 
 ### 1.2 Architectural Forces & Constraints
 - **Strict Read-Only Boundary**：协作看板仅作为系统的观察界面，不提供修改状态、删除记录或主动触发调用的入口。
-- **Zero Passive Wake-up (ADR-0001)**：看板状态获取与遥测为只读读取，不触发 Agent 实例被动唤醒。
-- **Workspace-Scoped Isolation by Default (ADR-0003)**：遥测数据与拓扑节点保持工作区边界隔离，跨工作区透视需显式声明。
+- **Zero Passive Wake-up (ADR-0001)**：看板状态获取与调用记录读取均为只读，不触发 Agent 实例被动唤醒。
+- **Workspace-Scoped Isolation by Default (ADR-0003)**：看板数据与拓扑节点保持工作区边界隔离，跨工作区透视需显式声明。
 - **Prompt KV Cache Invariant & Anti-Slop (ADR-0010, ADR-0011, ADR-0009)**：
-  - 遥测接口不注册为大模型的 Native Tool，避免 Agent 上下文膨胀与 Prompt KV Cache 失效；
-  - 遥测数据结构遵循标准英文紧凑契约，无装饰性符号与冗余元数据。
-- **Bounded In-Memory Footprint & Zero Disk Contention**：瞬态调用痕迹属于遥测观测数据，容量受限，避免内存泄漏与磁盘 I/O 争用。
+  - 看板数据接口不注册为大模型的 Native Tool，避免 Agent 上下文膨胀与 Prompt KV Cache 失效；
+  - 看板数据结构遵循标准英文紧凑契约，无装饰性符号与冗余元数据。
+- **Bounded In-Memory Footprint & Zero Disk Contention**：瞬态调用痕迹属于看板数据，容量受限，避免内存泄漏与磁盘 I/O 争用。
 
 ---
 
 ## 2. Decision Drivers
 
-- **Driver 1 (Non-Intrusive Observability)**：在不修改 `session_call` 和 `board-store` 核心语义的前提下，构建只读遥测。
+- **Driver 1 (Non-Intrusive Observability)**：在不修改 `session_call` 和 `board-store` 核心语义的前提下，构建只读看板数据视图。
 - **Driver 2 (Bounded RingBuffer Lifecycle)**：采用固定容量内存环形缓冲区（FIFO 淘汰），保证 O(1) 记录与查询性能，内存占用受控。
 - **Driver 3 (Workspace Isolation Alignment)**：记录调用的发起工作区与目标工作区，遵循 ADR-0003 隔离过滤规范。
-- **Driver 4 (Prompt KV Cache Defense)**：将看板遥测与 Agent LLM 工具集隔离，避免 Token 消耗与 KV Cache 抖动。
+- **Driver 4 (Prompt KV Cache Defense)**：将看板数据与 Agent LLM 工具集隔离，避免 Token 消耗与 KV Cache 抖动。
 - **Driver 5 (Web Native Slot Integration)**：挂载至 DSH Web `conversation.view` 扩展插槽，提供视觉拓扑展示。
 
 ---
@@ -54,7 +54,7 @@
 ### Option 1: Append-Only Disk Persistence (`telemetry.jsonl`)
 - **Description**: 每笔 `session_call` 完成后，追加写入本地 JSONL 文件。
 - **Pros**: 进程重启后历史调用连线不丢失。
-- **Cons**: 引入高频磁盘 I/O，在 Windows 环境下极易与 `board.json` 发生文件锁争用（违背 ADR-0004）；文件体积无限膨胀需要日志轮转器；遥测作为瞬态会话观测，落盘性价比极低。
+- **Cons**: 引入高频磁盘 I/O，在 Windows 环境下极易与 `board.json` 发生文件锁争用（违背 ADR-0004）；文件体积无限膨胀需要日志轮转器；调用记录作为瞬态会话观测，落盘性价比极低。
 
 ### Option 2: Global EventBus Broadcast & Reactive Subscriptions
 - **Description**: 在 `executeSessionCall` 完成后向全局 EventEmitter 广播事件，前端 WebSocket 直接监听。
@@ -64,12 +64,12 @@
 ### Option 3 (Chosen): Bounded In-Memory Ring Buffer + Read-Only Telemetry Facade + Native Web View Slot
 - **Description**:
   1. 在后端实现轻量纯内存环形缓冲区 `CallTelemetryRingBuffer`（默认容量 200 条，FIFO 淘汰）；
-  2. `executeSessionCall` 在投递成功后同步（或微任务异步）记录 1 条轻量遥测快照；
+  2. `executeSessionCall` 在投递成功后同步（或微任务异步）记录 1 条轻量调用记录快照；
   3. 提供只读门面接口 `getCanvasTelemetry({ workspace, crossWorkspace, limit })` 聚合会话、黑板与连线；
-  4. 遥测接口作为内部查询暴露给 Web 前端，不向 Agent 暴露为 LLM Tool，避免影响 KV Cache；
+  4. 调用记录接口作为内部查询暴露给 Web 前端，不向 Agent 暴露为 LLM Tool，避免影响 KV Cache；
   5. 前端通过 `conversation.view` 插槽挂载「看板」视图，采用 SVG + DOM 分层渲染与 RAF 节流实现 60fps。
 - **Pros**: 内存开销小、无磁盘 I/O、无被动唤醒、内存占用受限、不影响 Prompt KV Cache、契合 DSH 原生扩展规范。
-- **Cons**: 宿主进程重启后瞬态连线重置（拓扑自动基于存活会话与黑板重新投影，符合实时遥测预期）。
+- **Cons**: 宿主进程重启后瞬态连线重置（拓扑自动基于存活会话与黑板重新投影，符合实时观测预期）。
 
 ---
 
@@ -80,15 +80,15 @@
 ### 4.1 架构原则
 
 1. **Invariant 1 (Strict Read-Only Boundary)**：
-   看板与遥测服务作为只读观察者，不包含修改数据、删除会话或反向触发调用的入口。
+   看板与调用记录服务作为只读观察者，不包含修改数据、删除会话或反向触发调用的入口。
 2. **Invariant 2 (Zero Passive Wake-up Invariant)**：
-   获取拓扑快照和遥测记录直接在内存中读取，不调用任何会话的 `steer`, `followup`, `send` 或触发 prompt 执行。
+   获取拓扑快照和调用记录直接在内存中读取，不调用任何会话的 `steer`, `followup`, `send` 或触发 prompt 执行。
 3. **Invariant 3 (Bounded FIFO Memory Invariant)**：
    `CallTelemetryRingBuffer` 设置容量上限（默认 200 条，配置项 `telemetryCapacity`，范围 10~2000）。当缓冲区满时，最旧记录自动弹出，防止内存无限增长。
 4. **Invariant 4 (Prompt KV Cache Defense Invariant)**：
-   遥测查询接口不作为 Tool 注入给智能体。保护服务端 Prefix KV Cache 幂等命中。
+   调用记录查询接口不作为 Tool 注入给智能体。保护服务端 Prefix KV Cache 幂等命中。
 5. **Invariant 5 (Workspace Isolation Invariant)**：
-   遥测查询默认隔离在当前工作区；只有显式传递 `cross_workspace: true` 时才返回所有工作区数据。
+   调用记录查询默认隔离在当前工作区；只有显式传递 `cross_workspace: true` 时才返回所有工作区数据。
 
 ### 4.2 拓扑数据
 
@@ -193,7 +193,7 @@ export interface CanvasTelemetrySnapshot {
 }
 
 /**
- * 聚合全景遥测快照（只读无副作用）
+ * 聚合全景调用记录快照（只读无副作用）
  */
 export function getCanvasTelemetry(
   ctx: any,
@@ -203,7 +203,7 @@ export function getCanvasTelemetry(
 
 #### 4.3.3 路由契约
 
-浏览器端看板无法直接访问宿主进程内存，遥测快照必须经由一条宿主注册的只读 HTTP 路由暴露。该路由是看板唯一的数据入口：
+浏览器端看板无法直接访问宿主进程内存，调用记录快照必须经由一条宿主注册的只读 HTTP 路由暴露。该路由是看板唯一的数据入口：
 
 ```javascript
 export const TELEMETRY_ROUTE_PATH = '/plugins/dsh-call-session/telemetry';
@@ -253,13 +253,13 @@ ctx.slots.inject('conversation.view', () => ctx.slots.register({
 ### 5.1 Positive Consequences (Benefits)
 - **只读可观测性**：呈现多 Agent 交互拓扑与黑板状态，辅助多智能体协作排障；
 - **无状态破坏风险**：纯只读透视，无反向控制渠道，避免会话或黑板数据误删；
-- **无被动唤醒**：遥测读取依赖内存镜像，符合 ADR-0001 架构规范；
-- **不影响 Prompt KV Cache**：遥测服务不暴露为 LLM Tool，系统提示词不变，保持首字响应性能；
+- **无被动唤醒**：调用记录读取依赖内存镜像，符合 ADR-0001 架构规范；
+- **不影响 Prompt KV Cache**：调用记录服务不暴露为 LLM Tool，系统提示词不变，保持首字响应性能；
 - **恒定内存消耗**：环形缓冲区大小受限（默认 200），内存占用受控，无磁盘 I/O 阻塞。
 
 ### 5.2 Negative Consequences & Mitigations
 - **瞬态调用在宿主重启后清空**：
-  - *Mitigation*: 会话实体与黑板条目通过原有机制保留与持久化，拓扑图基于存活状态重新投影。调用连线作为瞬态遥测流动，重启后重置。
+  - *Mitigation*: 会话实体与黑板条目通过原有机制保留与持久化，拓扑图基于存活状态重新投影。调用连线作为瞬态观测数据流动，重启后重置。
 - **高频调用时的前端渲染负载**：
   - *Mitigation*: 执行 RAF 批量合并调度与视口裁剪，连线粒子动效采用 GPU CSS 合成。
 
@@ -273,10 +273,19 @@ ctx.slots.inject('conversation.view', () => ctx.slots.register({
 2. **Zero-Wakeup 验证**：
    - 在有 3 个处于 idle 状态的会话时，连续调用 100 次 `getCanvasTelemetry()`，验证 3 个会话的被动唤醒次数为 0。
 3. **KV Cache 验证**：
-   - 检查 Agent `tools` 列表与 System Prompt，确认无新增 LLM 遥测工具，保证提示词指纹幂等。
+   - 检查 Agent `tools` 列表与 System Prompt，确认无新增 LLM 调用记录工具，保证提示词指纹幂等。
 4. **端到端链路验证**：
    - 断言前端请求路径与宿主注册路径字符串完全一致，防止链路断裂；
    - 验证认证围栏在 Connection 缺失（503）、未授权（401）、越权（403）三态下均在处理器执行前拦截；
    - 验证非 GET 方法一律 405 拦截，响应头携带 `allow: GET`；
    - 验证无 Web 宿主时 `installTelemetryWebSurface` 返回未注册且不抛错，插件保持 tool-only；
    - 验证 `internal/service` 事件在服务后绑定时能够补挂载，且重复调用幂等不重复注册。
+
+---
+
+## 7. Revision
+
+### 7.1 Revision 2026-10-29: 看板数据措辞
+
+1. 仅改措辞：正文中该视图数据的历史易混用词统一为「看板数据」或「调用记录」，不变式、容量、路由与标识符均未改动。
+2. 被替换的用词登记在 CONTEXT.md 的 _Avoid_ 列表，由全仓词汇门禁强制。

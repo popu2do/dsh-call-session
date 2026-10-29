@@ -1,41 +1,50 @@
 /**
  * CONTEXT.md declares a ubiquitous-language contract: each term carries an
- * _Avoid_ list of names that mean something else, or nothing at all. No other
- * file reads that list, so it stays declarative unless this one enforces it.
+ * _Avoid_ list of names that mean something else, or nothing at all. That list
+ * is the single source; this gate reads it at runtime and refuses to keep a
+ * second copy, so adding a term to CONTEXT.md is enough to enforce it.
  *
- * The second concern is narrower: a correct word spent on the wrong thing.
- * CONTEXT.md binds the canonical short ID to "session candidates and
- * 引用图元", so the word denotes the inline marker and not a figure.
+ * The scan covers every tracked text file except the two that either define the
+ * vocabulary or record it historically. Two narrower concerns stay here: the
+ * rendered figure copy, and the inline marker whose Chinese name is reserved.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 import { buildHtml, VIEWPORT } from './helpers/render-mention-demo.mjs';
+import {
+  VOCABULARY_EXEMPT,
+  findViolations,
+  formatViolations,
+  isScannedPath,
+  parseAvoidTerms
+} from './helpers/vocabulary.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, '..');
-
-const README_FILES = ['README.md', 'README_ZH.md'];
-
-// ADR-0033 4.4 fixes the content contract for the reference showcase, so the
-// prose it prescribes answers to the same vocabulary as the READMEs.
-const AUTHORED_ADR = 'docs/adrs/0033-public-surface-contract.md';
 
 function readText(relPath) {
   return fs.readFileSync(path.join(rootDir, relPath), 'utf8');
 }
 
-/** Every term CONTEXT.md tells authors not to use. */
 function avoidedTerms() {
-  const terms = [];
-  for (const line of readText('CONTEXT.md').split(/\r?\n/)) {
-    const match = line.match(/^_Avoid_:\s*(.+)$/);
-    if (match) terms.push(...match[1].split(',').map((term) => term.trim()).filter(Boolean));
-  }
-  return terms;
+  return parseAvoidTerms(readText('CONTEXT.md'));
+}
+
+function trackedTextFiles() {
+  const output = execFileSync('git', ['ls-files', '-z'], {
+    cwd: rootDir,
+    encoding: 'utf8',
+    maxBuffer: 32 * 1024 * 1024
+  });
+  return output
+    .split('\0')
+    .filter(Boolean)
+    .filter((relPath) => !VOCABULARY_EXEMPT.has(relPath) && isScannedPath(relPath));
 }
 
 test('ubiquitous language: CONTEXT.md still declares an _Avoid_ list to enforce', () => {
@@ -46,20 +55,30 @@ test('ubiquitous language: CONTEXT.md still declares an _Avoid_ list to enforce'
   );
 });
 
-test('ubiquitous language: shipping documentation uses none of the avoided terms', () => {
+test('ubiquitous language: the matcher honours whole words, casing, and plurals', () => {
+  // Synthetic terms only: the repository scan below covers this file too.
+  const terms = ['flarn', '示例组件'];
+  const hits = (text) => findViolations(text, terms, 'probe').map((hit) => hit.term);
+
+  assert.deepEqual(hits('two flarns arrived'), ['flarn'], 'plural Latin term must match');
+  assert.deepEqual(hits('FLARN appears'), ['flarn'], 'Latin term matching must ignore casing');
+  assert.deepEqual(hits('flarnbox internals'), [], 'a longer compound word must not match');
+  assert.deepEqual(hits('innerflarn internals'), [], 'a term inside a longer word must not match');
+  assert.deepEqual(hits('示例组件说明'), ['示例组件'], 'Chinese term must match as a substring');
+  assert.deepEqual(hits('示例组'), [], 'a partial Chinese term must not match');
+});
+
+test('ubiquitous language: no tracked text file uses an avoided term', () => {
   const terms = avoidedTerms();
+  const files = trackedTextFiles();
+  assert.ok(files.length > 100, 'the gate must scan the repository, found ' + files.length + ' files');
 
-  for (const relPath of [...README_FILES, AUTHORED_ADR]) {
-    const body = readText(relPath);
-    const used = terms.filter((term) => body.includes(term));
-
-    assert.deepEqual(
-      used,
-      [],
-      relPath + ' must not use terms CONTEXT.md marks as avoid, found: ' + used.join(', ') +
-        ' (contract: ubiquitous language)'
-    );
+  const violations = [];
+  for (const relPath of files) {
+    violations.push(...findViolations(readText(relPath), terms, relPath));
   }
+
+  assert.deepEqual(violations, [], formatViolations(violations) + ' (contract: ubiquitous language)');
 });
 
 test('ubiquitous language: the rendered figure copy respects the same vocabulary', () => {
@@ -67,14 +86,8 @@ test('ubiquitous language: the rendered figure copy respects the same vocabulary
 
   for (const locale of ['en', 'zh']) {
     const html = buildHtml(locale, VIEWPORT);
-    const used = terms.filter((term) => html.includes(term));
-
-    assert.deepEqual(
-      used,
-      [],
-      locale + ' figure copy must not use terms CONTEXT.md marks as avoid, found: ' + used.join(', ') +
-        ' (contract: ubiquitous language)'
-    );
+    const violations = findViolations(html, terms, locale + ' figure');
+    assert.deepEqual(violations, [], formatViolations(violations) + ' (contract: ubiquitous language)');
   }
 });
 

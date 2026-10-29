@@ -3,6 +3,7 @@
 ## Primary Sources
 
 - **`CONTEXT.md`**: Authoritative glossary of domain terms and their `Avoid` lists. Use these exact terms in issue titles, specs, code, and tests.
+- **Vocabulary enforcement**: `tests/context-vocabulary.test.mjs` reads those `Avoid` lists at runtime and fails on any tracked text file that uses an avoided name, so adding a term to `CONTEXT.md` enforces it without editing the gate.
 - **`docs/adrs/`**: Architectural decision records (`0001` through `0034`), indexed in `docs/adrs/README.md` and verified by `tests/adr-integrity.test.mjs`. When a proposal conflicts with an accepted ADR, surface the conflict explicitly:
   > _Contradicts ADR-XXXX (...), worth reopening because..._
 

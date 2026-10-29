@@ -1793,10 +1793,10 @@ test('ADR-0013 看板默认全局透视、首列固定当前工作区、移除�
     locale: 'zh'
   });
 
-  const swimlanesLayer = findNodeById(defaultGlobalView, 'dsh-canvas-swimlanes');
-  assert.ok(swimlanesLayer, 'dsh-canvas-swimlanes 必须存在');
-  assert.equal(swimlanesLayer.children.length, 2, '默认全局模式下渲染全部工作区列');
-  assert.equal(swimlanesLayer.children[0].props.key, '/ws/main', '首列工作区必须自动重排固定为当前工作区 /ws/main');
+  const workspaceColumnsLayer = findNodeById(defaultGlobalView, 'dsh-canvas-workspace-group-columns');
+  assert.ok(workspaceColumnsLayer, 'dsh-canvas-workspace-group-columns 必须存在');
+  assert.equal(workspaceColumnsLayer.children.length, 2, '默认全局模式下渲染全部工作区列');
+  assert.equal(workspaceColumnsLayer.children[0].props.key, '/ws/main', '首列工作区必须自动重排固定为当前工作区 /ws/main');
 
   const nodesLayer = findNodeById(defaultGlobalView, 'dsh-canvas-nodes');
   assert.ok(nodesLayer, 'dsh-canvas-nodes 必须存在');
@@ -1960,9 +1960,9 @@ test('ADR-0013 看板默认全局透视、首列固定当前工作区、移除�
     sessionId: 'session-inferred',
     t: tZh
   });
-  const swimlanesInferred = findNodeById(viewInferred, 'dsh-canvas-swimlanes');
-  assert.ok(swimlanesInferred, 'dsh-canvas-swimlanes 必须存在');
-  assert.equal(swimlanesInferred.children[0].props.key, '/ws/inferred', '基于当前 sessionId 反查的工作区必须成功置首');
+  const workspaceColumnsInferred = findNodeById(viewInferred, 'dsh-canvas-workspace-group-columns');
+  assert.ok(workspaceColumnsInferred, 'dsh-canvas-workspace-group-columns 必须存在');
+  assert.equal(workspaceColumnsInferred.children[0].props.key, '/ws/inferred', '基于当前 sessionId 反查的工作区必须成功置首');
 });
 
 test('Topology Relationship Edges Contrast & WCAG 2.1 Compliance (PRD §3.1, §4.1 & Task t10)', () => {
@@ -2836,7 +2836,7 @@ test('ADR-0019 常态按需显影与历史调用连线抑制测试', () => {
     ],
     posts: [],
     calls: [
-      // 活跃调用 (5s 内)：常态下必须渲染
+      // 状态 active 的新鲜调用 (5s 内)：常态下必须渲染
       { id: 'call-fresh', callerSessionId: 's1', targetSessionId: 's2', callType: 'task_dispatch', timestamp: now - 5000, status: 'active' },
       // 已结算调用：常态下返回 null，避免连线冗余
       { id: 'call-settled', callerSessionId: 's1', targetSessionId: 's2', callType: 'task_report', timestamp: now - 3000, status: 'settled' },
@@ -2846,13 +2846,13 @@ test('ADR-0019 常态按需显影与历史调用连线抑制测试', () => {
     metrics: { totalSessions: 2, runningSessions: 0, activeCalls: 1, totalPosts: 0 }
   };
 
-  // 1. 常态下无交互：已结算和历史过期连线完全抑制，仅渲染 1 条活跃新鲜调用
+  // 1. 常态下无交互：已结算和历史过期连线完全抑制，仅渲染 1 条 active 新鲜调用
   const { view: defaultView } = createTestCanvasHarness(mockCanvasData);
   const defaultEdgesGroup = findVNodes(defaultView, (n) => n && n.props && n.props.id === 'dsh-canvas-call-edges')[0];
   assert.ok(defaultEdgesGroup, 'dsh-canvas-call-edges 容器必须存在');
 
   const renderedEdges = defaultEdgesGroup.children.filter(Boolean);
-  assert.equal(renderedEdges.length, 1, '常态下仅渲染 1 条活跃新鲜调用边');
+  assert.equal(renderedEdges.length, 1, '常态下仅渲染 1 条 active 新鲜调用边');
   assert.equal(renderedEdges[0].props.key, 'call-fresh', '常态下渲染的边必须为活跃新鲜调用');
 
   // 2. 悬停交互：悬停 s1 节点时，按需显影点亮关联链路，赋予 dsh-pulse-edge 脉冲实线且不透明度为 1.0
@@ -2865,7 +2865,7 @@ test('ADR-0019 常态按需显影与历史调用连线抑制测试', () => {
   assert.ok(highlightedEdges.some((e) => e.props.key === 'call-historical'), '常态抑制的历史过期调用在悬停时显影复苏');
 
   const freshEdge = highlightedEdges.find((e) => e.props.key === 'call-fresh');
-  assert.ok(freshEdge, '活跃调用边存在');
+  assert.ok(freshEdge, 'active 调用边存在');
   const pulsePath = findVNodes(freshEdge, (n) => n && n.props && n.props.className && n.props.className.includes('dsh-pulse-edge'))[0];
   assert.ok(pulsePath, '高亮关联连线中的可视化路径必须包含 dsh-pulse-edge 脉冲类');
   assert.equal(pulsePath.props.opacity, 1.0, '高亮关联连线不透明度严格为 1.0');
@@ -2892,16 +2892,16 @@ test('ADR-0019 & Task t5 反向调用链路与动效不变式全量验收: 目�
     metrics: { totalSessions: 3, runningSessions: 1, activeCalls: 1, totalPosts: 0 }
   };
 
-  // 1. 常态未交互：已结算和历史过期调用严格零渲染，仅渲染 1 条活跃新鲜调用
+  // 1. 常态未交互：已结算和历史过期调用严格零渲染，仅渲染 1 条 active 新鲜调用
   const { view: defaultView } = createTestCanvasHarness(mockCanvasData);
   const defaultEdgesGroup = findVNodes(defaultView, (n) => n && n.props && n.props.id === 'dsh-canvas-call-edges')[0];
   const defaultEdges = defaultEdgesGroup.children.filter(Boolean);
-  assert.equal(defaultEdges.length, 1, '常态下已结算和历史调用完全零渲染，仅渲染 1 条活跃新鲜调用');
+  assert.equal(defaultEdges.length, 1, '常态下已结算和历史调用完全零渲染，仅渲染 1 条 active 新鲜调用');
   assert.equal(defaultEdges[0].props.key, 'call-fresh');
 
-  // 动效验证：常态新鲜活跃调用为流动虚线 (6 4) 并携带 dsh-flow-edge
+  // 动效验证：常态新鲜active 调用为流动虚线 (6 4) 并携带 dsh-flow-edge
   const freshPath = findVNodes(defaultEdges[0], (n) => n && n.props && n.props.className && n.props.className.includes('dsh-flow-edge'))[0];
-  assert.ok(freshPath, '常态新鲜活跃调用具有 dsh-flow-edge 流动虚线动画');
+  assert.ok(freshPath, '常态新鲜active 调用具有 dsh-flow-edge 流动虚线动画');
   assert.equal(freshPath.props.strokeDasharray, '6 4', '流动虚线样式为 6 4');
 
   // 2. 悬停目标节点 s2：反向调用链路点亮上游 caller 与全量连线

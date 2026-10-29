@@ -5,7 +5,7 @@
  * 1. Native Tools:
  *    - board_post, board_list, board_clear: Shared state blackboard storage and queries
  *    - session_call: In-process unicast communication (steer/followup)
- *    - session_query: Active session discovery with workspace filtering
+ *    - session_query: Live session discovery with workspace filtering
  * 2. Lifecycle Disposal:
  *    - Reversible cleanup and state persistence on dispose
  */

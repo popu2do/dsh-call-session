@@ -24,14 +24,14 @@
 
 - **Single Event Loop Discipline**: 所有纯内存操作必须在个位数毫秒内完成，不得阻塞 Node.js 事件循环。
 - **Bounded Resource Footprint**: 进程内各级缓存与状态结构必须具备明确上限，长期常驻内存（RSS）增量严格可控。
-- **Non-Intrusive Observability**: Web 看板与遥测聚合必须严格保持只读，其自身开销不得扰动核心调度业务。
+- **Non-Intrusive Observability**: Web 看板与调用记录聚合必须严格保持只读，其自身开销不得扰动核心调度业务。
 - **Zero-Flake CI Reliability**: 性能门禁测试必须在兼顾严格量化的同时，具备对慢速 CI 环境的防抖动冗余。
 
 ---
 
 ## 2. Decision Drivers
 
-- **Driver 1 (Deterministic Latency SLA)**: 为黑板读取、单播投递、遥测路由制定量化 P99 延迟上限。
+- **Driver 1 (Deterministic Latency SLA)**: 为黑板读取、单播投递、调用记录路由制定量化 P99 延迟上限。
 - **Driver 2 (I/O Coalescing & Atomicity)**: 严格落实 300ms 防抖合并落盘，单次原子重命名与备份同步控制在 50ms 内。
 - **Driver 3 (Memory & Capacity Boundedness)**: 固化黑板 200 条、调用记录 200 条上限及状态感知淘汰规则，限定插件常驻内存增量 ≤ 30MB。
 - **Driver 4 (60 FPS & Throttled Polling)**: 保障前端 50 节点 + 100 连线规模下单帧计算 ≤ 16ms，确立前台 1500ms / 后台 5000ms / 隐藏 5 分钟挂起的节流策略。
@@ -71,7 +71,7 @@
 - **目录检索**：`SessionDirectory` 全量会话扫描与过滤，耗时 P99 ≤ 10ms。
 - **配额拦截**：单工作区并发运行根会话达 5 个（口径与上限修订自 ADR-0021；或代际深度达 2、频控超 5次/分）时，拦截判定为同步阻断，耗时 ≤ 1ms。
 
-#### Invariant 3: Web 看板与遥测聚合不变量 (Web Canvas & Route Baseline)
+#### Invariant 3: Web 看板与调用记录聚合不变量 (Web Canvas & Route Baseline)
 - **路由聚合**：GET `/plugins/dsh-call-session/telemetry` 快照聚合与 JSON 序列化，耗时 P99 ≤ 20ms。
 - **渲染流畅度**：单画布在 50 会话节点 + 100 条调用连线规模下，单次通道分流走线与布局计算耗时 ≤ 16ms（保障 60 FPS）。
 - **轮询能耗节流**：
@@ -83,7 +83,7 @@
 - **黑板容量**：硬上限 200 条，单条正文内容截断 64KB (65536 字符)。
 - **淘汰优先级**：满额写入时执行确定性状态感知淘汰：
   `已过期 (expired) -> 已撤销 (archived) -> 最旧创建活跃条目 (createdAtMs)`
-- **调用遥测缓冲区**：`CallTelemetryRingBuffer` 容量上限 200 条，单条摘要截断 120 字符，完整正文截断 8192 字符。
+- **调用记录环形缓冲区**：`CallTelemetryRingBuffer` 容量上限 200 条，单条摘要截断 120 字符，完整正文截断 8192 字符。
 - **内存预算**：插件全量运行时在长周期压测下的常驻内存（RSS）增量预算上限为 ≤ 30MB。
 
 ---
@@ -154,8 +154,8 @@
    - `session_call` 内存调度耗时中位数验证（断言 ≤ 6ms，基准 2ms）；
    - `SessionDirectory` 全量扫描耗时中位数验证（断言 ≤ 30ms，基准 10ms）；
    - 配额超额同步拦截耗时验证（断言 ≤ 3ms，基准 1ms）；
-3. **遥测路由与内存验证**：
-   - 遥测快照序列化耗时中位数验证（断言 ≤ 60ms，基准 20ms）；
+3. **调用记录路由与内存验证**：
+   - 调用记录快照序列化耗时中位数验证（断言 ≤ 60ms，基准 20ms）；
    - 大量操作后常驻内存 RSS 增量检查（断言 ≤ 30MB）；
 4. **客户端降频逻辑验证**：
    - 前台 1500ms、后台 5000ms、隐藏超 5 分钟清除定时器的状态转换逻辑断言。
@@ -165,6 +165,7 @@
 ## 7. Status History & Related Artifacts
 
 - **2026-09-18**: Proposed & Accepted following full-tier performance baseline consensus.
+- **2026-10-29**: Wording only — the retired jargon for canvas view data is replaced with 调用记录 / 看板数据; no budget, threshold, or invariant changed.
 - **Related ADRs**:
   - Related to: [ADR-0004](./0004-atomic-debounced-persistence-and-healing.md) (Persistence & Windows Locks)
   - Related to: [ADR-0010](./0010-dynamic-state-mirror-and-peer-session-lifecycle.md) (KV Cache & Session Lifecycle)
