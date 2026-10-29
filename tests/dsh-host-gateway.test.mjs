@@ -20,6 +20,7 @@ import {
   resolveRootAgentsService,
   resolveEffectiveModel,
   resolvePeerAgentOptions,
+  resolveResumeAgentOptions,
   resolvePresetSetup,
   resolvePeerPresetAndSetup,
   createRootAgent,
@@ -223,6 +224,38 @@ test('Effective Model - 显式入参覆盖与模型/推理强度重置', () => {
   });
   assert.equal(resAlias.provider, 'google');
   assert.equal(resAlias.model, 'gemini-2.0-pro');
+});
+
+test('Cold Resume Options - 只投影模型三键且要求 model 就位', () => {
+  // 调用方带完整三元组，其余选项被裁掉
+  const callerAgent = createMockAgent({
+    options: {
+      provider: 'deepseek',
+      model: 'deepseek-chat',
+      reasoningEffort: 'high',
+      cwd: '/elsewhere',
+      preset: 'worker',
+      temperature: 0.3
+    }
+  });
+  assert.deepEqual(resolveResumeAgentOptions({ callerAgent }), {
+    provider: 'deepseek',
+    model: 'deepseek-chat',
+    reasoningEffort: 'high'
+  });
+
+  // 无调用方模型时回落宿主默认选择
+  const ctx = {
+    agentDefaultModel: {
+      currentSelection: () => ({ provider: 'host-provider', model: 'host-model' })
+    }
+  };
+  assert.deepEqual(resolveResumeAgentOptions({ ctx }), { provider: 'host-provider', model: 'host-model' });
+
+  // 只有 provider 或只有 reasoningEffort 时不可生存，整体省略 agentOptions
+  assert.equal(resolveResumeAgentOptions({ callerAgent: createMockAgent({ options: { provider: 'only-provider' } }) }), undefined);
+  assert.equal(resolveResumeAgentOptions({ callerAgent: createMockAgent({ options: { reasoningEffort: 'max' } }) }), undefined);
+  assert.equal(resolveResumeAgentOptions({}), undefined);
 });
 
 // -----------------------------------------------------------------------------

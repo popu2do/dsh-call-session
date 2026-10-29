@@ -830,3 +830,44 @@ test('executeSessionCall: 目标处于错误态时阻断 dispatch 并转存 repo
   assert.ok(postedPosts[0].content.includes('Final deliverable content'));
   assert.ok(resReport.fallbackPostId, '返回值必须携带转存 post.id');
 });
+
+test('session_call 冷恢复经组合根注入解析器带上调用方有效模型 (ADR-0038)', async () => {
+  const caller = createMockAgent('session-caller-0001', {
+    cwd: 'c:/workspace/main',
+    title: 'Captain',
+    options: {
+      provider: 'deepseek-account',
+      model: 'deepseek-v4.1',
+      cwd: 'c:/caller/cwd',
+      preset: 'caller-preset'
+    }
+  });
+  const persisted = createMockAgent('session-cold-target-0001', {
+    cwd: 'c:/workspace/main',
+    title: 'Cold Worker',
+    status: 'idle'
+  });
+
+  const resumeArgs = [];
+  const ctx = createMockCtx({ agentsList: [caller] });
+  ctx.agents.resume = async (resumeOptions) => {
+    resumeArgs.push(resumeOptions);
+    return { agent: persisted };
+  };
+
+  const res = await executeSessionCall({
+    ctx,
+    args: { target_session_id: 'session-cold-target-0001', message: 'wake up', call_type: 'task_dispatch' },
+    exec: { agent: caller }
+  });
+
+  assert.equal(res.success, true, '冷恢复成功后必须继续完成投递');
+  assert.deepEqual(
+    resumeArgs,
+    [{
+      resumeSessionId: 'session-cold-target-0001',
+      agentOptions: { provider: 'deepseek-account', model: 'deepseek-v4.1' }
+    }],
+    '冷恢复必须由 lib/session-call.mjs 注入解析器并只投影模型三键'
+  );
+});

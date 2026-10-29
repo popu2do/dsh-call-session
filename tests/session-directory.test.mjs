@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { SessionDirectory, executeSessionQuery, resolveNativeSessionStatus, classifyError } from '../lib/session-directory.mjs';
 import { createMockAgent } from './helpers/mock-agent.mjs';
+import { resolveResumeAgentOptions } from '../lib/dsh-host-gateway.mjs';
 import { normalizeWorkspace } from '../lib/board-store.mjs';
 
 function createMockCordis(liveAgents = [], archivedIds = []) {
@@ -21,11 +22,27 @@ function createMockCordis(liveAgents = [], archivedIds = []) {
     get(name) {
       if (name === 'agents') return this.agents;
       if (name === 'workspaceRegistry') return this.workspaceRegistry;
+      if (name === 'agentDefaultModel') return this.agentDefaultModel;
       return null;
     }
   };
 }
 
+/** 伪造冷会话：内存查不到、持久层可恢复，并记录 resume 入参 */
+function stubColdResume(ctx, persisted) {
+  const calls = [];
+  ctx.agents.get = () => null;
+  ctx.agents.resume = async resumeOptions => {
+    calls.push(resumeOptions);
+    return { agent: persisted };
+  };
+  return calls;
+}
+
+/** 与生产路径一致：冷恢复的模型三键由调用方解析后注入 */
+function resumeModelResolver(ctx, callerAgent) {
+  return () => resolveResumeAgentOptions({ ctx, callerAgent });
+}
 
 test('SessionDirectory: resolveCwd and resolveWorkspace', () => {
   const dir = new SessionDirectory({});
@@ -285,6 +302,136 @@ test('SessionDirectory: resolveTarget 冷恢复向持久层传入规范 id 形�
   assert.equal(resolved.targetAgent.id, canonicalId);
   assert.equal(resolved.targetTitle, 'Persisted');
   assert.deepEqual(resumeCalls, [canonicalId]);
+});
+
+test('SessionDirectory: 冷恢复继承调用方的有效模型', async () => {
+  const canonicalId = 'session-7b3391ba-df1b-4b9d';
+  const caller = createMockAgent({
+    id: 'session-caller-11112222',
+    cwd: '/repo',
+    options: { provider: 'deepseek-account', model: 'deepseek-flash', reasoningEffort: 'max' }
+  });
+  const persisted = createMockAgent({ id: canonicalId, title: 'Persisted', cwd: '/repo' });
+  const ctx = createMockCordis([caller]);
+  const resumeArgs = stubColdResume(ctx, persisted);
+
+  const dir = new SessionDirectory(ctx);
+  const resolved = await dir.resolveTarget(canonicalId, {
+    callerSessionId: caller.id,
+    callerAgent: caller,
+    resolveResumeAgentOptions: resumeModelResolver(ctx, caller)
+  });
+
+  assert.equal(resolved.targetAgent.id, canonicalId);
+  assert.deepEqual(resumeArgs, [{
+    resumeSessionId: canonicalId,
+    agentOptions: { provider: 'deepseek-account', model: 'deepseek-flash', reasoningEffort: 'max' }
+  }]);
+});
+
+test('SessionDirectory: 冷恢复无调用方模型时回退宿主默认选择', async () => {
+  const canonicalId = 'session-7b3391ba-df1b-4b9d';
+  const persisted = createMockAgent({ id: canonicalId, title: 'Persisted', cwd: '/repo' });
+  const ctx = createMockCordis([]);
+  ctx.agentDefaultModel = { currentSelection: () => ({ provider: 'host-provider', model: 'host-model' }) };
+  const resumeArgs = stubColdResume(ctx, persisted);
+
+  const dir = new SessionDirectory(ctx);
+  await dir.resolveTarget(canonicalId, { resolveResumeAgentOptions: resumeModelResolver(ctx, undefined) });
+
+  assert.deepEqual(resumeArgs, [{
+    resumeSessionId: canonicalId,
+    agentOptions: { provider: 'host-provider', model: 'host-model' }
+  }]);
+});
+
+test('SessionDirectory: 冷恢复只透传模型三键，不泄漏调用方其他选项', async () => {
+  const canonicalId = 'session-7b3391ba-df1b-4b9d';
+  const caller = createMockAgent({
+    id: 'session-caller-11112222',
+    cwd: '/repo',
+    options: { provider: 'caller-provider', model: 'caller-model', cwd: '/elsewhere', preset: 'worker', temperature: 0.3 }
+  });
+  const persisted = createMockAgent({ id: canonicalId, title: 'Persisted', cwd: '/repo' });
+  const ctx = createMockCordis([caller]);
+  const resumeArgs = stubColdResume(ctx, persisted);
+
+  const dir = new SessionDirectory(ctx);
+  await dir.resolveTarget(canonicalId, {
+    callerSessionId: caller.id,
+    callerAgent: caller,
+    resolveResumeAgentOptions: resumeModelResolver(ctx, caller)
+  });
+
+  assert.deepEqual(resumeArgs[0].agentOptions, { provider: 'caller-provider', model: 'caller-model' });
+});
+
+test('SessionDirectory: 冷恢复模型解析失败时仍发起 resume', async () => {
+  const canonicalId = 'session-7b3391ba-df1b-4b9d';
+  const persisted = createMockAgent({ id: canonicalId, title: 'Persisted', cwd: '/repo' });
+  const caller = createMockAgent({ id: 'session-caller-11112222', cwd: '/repo' });
+
+  const ctx = createMockCordis([caller]);
+  const resumeArgs = stubColdResume(ctx, persisted);
+  const debugLogs = [];
+  const otherLogs = [];
+  const logger = {
+    debug: message => debugLogs.push(message),
+    info: message => otherLogs.push(message),
+    warn: message => otherLogs.push(message),
+    error: message => otherLogs.push(message)
+  };
+
+  const dir = new SessionDirectory(ctx, { logger });
+  const resolved = await dir.resolveTarget(canonicalId, {
+    callerAgent: caller,
+    resolveResumeAgentOptions: () => {
+      throw new Error('caller options unavailable');
+    }
+  });
+
+  assert.equal(resolved.targetAgent.id, canonicalId);
+  assert.deepEqual(resumeArgs, [{ resumeSessionId: canonicalId }]);
+  assert.deepEqual(otherLogs, [], '解析失败不是 warn/error 级事件');
+  assert.equal(debugLogs.length, 1, '解析失败必须留下可观测痕迹');
+  assert.match(debugLogs[0], /Resolve agent options for "session-7b3391ba-df1b-4b9d" failed/);
+});
+
+test('SessionDirectory: 未注入解析器时冷恢复省略 agentOptions', async () => {
+  const canonicalId = 'session-7b3391ba-df1b-4b9d';
+  const persisted = createMockAgent({ id: canonicalId, title: 'Persisted', cwd: '/repo' });
+  const caller = createMockAgent({
+    id: 'session-caller-11112222',
+    cwd: '/repo',
+    options: { provider: 'deepseek-account', model: 'deepseek-flash' }
+  });
+  const ctx = createMockCordis([caller]);
+  const resumeArgs = stubColdResume(ctx, persisted);
+
+  const dir = new SessionDirectory(ctx);
+  await dir.resolveTarget(canonicalId, { callerSessionId: caller.id, callerAgent: caller });
+
+  assert.deepEqual(resumeArgs, [{ resumeSessionId: canonicalId }]);
+});
+
+test('SessionDirectory: 模型不完整时不传 agentOptions', async () => {
+  const canonicalId = 'session-7b3391ba-df1b-4b9d';
+  const persisted = createMockAgent({ id: canonicalId, title: 'Persisted', cwd: '/repo' });
+
+  for (const options of [{ reasoningEffort: 'max' }, { provider: 'deepseek-account' }]) {
+    const caller = createMockAgent({ id: 'session-caller-11112222', cwd: '/repo', options });
+    const ctx = createMockCordis([caller]);
+    const resumeArgs = stubColdResume(ctx, persisted);
+
+    const dir = new SessionDirectory(ctx);
+    await dir.resolveTarget(canonicalId, {
+      callerSessionId: caller.id,
+      callerAgent: caller,
+      resolveResumeAgentOptions: resumeModelResolver(ctx, caller)
+    });
+
+    assert.deepEqual(resumeArgs, [{ resumeSessionId: canonicalId }], `不应为 ${JSON.stringify(options)} 挂载 agentOptions`);
+  }
 });
 
 test('SessionDirectory: resolveTarget 对短于下限的前缀仍抛参数错误', async () => {
