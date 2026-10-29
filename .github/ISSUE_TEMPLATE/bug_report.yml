@@ -1,29 +1,43 @@
 name: "Bug Report"
 description: "Report a bug or unexpected behavior in dsh-call-session"
 title: "[Bug]: "
-labels: ["bug"]
+labels: ["bug", "needs-triage"]
 
 body:
   - type: markdown
     attributes:
       value: |
-        Search existing issues before submitting to avoid duplicates.
+        Thanks for reporting an issue. Please search existing issues before opening a new report and redact any credentials, tokens, or local home directory paths.
+
+  - type: dropdown
+    id: surface
+    attributes:
+      label: "Plugin Surface"
+      description: "Which capability or subsystem is affected?"
+      options:
+        - "Unicast Call / Session Creation (session_call, session_create, session_query)"
+        - "Public Blackboard (board_post, board_list, board_clear)"
+        - "Collaboration Canvas (/session-canvas UI, lineage routing, viewport)"
+        - "Peer Session Mention (@ composer trigger, two-level drill-down, dsh-session slice)"
+        - "DSH Host Gateway / Cordis lifecycle activation"
+    validations:
+      required: true
 
   - type: input
     id: environment
     attributes:
       label: "Runtime Environment"
-      description: "Node.js version, OS, and DeepSeek Harness version."
-      placeholder: "e.g. Node v20.12.0 / Windows 11 / DSH v0.1.1-rc.1"
+      description: "Plugin version, DeepSeek Harness version, Node.js version, and OS."
+      placeholder: "dsh-call-session v0.1.33 / DSH v0.2.0 / Node v22.x / Ubuntu 24.04"
     validations:
       required: true
 
   - type: textarea
     id: description
     attributes:
-      label: "Bug Description"
-      description: "A clear and concise description of what the bug is."
-      placeholder: "When calling session_call with target_session_id..."
+      label: "Observed Behavior"
+      description: "Describe what happened, including tool return values, session states (running / idle / error), or canvas behavior."
+      placeholder: "Calling session_call with targetSessionId returns..."
     validations:
       required: true
 
@@ -31,11 +45,11 @@ body:
     id: reproduction
     attributes:
       label: "Steps to Reproduce"
-      description: "Steps to reproduce the observed problem."
+      description: "Minimal steps or session configuration to reproduce the behavior."
       value: |
-        1. Configure plugin in `cordis.patch.yml` or DSH config
-        2. Run command or trigger tool call: ...
-        3. See error ...
+        1. Configure `dsh-call-session` in `cordis.patch.yml`
+        2. Invoke tool or UI action: ...
+        3. Observe output: ...
     validations:
       required: true
 
@@ -43,23 +57,13 @@ body:
     id: expected
     attributes:
       label: "Expected Behavior"
-      description: "A clear and concise description of what you expected to happen."
+      description: "Describe what should have happened according to the tool contract or ADR."
     validations:
       required: true
 
   - type: textarea
     id: logs
     attributes:
-      label: "Console Logs / Error Output"
-      description: "Paste relevant command output, stack traces, or logs here."
+      label: "Logs / Redacted Output"
+      description: "Relevant console output, stack traces, or redacted session payloads."
       render: shell
-
-  - type: checkboxes
-    id: validation
-    attributes:
-      label: "Checklist"
-      options:
-        - label: "I have confirmed this bug exists on the latest release."
-          required: true
-        - label: "I have verified there are no sensitive tokens or private keys in the logs above."
-          required: true

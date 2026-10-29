@@ -1,32 +1,22 @@
-## Description
+## What this changes
 
-<!-- Describe your changes in detail, including motivation, context, and impact. -->
+<!-- Problem statement, architectural context, and summary of the change. -->
 
-## Related Issues
+## Related issue or ADR
 
-<!-- Link related issue: Fixes #123 or Closes #456 -->
+<!-- Link the triaged issue and any relevant ADR in docs/adrs/: Fixes #123 -->
 Fixes #
 
-## Type of Change
+## Affected surfaces
 
-- [ ] Bug fix (non-breaking change which fixes an issue)
-- [ ] New feature (non-breaking change which adds functionality)
-- [ ] Breaking change (fix or feature that would cause existing functionality to not work as expected)
-- [ ] Documentation update (README, ADRs, JSDoc)
-- [ ] Tests (adding missing tests or fixing existing ones)
-- [ ] Engineering / CI/CD / Chore (workflow, configuration, scripts)
+- [ ] Collaboration tools / runtime state (`lib/tools-registry.mjs`, `lib/session-gateway.mjs`, `lib/blackboard-store.mjs`)
+- [ ] DSH host gateway / Cordis lifecycle (`index.mjs`, `lib/host-services.mjs`)
+- [ ] Collaboration Canvas / `@` Peer Session Mention UI (`lib/client.js`, `lib/mention-picker.js`, `lib/locales/table.mjs`)
+- [ ] Public documentation / presence manifest (`README.md`, `README_ZH.md`, `presence.json`, `docs/adrs/`)
 
-## Verification & Testing
+## Checks
 
-<!-- Describe how you verified these changes. -->
-- [ ] Ran `npm run lint` (syntax check passed)
-- [ ] Ran `npm test` (all unit test suites passed)
-- [ ] Verified Node.js runtime compatibility (Node 20 / 22)
-- [ ] Ran `npm pack --dry-run` to confirm package bundle purity and size
-
-## Quality & Compliance Checklist
-
-- [ ] Code adheres to project coding style and zero-trace principle.
-- [ ] I have updated corresponding documentation and type definitions if applicable.
-- [ ] No sensitive credentials, private tokens, or test keys are committed.
-- [ ] Git diff is clean and contains no residual debugging artifacts.
+- [ ] `npm run verify` passes (`npm run lint` + `npm test`)
+- [ ] `npm run typecheck` passes (`types/index.d.ts` aligned)
+- [ ] `node scripts/scan-secrets.mjs --all` passes with zero findings
+- [ ] `npm pack --dry-run` confirms published tarball contents
