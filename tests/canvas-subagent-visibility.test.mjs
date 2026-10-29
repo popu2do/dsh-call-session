@@ -248,9 +248,9 @@ test('看板可见性 6: 只含隐藏会话的工作区不留下空列', () => {
   const runtime = createCanvasRuntime({ telemetry });
   const view = runtime.render('session-a');
 
-  const swimlanes = findVNodes(view, (n) => n && n.props && n.props.id === 'dsh-canvas-swimlanes')[0];
-  assert.ok(swimlanes, '看板必须渲染工作区分组列层');
-  const columns = swimlanes.children.filter((child) => child && child.props && child.props.transform);
+  const workspaceGroupColumns = findVNodes(view, (n) => n && n.props && n.props.id === 'dsh-canvas-workspace-group-columns')[0];
+  assert.ok(workspaceGroupColumns, '看板必须渲染工作区分组列层');
+  const columns = workspaceGroupColumns.children.filter((child) => child && child.props && child.props.transform);
   assert.equal(columns.length, 2, '只含隐藏会话的工作区不得占据分组列');
   assert.deepEqual(
     sessionNodeIds(runtime, view).slice().sort(),
@@ -294,13 +294,13 @@ test('看板可见性 8: 当前工作区只剩隐藏会话时不留空列也不�
   const runtime = createCanvasRuntime({ telemetry });
   const view = runtime.render('session-c');
 
-  const swimlanes = findVNodes(view, (n) => n && n.props && n.props.id === 'dsh-canvas-swimlanes')[0];
-  assert.ok(swimlanes, '看板必须渲染工作区分组列层');
-  const columns = swimlanes.children.filter((child) => child && child.props && child.props.transform);
+  const workspaceGroupColumns = findVNodes(view, (n) => n && n.props && n.props.id === 'dsh-canvas-workspace-group-columns')[0];
+  assert.ok(workspaceGroupColumns, '看板必须渲染工作区分组列层');
+  const columns = workspaceGroupColumns.children.filter((child) => child && child.props && child.props.transform);
   assert.equal(columns.length, 1, '当前工作区已无绘制会话时不得保留零节点的空列');
   assert.deepEqual(sessionNodeIds(runtime, view), ['session-c'], '仅存的顶层会话必须落在保留的列内');
 
-  const headerTexts = findVNodes(swimlanes, (n) => n && n.type === 'text' && Array.isArray(n.children));
+  const headerTexts = findVNodes(workspaceGroupColumns, (n) => n && n.type === 'text' && Array.isArray(n.children));
   assert.equal(
     headerTexts.some((node) => node.children.some((text) => typeof text === 'string' && text.includes('当前'))),
     false,
@@ -427,11 +427,11 @@ test('看板可见性 14: 宿主下发的空当前列照旧渲染并标当前', 
   const runtime = createCanvasRuntime({ telemetry });
   const view = runtime.render('session-c');
 
-  const swimlanes = findVNodes(view, (n) => n && n.props && n.props.id === 'dsh-canvas-swimlanes')[0];
-  const columns = swimlanes.children.filter((child) => child && child.props && child.props.transform);
+  const workspaceGroupColumns = findVNodes(view, (n) => n && n.props && n.props.id === 'dsh-canvas-workspace-group-columns')[0];
+  const columns = workspaceGroupColumns.children.filter((child) => child && child.props && child.props.transform);
   assert.equal(columns.length, 2, '收窄没有隐藏任何会话，宿主下发的空当前列必须保留');
 
-  const headerTexts = findVNodes(swimlanes, (n) => n && n.type === 'text' && Array.isArray(n.children));
+  const headerTexts = findVNodes(workspaceGroupColumns, (n) => n && n.type === 'text' && Array.isArray(n.children));
   assert.equal(
     headerTexts.some((node) => node.children.some((text) => typeof text === 'string' && text.includes('当前'))),
     true,

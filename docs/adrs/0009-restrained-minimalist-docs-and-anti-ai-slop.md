@@ -90,6 +90,12 @@ User-facing documentation (`README.md` and `README_ZH.md`) must strictly adhere 
 3. **Section Divider Cadence**: Major Level-2 sections (`##`) are separated by horizontal dividers (`---`) to maintain scannability and visual rhythm.
 4. **Audience-Appropriate Terminal Sections**: Deprecates source-level developer test commands (`npm test`, `npm run verify`) in user READMEs in favor of an explicit Compatibility matrix (`## 兼容` / `## Compatibility`) and license declaration (`## 许可` / `## License`).
 
+### 4.4 Revision 2026-10-29: Single-Source Vocabulary Contract
+1. **Single Vocabulary Source**: The `_Avoid_` lines of `CONTEXT.md` are the only place a rejected synonym is written. Documentation, comments, test messages and identifiers are checked against that list by a machine gate at run time, and no module keeps its own copy of the terms.
+2. **Full-Scope Vocabulary Gate**: The vocabulary gate scans every tracked text file except the glossary itself, binary assets and the release changelog, which records shipped behaviour. Matching is word-boundary based for Latin terms and substring based for Chinese ones.
+3. **Identifiers Speak the Glossary**: Element identifiers, dictionary keys and test symbols carry canonical terms, so reading the source cannot teach a rejected word.
+4. **Terminology Revisions**: An accepted record may be edited for wording only, recorded as a revision subsection that states decision semantics are unchanged.
+
 ---
 
 ## 5. Consequences

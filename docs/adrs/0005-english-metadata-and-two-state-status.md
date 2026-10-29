@@ -12,7 +12,7 @@
 
 ### 1.1 Background & Pain Points
 
-Multi-agent coordination requires discovering active sessions and determining whether a peer is currently executing work or available for new assignments. DeepSeek Harness maintains complex internal session lifecycles with states such as `running`, `idle`, `waiting`, `aborted`, `completed`, `interrupted`, and `null`.
+Multi-agent coordination requires discovering live sessions and determining whether a peer is currently executing work or available for new assignments. DeepSeek Harness maintains complex internal session lifecycles with states such as `running`, `idle`, `waiting`, `aborted`, `completed`, `interrupted`, and `null`.
 
 Exposing these raw, transient internal states to LLM subagents caused significant operational friction:
 1. **Prompt Confusion & Hallucination**: When an agent saw a peer in `waiting` or `interrupted` status, LLMs frequently hallucinated that the agent had crashed permanently or required emergency reboot prompts, rather than recognizing that it was simply ready for its next turn.
@@ -225,3 +225,7 @@ Exposing these raw, transient internal states to LLM subagents caused significan
 - **Implementation Artifacts**:
   - `lib/session-query.mjs` (Line 8-51, 79-131)
   - `index.mjs` (Line 754-817)
+
+## Revision
+
+- 2026-10-29: Wording only — the living-session noun uses the canonical 存活会话 / live session naming; the two-state status model is unchanged.

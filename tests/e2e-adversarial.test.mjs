@@ -253,12 +253,12 @@ test('需求一端到端：条目清理消除与自然过期 (TTL Expiration)', 
 // Suite 2: 需求二并发与边界测试 (10-Active Quota Interception, Rate Limit, Boundary Titles, Orphan Prevention)
 // ---------------------------------------------------------------------------
 
-test('需求二端到端：活跃会话达配额上限拦截与配额释放', async () => {
+test('需求二端到端：运行中会话达配额上限拦截与配额释放', async () => {
   resetRateLimits();
   const initialAgent = createMockAgent('root-session', { cwd: 'c:/workspace/project-alpha', status: 'running' });
   const { ctx } = createMockHarness({ initialAgents: [initialAgent] });
 
-  // 初始工作区已有 1 个活跃会话 (root-session)
+  // 初始工作区已有 1 个运行中会话 (root-session)
   // 模拟多个不同会话发起创建（以避开单会话 5次/分 的限频，纯粹针对工作区 10 个配额硬防线对抗）
   const createdSessions = [];
 
@@ -294,7 +294,7 @@ test('需求二端到端：活跃会话达配额上限拦截与配额释放', as
 
   // 验证孤儿防范：被拦截的会话绝未遗留在 agents 服务中
   const liveCount = ctx.agents.list().length;
-  assert.equal(liveCount, 5, '活跃会话总数保持为 5');
+  assert.equal(liveCount, 5, '存活会话总数保持为 5');
 
   // 模拟归档其中 1 个会话，释放 1 个配额
   const archivedId = createdSessions[0];

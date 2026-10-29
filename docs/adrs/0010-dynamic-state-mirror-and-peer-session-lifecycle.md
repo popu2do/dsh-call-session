@@ -49,7 +49,7 @@
 3. **会话销毁后的过期条目积压**：
    - 当会话归档、销毁或终止后，其在黑板发布的临时协调条目长期滞留，影响其他 Agent 的决策。
 4. **同级会话创建能力缺失与子代理层级绑定限制**：
-   - 既有的 `subagent` 工具支持树状父子代理派生，绑定于父会话的执行上下文与生命周期，无法生成拥有独立执行循环、与发起方平级的根会话（Root Session）。
+   - 既有的 `subagent` 工具支持树状父子代理派生，绑定于发起方会话的执行上下文与生命周期，无法生成拥有独立执行循环、与发起方平级的根会话（Root Session）。
    - 缺乏通过工具直接编排、创建平级自治会话的受控通道。
 
 ### 1.2 Architectural Forces & Constraints
@@ -263,3 +263,11 @@ Active Posts (Memory)   Anti-Snapshot-Storm                      Quota & Rate Ch
   - `lib/board-store.mjs` (Cascade Cleanup, Mirror Projection Formatter)
   - `lib/session-create.mjs` (New Engine: Quota, Title Sanitizer, Fire-and-Forget Ignition)
   - `lib/session-query.mjs` (Concurrent Running Quota Calculation & Lifecycle Probes)
+
+---
+
+## 8. Revision
+
+### 8.1 Revision 2026-10-29: 顶层会话措辞
+
+Wording only: replace retired hierarchical session jargon with 发起方会话 per CONTEXT.md; no decision, invariant, or budget changed.

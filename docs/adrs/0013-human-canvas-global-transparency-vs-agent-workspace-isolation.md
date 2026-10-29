@@ -16,7 +16,7 @@ When ADR-0012 introduced the Collaboration Canvas, it mechanically copied this c
 This produced a fundamental architectural contradiction:
 1. **Broken Information Architecture**: The canvas was explicitly designed as a horizontal multi-column layout with cross-workspace call curves. Hiding external columns by default broke the visual purpose of the canvas.
 2. **Confused Target Audiences**: Workspace isolation is a guardrail for autonomous Agents, not a limitation for human observers. Forcing a human user to toggle a button to see peer projects in a bird's-eye view was an unnecessary friction.
-3. **Buzzword Drift**: The data interface was labeled with marketing jargon ("telemetry" / "遥测") instead of plain domain terminology ("看板数据" / "canvas data"), violating ADR-0009.
+3. **Buzzword Drift**: The data interface was labeled with marketing jargon instead of plain domain terminology ("看板数据" / "canvas data"), violating ADR-0009.
 
 ---
 
@@ -28,7 +28,7 @@ We explicitly decouple **Agent execution boundaries** from **human observer boun
 2. **Eliminate Toggle Button**: Remove the "跨工作区拓扑" toolbar button completely. The toolbar only retains fit view, locate current session, and zoom controls.
 3. **Pin Current Workspace First**: The workspace containing the user's current session is rendered as the first column on the left (marked `[Current]`), with other workspaces arranged to its right. §2.2.4 defines the only case where that column is absent: every session it held was hidden by the narrowing.
 4. **Data Route Simplification**: The canvas data endpoint (`/plugins/dsh-call-session/telemetry`) eliminates the `crossWorkspace` query parameter and unconditionally returns full workspace data.
-5. **Terminology Cleanup**: Discontinue the use of "遥测" in user-facing contexts, standardizing on "看板数据".
+5. **Terminology Cleanup**: Standardize user-facing naming on "看板数据" / canvas data and register the retired jargon in the CONTEXT.md avoid list.
 6. **Agent Sandbox Invariant**: Agent tools (`board_list`, `session_query`) strictly maintain their `cross_workspace: false` isolation default per ADR-0003.
 
 ### 2.1 Revision 2026-09-20: Viewport Fit, Clamped Session Locating, and Landed Pulse Feedback
@@ -98,6 +98,7 @@ The canvas treated every session in the payload as a collaboration peer, so dele
 - **2026-09-10**: Accepted by Architect, Frontend Lead, Core Maintainers
 - **2026-09-20**: §2.1 revised viewport fit, clamped locating and landed pulse feedback
 - **2026-10-29**: §2.2 revised canvas visibility to top-level sessions only
+- **2026-10-29**: §2.3 replaced retired jargon for canvas view data with 看板数据 across the body; retired jargon stays registered in the CONTEXT.md avoid list
 - **Revision history**: §2.1 (2026-09-20) and §2.2 (2026-10-29) were revised in place; this decision has no successor ADR
 - **Related ADRs**:
   - Supersedes: Workspace isolation for the human canvas (ADR-0012, see `docs/adrs/README.md`)

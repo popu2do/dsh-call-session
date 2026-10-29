@@ -44,7 +44,7 @@ Two long-running sessions hand work to each other; the canvas shows both workspa
 
 Type `@` in the composer to reference another session: the title is inserted into the message as a reference chip, and the model receives that session's read-only content.
 
-- Pick a workspace, then a session; sessions this one has already called or messaged come first.
+- Pick a workspace, then a session; sessions this one has already called or messaged come first, archived sessions never show, and a workspace emptied by archiving disappears.
 - The referenced session is not woken, no call is dispatched, and no connection appears on the canvas.
 
 ---

@@ -75,12 +75,12 @@ Accepted as the definitive localization architecture for `dsh-call-session`.
 - `[WorkspaceRegistryUnavailable]`: The host exposes no workspace registry, so cross-workspace creation cannot be validated and fails closed.
 - `[TargetNotFound]`: Target session ID or prefix cannot be matched or resolved.
 - `[SelfCallForbidden]`: Attempting to execute a unicast call targeting the caller session.
-- `[AmbiguousPrefix]`: Session prefix matches multiple active sessions.
+- `[AmbiguousPrefix]`: Session prefix matches multiple live sessions.
 - `[WildcardForbidden]`: Attempting wildcard dispatch in unicast calls.
 - `[RateLimitExceeded]`: Peer session creation rate exceeds quota.
 - `[GenerationLimitExceeded]`: Peer session derivation depth reaches ceiling.
 - `[QuotaExceeded]`: Concurrent running sessions reach budget.
-- `[DuplicateTitle]`: Peer session title collides with an active session.
+- `[DuplicateTitle]`: Peer session title collides with a live session.
 - `[ReservedTopic]`: Attempting to persist reserved telemetry topic to blackboard.
 - `[StorageError]`: Persistence or JSON serialization failure.
 - `[ServiceUnavailable]`: Required host capability or agent service unmounted or unavailable.
@@ -127,3 +127,4 @@ Accepted as the definitive localization architecture for `dsh-call-session`.
 ## 7. History and Notes
 
 - 2026-09-21: Initial draft proposed and accepted following architecture review and two-axis code review convergence.
+- 2026-10-29: Wording only — session nouns in the error catalog use 存活会话 / live session; message templates and identifiers unchanged.

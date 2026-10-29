@@ -147,7 +147,7 @@ test('通配符目标调用拦截检查', async () => {
 test('短前缀与歧义前缀调用处理', async () => {
   const caller = createMockAgent('session-caller-00000001');
 
-  // 构造两个相同前缀的活跃会话: "session-conflict-worker-1" vs "session-conflict-worker-2"
+  // 构造两个相同前缀的存活会话: "session-conflict-worker-1" vs "session-conflict-worker-2"
   const conflict1 = createMockAgent('session-conflict-worker-1');
   const conflict2 = createMockAgent('session-conflict-worker-2');
 
@@ -197,7 +197,7 @@ test('短前缀与歧义前缀调用处理', async () => {
   assert.equal(conflict1.received.length, 0);
   assert.equal(conflict2.received.length, 0);
 
-  // 3.3 归档会话剔除与唯一活跃会话匹配
+  // 3.3 归档会话剔除与唯一存活会话匹配
   // session-unique 匹配到 uniqueLive 和 archivedConflict，但 archived 必须自动排除，成功投递给 uniqueLive
   const okRes = await executeSessionCall(ctx, {
     target_session_id: 'session-unique',

@@ -1017,7 +1017,7 @@ test('new session 与未产生调用的新会话在看板中正常呈现 (PRD 2.
   assert.equal(snapshot.sessions.length, 2);
   const ids = snapshot.sessions.map(s => s.id);
   assert.ok(ids.includes('session-new-born-1234'), '新建会话必须在看板中立即可见');
-  assert.ok(ids.includes('session-existing-5678'), '活跃会话必须在看板中正常可见');
+  assert.ok(ids.includes('session-existing-5678'), '存活会话必须在看板中正常可见');
   assert.equal(snapshot.metrics.totalSessions, 2);
   assert.equal(snapshot.metrics.runningSessions, 1);
 
