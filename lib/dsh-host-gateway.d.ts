@@ -56,6 +56,11 @@ export declare function resolveEffectiveModel(params?: EffectiveModelParams): Re
 
 export declare const resolvePeerAgentOptions: typeof resolveEffectiveModel;
 
+export declare function resolveResumeAgentOptions(params?: {
+  ctx?: any;
+  callerAgent?: any;
+}): { provider?: string; model?: string; reasoningEffort?: string } | undefined;
+
 export declare function resolvePresetSetup(params?: PresetSetupParams): Promise<PresetSetupResult>;
 
 export declare const resolvePeerPresetAndSetup: typeof resolvePresetSetup;
