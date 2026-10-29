@@ -1,22 +1,22 @@
-# 规格说明: 同级会话工作区发现与本地引用规范
+# Peer Session Mention Specification
 
 ## Problem Statement
 
-用户在输入框键入 @ 符号引用同级会话时，面临界面重绘打扰与列表脏乱问题：
-系统自带的原生功能会在后台向远端服务器发起全量会话查询，耗时两秒才能返回。此时两套功能产生冲突，原生慢速查询返回后会强制重绘输入菜单，将大量历史审查子任务与已终结死会话覆盖在最顶层，导致光标焦点丢失，界面剧烈闪烁，真正需要协作的同级会话被挤出视野。
+When referencing a peer session by typing `@` in the composer, users face disruption from UI redraws and noisy candidate lists:
+The host default session query issues an unconstrained remote query across all workspaces that takes up to two seconds to return. When that slow remote fetch completes, it forces a redraw over the candidate menu, obscuring the target with internal subagents and terminated dead sessions. This drops cursor focus, causes layout jitter, and pushes the intended peer session out of view.
 
 ## Solution
 
-在不破坏系统自带文件搜索的前提下，由插件接管会话排位优先级与展示逻辑：
-第一，保留系统原生搜文件与搜目录功能，完全不予破坏；
-第二，将插件来源的优先级提升至最顶端，保证选工作区与选会话的操作永远稳居首位，光标不被抢占；
-第三，用户进入具体工作区后，二级会话列表完全基于本地内存秒级解析，不发起耗时两秒的远端慢速查询，从源头切断二次重刷新；
-第四，严格过滤所有跑腿子任务与已归档死会话，仅展示当前工作区内独立自治的活跃根会话；
-第五，参与过单播协同的会话优先置顶，次级按最新更新时间倒序，绑定 8 位短标识徽标消歧，单帧内存耗时小于 5 毫秒并硬限 50 条。
+Without modifying native file search, the plugin controls session candidate ranking and presentation:
+1. Native file and folder search remain functional and intact.
+2. The plugin candidate source sets its priority order to `-10`, ensuring workspace entry points and peer sessions lead the candidate list so focus is never stolen.
+3. Once a workspace is selected, the secondary session list resolves synchronously from local memory in under 5ms, avoiding slow remote queries and subsequent redraws.
+4. Internal subagent delegations and archived dead sessions are filtered out, displaying only autonomous root sessions within the workspace.
+5. Sessions with active collaboration are ranked ahead, followed by update recency descending, with an 8-character canonical short ID badge for disambiguation, capped at 50 entries.
 
 ## User Stories
 
-1. As a collaborative developer, I want typing @ in the composer to show accessible project workspaces right at the top, so that I can pick my target workspace immediately without hunting.
+1. As a collaborative developer, I want typing `@` in the composer to show accessible project workspaces right at the top, so that I can pick my target workspace immediately without hunting.
 2. As a project owner, I want the current project workspace automatically pinned to the very top, so that I can enter my active working directory with a single click.
 3. As a developer searching files, I want native file and folder search to remain completely functional, so that my existing file reference habits are never broken.
 4. As an engineer entering a workspace, I want the secondary session list to strictly exclude all internal subagents and review tasks, so that only genuine independent root sessions appear.
@@ -35,58 +35,57 @@
 
 ## Implementation Decisions
 
-### 优先接管
+### Priority Override
 
-功能收敛在客户端输入源契约中，命名为 peer-session，触发字符为 @。
-将插件输入源的排位权重调整为负十，确保在系统合并多个数据源时，插件的工作区入口与同级会话永远排在最顶层，光标焦点始终稳定停留在此，消除外部异步数据抢占焦点的跳动隐患。
+The capability integrates via the client input trigger contract under source name `peer-session` with trigger character `@`.
+The plugin sets source `order: -10` so workspace entry points and peer sessions consistently lead merged candidate lists, maintaining stable keyboard focus against asynchronous remote insertions.
 
-### 原生共存
+### Native Coexistence
 
-严格恪守不破坏原生的准则：
-系统自带的本地文件搜索与目录钻取逻辑完全保留，不修改一行原生代码，不注入破坏性切面，两者在同一输入框内安全共存。
+Native file search and directory traversal remain untouched. Zero native code is monkey-patched, and both candidate types coexist safely in the same composer menu.
 
-### 本地求值
+### In-Memory Resolution
 
-点进工作区后，二级会话列表完全由插件从本地内存快照中同步提取：
-不调用系统自带的远端会话查询接口，不向远端服务器发送任何网络请求。纯内存遍历与排序在 1 毫秒内同步落定，从源头上消除两秒后的二次重刷新现象。
+Upon workspace drill-down, the secondary session list is extracted synchronously from the local memory snapshot:
+Zero remote session queries are dispatched over the network. Synchronous iteration and ranking complete in under 1ms, preventing deferred UI repaints.
 
-### 会话清洗
+### Session Sanitization
 
-对二级展开的会话实体实施多维清洗：
-- 排除子会话：凡包含 parentSessionId、parentId、parentSession、拥有 subagent 标记、或标题包含审查与临时任务特征的条目，一律直接忽略；
-- 排除归档会话：凡标记为 archived 或状态为 archived、dismissed、deleted 的会话，一律直接忽略；
-- 排除原生归档名单会话：归档名单来自原生 workspaces 服务的列表快照字段（archivedSessionIds），命中名单的会话在二级展开与一级汇聚中一并忽略；
-- 退化契约：workspaces 服务缺失、快照无归档名单字段或读取抛出异常时，名单按空处理，清洗退化为上述快照字段判定，候选输出与无服务基线一致；
-- 一级收敛：仅剩名单归档会话的工作区不再作为工作区入口出现在一级列表，仍有存活会话的工作区照常出现，当前工作区保持无条件置顶。
+Candidate sessions undergo multi-dimensional filtering:
+- Exclude subagents: Any session carrying `parentSessionId`, `parentId`, `parentSession`, an `origin: 'subagent'` flag, or review task markers is excluded.
+- Exclude archived sessions: Any session marked `archived` or in status `archived`, `dismissed`, or `deleted` is excluded.
+- Exclude rostered archived sessions: When the host `workspaces` service provides an `archivedSessionIds` roster in its snapshot, matching sessions are excluded from Level 2 expansion and Level 1 workspace convergence.
+- Degradation contract: When the `workspaces` service is absent, lacks the roster field, or throws on read, the roster is treated as empty, degrading gracefully to snapshot-field filtering.
+- Workspace convergence: Workspaces left with only rostered archived sessions do not appear at Level 1. Workspaces with live sessions remain visible, and the current workspace remains pinned.
 
-### 确定排序
+### Deterministic Ranking
 
-二级展开列表严格执行两级排序：
-- 第一优先级：提取调用连线记录与黑板存储，凡参与过单播调用呼入呼出、发布过黑板条目、或由同级工厂创建的会话判定为已注册，优先置顶；
-- 第二优先级：按会话原生最新更新时间倒序排列；
-- 数量截断：展现结果上限硬性钳位在 50 条以内，保障浏览器 60 帧每秒丝滑刷新。
+Level 2 candidates follow strict two-tier ordering:
+- Tier 1: Collaborating sessions (participated in unicast calls, blackboard posts, or created via peer factory) are registered and prioritized first.
+- Tier 2: Sorted by native `updatedAt` timestamp descending.
+- Window cap: Results are clamped to 50 items to sustain 60fps rendering performance.
 
 ## Testing Decisions
 
-### 质量标准
+### Verification Invariants
 
-测试面向真实外部表现，运行于 Node VM 沙箱隔离环境中。必须验证：
-- 一级列表仅展示工作区入口，区块文案为平文「工作区」（Workspaces），当前工作区自动置顶；
-- 二级列表排除子代理与已归档会话，仅展示活跃同级根会话；
-- 协同会话优先置顶，同组内按最新时间倒序；
-- 8 位规范短 ID 徽标排布整齐；
-- 全流程协作看板调用连线计数严格恒等于 0。
+Tests execute in an isolated Node VM sandbox verifying real user-facing behavior:
+- Level 1 displays only workspace entries with plain text section `Workspaces` (`工作区`), current workspace pinned at top.
+- Level 2 excludes subagents and archived sessions, exposing only active peer root sessions.
+- Collaborating sessions lead, followed by update recency descending.
+- Canonical 8-character short ID badges are aligned.
+- Collaboration canvas edge count remains strictly 0.
 
-### 测试模块
+### Test Location
 
-测试文件统一维护在 tests/peer-session-reference.test.mjs，复用沙箱模块加载器与隔离环境。
+Automated tests are maintained in `tests/peer-session-reference.test.mjs` using the shared sandbox module harness.
 
 ## Out of Scope
 
-- 不修改或劫持系统底层的文件检索逻辑；
-- 不在协作看板上为输入框文本引用绘制连线；
-- 不对引用的会话进行物理生命周期干预或强制唤醒。
+- Modifying or intercepting host file search logic.
+- Drawing canvas calling edges for composer inline text references.
+- Triggering physical lifecycle wakeups or notifications on referenced sessions.
 
-## Further Notes
+## References
 
-该规范遵循智能体消费文档准则，剔除技术黑话，全面对齐 ADR-0034 决策记录与真实交互验收标准。
+Governed by agent documentation discipline, aligned with architectural decision record ADR-0034.
