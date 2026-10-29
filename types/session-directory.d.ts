@@ -64,6 +64,10 @@ export declare class SessionDirectory {
       callerSessionId?: string;
       callerAgent?: any;
       exec?: any;
+      /**
+       * 冷恢复时解析 agentOptions 的注入解析器；返回 undefined 表示不挂载。
+       */
+      resolveResumeAgentOptions?: () => { provider?: string; model?: string; reasoningEffort?: string } | undefined;
     }
   ): Promise<TargetResolutionResult>;
 }

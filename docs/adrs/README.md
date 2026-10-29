@@ -58,6 +58,7 @@
 
 | ID | Title | Status | Date | Primary Anchors | Document |
 | :--- | :--- | :--- | :--- | :--- | :--- |
+| **ADR-0038** | Cold Resume Model Inheritance and Prompt Assembly Survivability | **Accepted** - Current | 2026-10-29 | `lib/session-directory.mjs`, `lib/dsh-host-gateway.mjs` | [0038-cold-resume-model-inheritance.md](./0038-cold-resume-model-inheritance.md) |
 | **ADR-0036** | Target Acceptance Causal Verification, Graceful Fallback Safeguards, and Structured Error Contracts | **Accepted** - Current | 2026-10-20 | `lib/session-call.mjs`, `lib/session-create.mjs` | [0036-target-acceptance-causal-verification-and-structured-error-contract.md](./0036-target-acceptance-causal-verification-and-structured-error-contract.md) |
 | **ADR-0028** | Deep Admission Safeguard Seam, Atomic Title Resolution, and Lease Single Source of Truth | **Accepted** - Current | 2026-10-13 | `lib/session-safeguard.mjs`, `lib/session-create.mjs` | [0028-deep-admission-safeguard-seam-and-lease-single-source-of-truth.md](./0028-deep-admission-safeguard-seam-and-lease-single-source-of-truth.md) |
 | **ADR-0025** | Peer Session Creation Host Gateway, Safeguard Lease, and Bootstrap Decoupling | **Accepted** - Current | 2026-09-23 | `lib/dsh-host-gateway.mjs`, `lib/session-safeguard.mjs` | [0025-peer-session-creation-gateway-safeguard-and-bootstrap-decoupling.md](./0025-peer-session-creation-gateway-safeguard-and-bootstrap-decoupling.md) |
