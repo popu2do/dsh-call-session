@@ -31,7 +31,7 @@ export declare const CALL_TYPE_INTENTS: Readonly<{
  * session_call 工具调用入参
  */
 export interface SessionCallArgs {
-  /** 目标会话 Session ID，支持精确匹配或至少 8 位唯一前缀，不支持通配符 */
+  /** 目标会话 Session ID，规范形态 session-<uuid>，裸 uuid 与其等价，支持精确匹配或至少 8 位唯一前缀，不支持通配符 */
   target_session_id: string;
   /** 任务指令、汇报或通知内容，最大 4000 字符 */
   message: string;
@@ -115,7 +115,7 @@ export declare function dispatchNativeMessage(
  * 执行 session_call 单播投递
  *
  * 校验规则与流程：
- * 1. 校验目标 Session ID，不支持通配符与自身调用，前缀至少 8 位且唯一
+ * 1. 校验目标 Session ID，规范形态 session-<uuid> 与裸 uuid 等价，不支持通配符与自身调用，前缀至少 8 位且唯一
  * 2. 检索目标活跃会话
  * 3. 根据目标状态分发，running 使用 steer，idle 使用 followup
  *
