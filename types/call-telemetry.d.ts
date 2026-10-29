@@ -47,6 +47,13 @@ export interface CallTelemetryRecord {
   messageSnippet: string;
   /** 完整消息内容 */
   messagePayload: string;
+  /**
+   * 发起方在记录时是否非顶层（subagent 或空白会话），
+   * 决定该端点离开 liveAgents 后能否凭记录合成回看板
+   */
+  callerNonTopLevel?: boolean;
+  /** 接收方在记录时是否非顶层（subagent 或空白会话） */
+  targetNonTopLevel?: boolean;
   /** 发起方端点是否已离线/归档 */
   callerOffline?: boolean;
   /** 接收方端点是否已离线/归档 */
@@ -129,8 +136,8 @@ export interface CanvasSessionEntity {
   workspace: string;
   /** 规范化运行状态：running 或 idle */
   state: CanvasSessionState;
-  /** 是否为根会话 */
-  isTopLevel: boolean;
+  /** 顶层标记由宿主赋值；客户端必须容忍缺失，缺省按顶层处理 */
+  isTopLevel?: boolean;
   /** 智能体预设或类型标识 */
   agentType?: string;
   /** 会话创建时间戳 */
@@ -185,15 +192,15 @@ export interface CanvasTelemetrySnapshot {
   timestamp: number;
   /** 当前工作区规范化路径 */
   currentWorkspace: string;
-  /** 工作区集群列表 */
+  /** 工作区集群列表（收窄后：只含仍绘制会话的工作区，或宿主保留的空当前工作区列） */
   workspaces: CanvasWorkspaceEntity[];
-  /** 会话节点列表 */
+  /** 会话节点列表（收窄后：只含顶层会话，ADR-0013 §2.2） */
   sessions: CanvasSessionEntity[];
-  /** 黑板公告列表 */
+  /** 黑板公告列表（全量，作者可能不在 sessions 内） */
   posts: CanvasBoardPostEntity[];
-  /** 跨会话调用连线列表 */
+  /** 跨会话调用连线列表（收窄后：端点均为顶层会话） */
   calls: CallTelemetryRecord[];
-  /** 全局统计度量 */
+  /** 绘制集合的统计度量，与 sessions/calls 同源 */
   metrics: {
     totalSessions: number;
     runningSessions: number;
