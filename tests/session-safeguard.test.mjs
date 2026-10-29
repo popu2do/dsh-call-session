@@ -98,7 +98,7 @@ test('SessionSafeguard - 运行态配额控制 (MAX_ACTIVE_PEER_SESSIONS=5)', ()
   const workspaceA = '/test/workspace-a';
   const workspaceB = '/test/workspace-b';
 
-  // 活跃会话数 = 4，尚未达到上限 5，准入成功
+  // 运行中会话数 = 4，尚未达到上限 5，准入成功
   const leaseA1 = safeguard.acquire({
     callerSessionId: 'caller-a',
     callerGeneration: 0,
@@ -109,7 +109,7 @@ test('SessionSafeguard - 运行态配额控制 (MAX_ACTIVE_PEER_SESSIONS=5)', ()
   assert.ok(leaseA1 instanceof AdmissionLease);
   leaseA1.release();
 
-  // 活跃会话数 = 5，达到上限，拦截准入
+  // 运行中会话数 = 5，达到上限，拦截准入
   assert.throws(
     () => {
       safeguard.acquire({
@@ -271,7 +271,7 @@ test('SessionSafeguard - 在途并发防超发与在途标题冲突拦截', () =
       });
     },
     {
-      message: /[DuplicateTitle].*conflicts with an active session/i
+      message: /[DuplicateTitle].*conflicts with a live session/i
     }
   );
 

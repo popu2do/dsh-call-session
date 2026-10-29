@@ -16,7 +16,7 @@ When ADR-0012 introduced the Collaboration Canvas, it mechanically copied this c
 This produced a fundamental architectural contradiction:
 1. **Broken Information Architecture**: The canvas was explicitly designed as a horizontal multi-column layout with cross-workspace call curves. Hiding external columns by default broke the visual purpose of the canvas.
 2. **Confused Target Audiences**: Workspace isolation is a guardrail for autonomous Agents, not a limitation for human observers. Forcing a human user to toggle a button to see peer projects in a bird's-eye view was an unnecessary friction.
-3. **Buzzword Drift**: The data interface was labeled with marketing jargon ("telemetry" / "遥测") instead of plain domain terminology ("看板数据" / "canvas data"), violating ADR-0009.
+3. **Buzzword Drift**: The data interface was labeled with marketing jargon instead of plain domain terminology ("看板数据" / "canvas data"), violating ADR-0009.
 
 ---
 
@@ -28,7 +28,7 @@ We explicitly decouple **Agent execution boundaries** from **human observer boun
 2. **Eliminate Toggle Button**: Remove the "跨工作区拓扑" toolbar button completely. The toolbar only retains fit view, locate current session, and zoom controls.
 3. **Pin Current Workspace First**: The workspace containing the user's current session is always rendered as the first column on the left (marked `[Current]`), with other workspaces arranged to its right.
 4. **Data Route Simplification**: The canvas data endpoint (`/plugins/dsh-call-session/telemetry`) eliminates the `crossWorkspace` query parameter and unconditionally returns full workspace data.
-5. **Terminology Cleanup**: Discontinue the use of "遥测" in user-facing contexts, standardizing on "看板数据".
+5. **Terminology Cleanup**: Standardize user-facing naming on "看板数据" / canvas data and register the retired jargon in the CONTEXT.md avoid list.
 6. **Agent Sandbox Invariant**: Agent tools (`board_list`, `session_query`) strictly maintain their `cross_workspace: false` isolation default per ADR-0003.
 
 ### 2.1 Revision 2026-09-20: Viewport Fit, Clamped Session Locating, and Landed Pulse Feedback
@@ -76,3 +76,11 @@ Pinning the current workspace to the leftmost column (index 0) created an intera
 3. **Clamping Invariant**: Tests assert that locating a session in column 0 when content width exceeds viewport bounds clamps `panX` to the left safety padding and prevents large empty margins.
 4. **Zoom Invariant**: Tests verify that locate operations clamp zoom into `[0.8, 1.2]` while preserving in-range user zoom, and that macro framing never drops below the `0.30` floor.
 5. **Landed Pulse & Motion Invariant**: Tests verify that `.dsh-canvas-node-locating` is applied to the located node only, that `@keyframes dshLocatePulse` carries no geometric scale or transform mutations, and that `prefers-reduced-motion` freezes it (per ADR-0018).
+
+---
+
+## 5. Revision
+
+### 5.1 Revision 2026-10-29: 看板数据措辞
+
+Wording only: the retired jargon for canvas view data is replaced with 看板数据 across the body; no decision, invariant, or budget changed. The retired jargon stays registered in the CONTEXT.md avoid list.

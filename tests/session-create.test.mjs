@@ -617,7 +617,7 @@ test('inspectWorkspaceActiveSessions: 准确识别真实宿主下 session.header
   );
 
   // subagent 必须被过滤排除，只有 rootAgent 计入
-  assert.equal(count, 1, '子代理被过滤排除，活跃会话计数为 1');
+  assert.equal(count, 1, '子代理被过滤排除，存活会话计数为 1');
   assert.ok(activeTitles.has(rootAgent.title.toLowerCase()));
 });
 

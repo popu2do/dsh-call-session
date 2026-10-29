@@ -260,8 +260,8 @@ test('mention archived figure: the fixed scenario keeps rostered rows and dead w
       assert.ok(html.includes(session.title), locale + ' archived figure must render live row ' + session.title + ' (contract: live rows kept)');
     }
 
-    // 共存标识：一级区块文案呈现 协同工作区 / Collaboration Workspaces
-    assert.ok(html.includes('>' + model.sectionWorkspaces + '<'), locale + ' archived figure section head must carry ' + model.sectionWorkspaces + ' (contract: coexistence copy)');
-    assert.equal(model.sectionWorkspaces, locale === 'zh' ? '协同工作区' : 'Collaboration Workspaces', locale + ' archived figure must use the plugin-owned coexistence word (contract: coexistence copy)');
+    // 一级区块文案呈现 工作区 / Workspaces
+    assert.ok(html.includes('>' + model.sectionWorkspaces + '<'), locale + ' archived figure section head must carry ' + model.sectionWorkspaces + ' (contract: section copy)');
+    assert.equal(model.sectionWorkspaces, locale === 'zh' ? '工作区' : 'Workspaces', locale + ' archived figure must use the plugin-owned plain word (contract: section copy)');
   }
 });
