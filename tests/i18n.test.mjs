@@ -90,6 +90,17 @@ test('ADR-0023: Catalog 拓扑完全对称与中英文键对齐验证', () => {
   }
 });
 
+test('ADR-0023: session_call 目标 ID 入参描述声明规范形态与裸 uuid 等价', () => {
+  const zhDesc = zh.tools.session_call.parameters.target_session_id;
+  const enDesc = en.tools.session_call.parameters.target_session_id;
+
+  for (const [locale, desc] of [['zh', zhDesc], ['en', enDesc]]) {
+    assert.ok(desc.includes('session-<uuid>'), `${locale} 描述必须给出规范形态 session-<uuid>`);
+  }
+  assert.ok(zhDesc.includes('裸 uuid'), '中文描述必须说明裸 uuid 等价');
+  assert.ok(enDesc.includes('bare uuid'), '英文描述必须说明裸 uuid 等价');
+});
+
 test('ADR-0023: resolveLocale 层级决议与配置穿透验证', () => {
   // 1. 宿主 settings 偏好优先级最高以确保 Web 切换即刻生效 (ADR-0023 第三节)
   assert.equal(resolveLocale(null, { locale: 'en' }), 'en');

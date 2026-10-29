@@ -195,6 +195,113 @@ test('SessionDirectory: resolveTarget with exact match, prefix match, and guards
   );
 });
 
+test('SessionDirectory: resolveTarget 接受存活会话的裸 uuid，与规范形式等价', async () => {
+  const bareUuid = '7b3391ba-df1b-4b9d-9d5e-3f2c1a6b8d40';
+  const canonicalId = `session-${bareUuid}`;
+  const caller = createMockAgent({ id: 'session-caller-11112222', title: 'Caller', cwd: '/repo' });
+  const target = createMockAgent({ id: canonicalId, title: 'Bare Target', cwd: '/repo' });
+
+  const dir = new SessionDirectory(createMockCordis([caller, target]));
+  const resolved = await dir.resolveTarget(bareUuid, { callerSessionId: caller.id });
+
+  assert.equal(resolved.targetAgent.id, canonicalId);
+  assert.equal(resolved.targetTitle, 'Bare Target');
+});
+
+test('SessionDirectory: resolveTarget 接受裸 uuid 的 >=8 位唯一前缀', async () => {
+  const caller = createMockAgent({ id: 'session-caller-11112222', cwd: '/repo' });
+  const target = createMockAgent({ id: 'session-7b3391ba-df1b-4b9d', title: 'Prefix Target', cwd: '/repo' });
+  const other = createMockAgent({ id: 'session-a1b2c3d4-0000-1111', title: 'Other', cwd: '/repo' });
+
+  const dir = new SessionDirectory(createMockCordis([caller, target, other]));
+  const resolved = await dir.resolveTarget('7b3391ba', { callerSessionId: caller.id });
+
+  assert.equal(resolved.targetAgent.id, 'session-7b3391ba-df1b-4b9d');
+});
+
+test('SessionDirectory: resolveTarget 裸 uuid 前缀歧义时熔断而非静默选取', async () => {
+  const caller = createMockAgent({ id: 'session-caller-11112222', cwd: '/repo' });
+  const first = createMockAgent({ id: 'session-7b3391ba-aaaa', title: 'First', cwd: '/repo' });
+  const second = createMockAgent({ id: 'session-7b3391ba-bbbb', title: 'Second', cwd: '/repo' });
+
+  const dir = new SessionDirectory(createMockCordis([caller, first, second]));
+
+  await assert.rejects(
+    () => dir.resolveTarget('7b3391ba', { callerSessionId: caller.id }),
+    (err) => {
+      assert.match(err.message, /\[AmbiguousPrefix\]/);
+      assert.ok(err.message.includes('session-7b3391ba-aaaa'));
+      assert.ok(err.message.includes('session-7b3391ba-bbbb'));
+      return true;
+    }
+  );
+});
+
+test('SessionDirectory: resolveTarget 将调用方裸 uuid 识别为自呼叫', async () => {
+  const bareUuid = '7b3391ba-df1b-4b9d-9d5e-3f2c1a6b8d40';
+  const caller = createMockAgent({ id: `session-${bareUuid}`, cwd: '/repo' });
+  const other = createMockAgent({ id: 'session-a1b2c3d4-0000-1111', cwd: '/repo' });
+
+  const dir = new SessionDirectory(createMockCordis([caller, other]));
+
+  await assert.rejects(
+    () => dir.resolveTarget(bareUuid, { callerSessionId: caller.id }),
+    /\[SelfCallForbidden\]/
+  );
+});
+
+test('SessionDirectory: resolveTarget 将调用方裸 uuid 的 >=8 位前缀识别为自呼叫', async () => {
+  const caller = createMockAgent({ id: 'session-7b3391ba-df1b-4b9d-9d5e-3f2c1a6b8d40', cwd: '/repo' });
+  const other = createMockAgent({ id: 'session-a1b2c3d4-0000-1111', cwd: '/repo' });
+
+  const dir = new SessionDirectory(createMockCordis([caller, other]));
+
+  await assert.rejects(
+    () => dir.resolveTarget('7b3391ba', { callerSessionId: caller.id }),
+    /\[SelfCallForbidden\]/
+  );
+});
+
+test('SessionDirectory: resolveTarget 冷恢复向持久层传入规范 id 形态', async () => {
+  const bareUuid = '7b3391ba-df1b-4b9d-9d5e-3f2c1a6b8d40';
+  const canonicalId = `session-${bareUuid}`;
+  const caller = createMockAgent({ id: 'session-caller-11112222', cwd: '/repo' });
+  const persisted = createMockAgent({ id: canonicalId, title: 'Persisted', cwd: '/repo' });
+  const resumeCalls = [];
+
+  const ctx = createMockCordis([caller]);
+  ctx.agents.get = () => null;
+  ctx.agents.resume = async ({ resumeSessionId }) => {
+    resumeCalls.push(resumeSessionId);
+    if (resumeSessionId !== canonicalId) {
+      throw new Error(`unknown persisted session "${resumeSessionId}"`);
+    }
+    return { agent: persisted };
+  };
+
+  const dir = new SessionDirectory(ctx);
+  const resolved = await dir.resolveTarget(bareUuid, { callerSessionId: caller.id });
+
+  assert.equal(resolved.targetAgent.id, canonicalId);
+  assert.equal(resolved.targetTitle, 'Persisted');
+  assert.deepEqual(resumeCalls, [canonicalId]);
+});
+
+test('SessionDirectory: resolveTarget 对短于下限的前缀仍抛参数错误', async () => {
+  const target = createMockAgent({ id: 'session-7b3391ba-df1b-4b9d-9d5e-3f2c1a6b8d40', cwd: '/repo' });
+  const caller = createMockAgent({ id: 'session-caller-11112222', cwd: '/repo' });
+
+  const dir = new SessionDirectory(createMockCordis([target, caller]));
+
+  for (const shortPrefix of ['7b339', '7b3391b']) {
+    await assert.rejects(
+      () => dir.resolveTarget(shortPrefix, { callerSessionId: caller.id }),
+      /\[InvalidParameter\]/,
+      '短前缀 "' + shortPrefix + '" 必须抛参数错误'
+    );
+  }
+});
+
 test('SessionDirectory.prototype.query: 完整状态统计与元数据汇总契约', () => {
   const wsA = 'c:/workspace/proj-a';
   const wsB = 'c:/workspace/proj-b';
