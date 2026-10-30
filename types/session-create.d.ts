@@ -212,3 +212,47 @@ export declare function executeSessionCreate(
   rawExec?: any,
   rawOptions?: any
 ): Promise<SessionCreateResult>;
+export interface PeerSessionAdmissionDeps {
+  ctx?: any;
+  logger?: any;
+  directory?: SessionDirectory;
+  gateway?: DshHostGateway;
+  safeguard?: SessionSafeguard;
+  bootstrapper?: PeerBootstrapper;
+  options?: any;
+}
+
+export interface PeerSessionAdmissionInput {
+  args?: SessionCreateArgs;
+  exec?: any;
+  options?: any;
+  boardStore?: any;
+}
+
+export interface BootstrapAndVerifyOutcome {
+  status: SessionStatus;
+  bootstrapPostId: string | null;
+  deliveryState: DeliveryState;
+  executionState: ExecutionState;
+  finalStatus: SessionStatus;
+  executionError: any;
+  hasInitialMessage: boolean;
+  isPreflightError: boolean;
+}
+
+export interface ExecutePeerSessionAdmissionPipelineParams {
+  args?: SessionCreateArgs;
+  exec?: any;
+  options?: any;
+  gateway?: DshHostGateway;
+  safeguard?: SessionSafeguard;
+  directory?: SessionDirectory;
+  bootstrapper?: PeerBootstrapper;
+  boardStore?: any;
+  logger?: any;
+}
+
+export declare function executePeerSessionAdmissionPipeline(
+  ctx: any,
+  params?: ExecutePeerSessionAdmissionPipelineParams
+): Promise<SessionCreateResult>;
