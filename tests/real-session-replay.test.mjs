@@ -7,10 +7,10 @@ import { resolveNativeSessionStatus } from '../lib/session-directory.mjs';
 import { executeSessionCall } from '../lib/session-call.mjs';
 import { createMockAgent, silentLogger } from './helpers/mock-agent.mjs';
 
-const REAL_ZSTD_PATH = '/home/dev/.dsh/sessions/--home-dev-code-TSPR-dsh-call-session--/session-8c5cbede-01ae-48fe-8e5a-3ead04a889f7/session.v4.jsonl.zstd';
+const REAL_ZSTD_PATH = process.env.DSH_TEST_ZSTD_PATH;
 
 function loadRealOrFallbackEvents() {
-  if (fs.existsSync(REAL_ZSTD_PATH)) {
+  if (REAL_ZSTD_PATH && fs.existsSync(REAL_ZSTD_PATH)) {
     try {
       const output = execSync(`zstdcat ${REAL_ZSTD_PATH} | tail -n 120`, {
         maxBuffer: 10 * 1024 * 1024
