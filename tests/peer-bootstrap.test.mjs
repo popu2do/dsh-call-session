@@ -368,3 +368,79 @@ test('ADR-0025 不变量 4 (Zero-Trace Blackboard Hygiene): 会话就绪公告�
   assert.equal(clearRes.success, true);
   assert.equal(store.posts.length, 0, '清理后必须保持零残留');
 });
+
+test('PeerBootstrapper 门面等价性：实例方法、静态方法与底层纯函数逐字段全等且无跨调用累积状态', () => {
+  const store = createMockBoardStore();
+  const agent1 = createMockAgent({ id: 'agent-eq-1' });
+  const agent2 = createMockAgent({ id: 'agent-eq-2' });
+  const agent3 = createMockAgent({ id: 'agent-eq-3' });
+
+  let seq = 0;
+  const generateMessageId = () => `msg-fixed-${++seq}`;
+
+  const bootstrapper = new PeerBootstrapper({
+    boardStore: store,
+    generateMessageId
+  });
+
+  // 1. 验证实例配置与无污染状态
+  const initialKeys = Object.keys(bootstrapper).sort();
+  assert.deepEqual(initialKeys, ['boardStore', 'generateMessageId', 'logger', 'options']);
+
+  // 2. formatInitialMessage 等价性
+  const formatInput = {
+    initialMessage: 'Equivalence task',
+    contextPostIds: ['ctx-eq-1'],
+    callerSessionId: 'caller-eq',
+    callerTitle: 'CallerEq'
+  };
+
+  const pureMsg = formatInitialMessage({ ...formatInput, generateMessageId: () => 'msg-fixed' });
+  const instMsg = (new PeerBootstrapper({ generateMessageId: () => 'msg-fixed' })).formatInitialMessage(formatInput);
+  const staticMsg = PeerBootstrapper.formatInitialMessage({ ...formatInput, generateMessageId: () => 'msg-fixed' });
+  assert.deepEqual(instMsg, pureMsg);
+  assert.deepEqual(staticMsg, pureMsg);
+
+  // 3. dispatchInitialMessage 等价性
+  const dPure = dispatchInitialMessage(agent1, pureMsg);
+  const dInst = bootstrapper.dispatchInitialMessage(agent2, pureMsg);
+  const dStatic = PeerBootstrapper.dispatchInitialMessage(agent3, pureMsg);
+  assert.equal(dInst, dPure);
+  assert.equal(dStatic, dPure);
+  assert.equal(dPure, 'running');
+
+  // 4. bootstrapPeerSession 等价性：验证返回契约只有 status 与 bootstrapPostId
+  const bPure = bootstrapPeerSession({
+    targetAgent: agent1,
+    boardStore: store,
+    initialMessage: 'Bootstrap task',
+    finalTitle: 'Peer-1',
+    callerSessionId: 'caller-eq'
+  });
+  const bInst = bootstrapper.bootstrap({
+    targetAgent: agent2,
+    initialMessage: 'Bootstrap task',
+    finalTitle: 'Peer-2',
+    callerSessionId: 'caller-eq'
+  });
+  const bStatic = PeerBootstrapper.bootstrap({
+    targetAgent: agent3,
+    boardStore: store,
+    initialMessage: 'Bootstrap task',
+    finalTitle: 'Peer-3',
+    callerSessionId: 'caller-eq'
+  });
+
+  assert.deepEqual(Object.keys(bPure).sort(), ['bootstrapPostId', 'status']);
+  assert.deepEqual(Object.keys(bInst).sort(), ['bootstrapPostId', 'status']);
+  assert.deepEqual(Object.keys(bStatic).sort(), ['bootstrapPostId', 'status']);
+  assert.equal(bInst.status, bPure.status);
+  assert.equal(bStatic.status, bPure.status);
+  assert.ok(typeof bPure.bootstrapPostId === 'string');
+  assert.ok(typeof bInst.bootstrapPostId === 'string');
+  assert.ok(typeof bStatic.bootstrapPostId === 'string');
+
+  // 5. 跨调用无累积状态
+  const afterKeys = Object.keys(bootstrapper).sort();
+  assert.deepEqual(afterKeys, initialKeys);
+});
