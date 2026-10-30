@@ -510,6 +510,39 @@ test('executeSessionQuery 模块函数导出: 兼容对象参数与位置参数�
   assert.equal(posRes.idleCount, 1);
 });
 
+test('SessionDirectory.prototype.executeSessionQuery & SessionDirectory.executeSessionQuery 重载兼容', () => {
+  const ws = 'c:/workspace/proj-a';
+  const a1 = createMockAgent({ id: 's-ol-1', status: 'running', cwd: ws });
+  const a2 = createMockAgent({ id: 's-ol-2', status: 'idle', cwd: ws });
+  const ctx = createMockCordis([a1, a2]);
+  const caller = createMockAgent({ id: 's-caller', cwd: ws });
+
+  const dir = new SessionDirectory(ctx);
+
+  // 1. 实例方法双位置参数
+  const instPos = dir.executeSessionQuery({ running_only: true }, { agent: caller });
+  assert.equal(instPos.count, 1);
+  assert.equal(instPos.activeCount, 1);
+
+  // 2. 实例方法单对象包裹
+  const instObj = dir.executeSessionQuery({ args: { running_only: false }, exec: { agent: caller } });
+  assert.equal(instObj.count, 2);
+
+  // 3. 静态方法三位置参数
+  const statPos = SessionDirectory.executeSessionQuery(ctx, { running_only: true }, { agent: caller });
+  assert.equal(statPos.count, 1);
+  assert.equal(statPos.activeCount, 1);
+
+  // 4. 静态方法单对象包裹
+  const statObj = SessionDirectory.executeSessionQuery({ ctx, args: {}, exec: { agent: caller } });
+  assert.equal(statObj.count, 2);
+
+  // 5. 实例方法完整包裹对象（ctx 字段由实例自身承载，不参与重定向）
+  const instCtxObj = dir.executeSessionQuery({ ctx, args: { running_only: true }, exec: { agent: caller } });
+  assert.equal(instCtxObj.count, 1);
+  assert.equal(instCtxObj.activeCount, 1);
+});
+
 test('resolveNativeSessionStatus: running 状态判定与原生 phase 优先原则', () => {
   // 1. phase.kind 为 running
   const runningAgent = {
