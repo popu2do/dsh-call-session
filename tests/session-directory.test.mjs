@@ -541,6 +541,62 @@ test('SessionDirectory.prototype.executeSessionQuery & SessionDirectory.executeS
   const instCtxObj = dir.executeSessionQuery({ ctx, args: { running_only: true }, exec: { agent: caller } });
   assert.equal(instCtxObj.count, 1);
   assert.equal(instCtxObj.activeCount, 1);
+
+  // 6. 静态方法单对象包裹（缺省 ctx，仅传入 args 与 exec，由 exec.agent.ctx 解析 agents）
+  caller.ctx = ctx;
+  const statNoCtx = SessionDirectory.executeSessionQuery({ args: { cross_workspace: true }, exec: { agent: caller } });
+  assert.equal(statNoCtx.count, 2);
+  assert.equal(statNoCtx.scope, 'global');
+});
+
+test('SessionDirectory.prototype.query: 入参规范化、正整数 limit 与边界容错契约', () => {
+  const ws = 'c:/workspace/proj-normalize';
+  const a1 = createMockAgent({ id: 's-norm-1', status: 'running', cwd: ws, title: 'Alpha Worker' });
+  const a2 = createMockAgent({ id: 's-norm-2', status: 'idle', cwd: ws, title: 'Beta Task' });
+  const aSub = createMockAgent({ id: 's-sub-1', isSubagent: true, status: 'running', cwd: ws, title: 'Child Task' });
+
+  const ctx = createMockCordis([a1, a2, aSub]);
+  const dir = new SessionDirectory(ctx);
+  const caller = createMockAgent({ id: 's-caller', cwd: ws });
+
+  // 1. limit 校验：非整数与负数回退为默认 50，正整数生效且上限 100
+  const floatLimitRes = dir.query({ limit: 0.5 }, { agent: caller });
+  assert.equal(floatLimitRes.count, 2); // 0.5 回退为 50，查出当前工作区所有顶层会话 2 条
+
+  const negLimitRes = dir.query({ limit: -10 }, { agent: caller });
+  assert.equal(negLimitRes.count, 2); // -10 回退为 50
+
+  const zeroLimitRes = dir.query({ limit: 0 }, { agent: caller });
+  assert.equal(zeroLimitRes.count, 2); // 0 回退为 50
+
+  const strLimitRes = dir.query({ limit: '1' }, { agent: caller });
+  assert.equal(strLimitRes.count, 2); // 字符串回退为 50
+
+  const validLimitRes = dir.query({ limit: 1 }, { agent: caller });
+  assert.equal(validLimitRes.count, 1); // 有效正整数限制为 1
+
+  // 2. query 检索词修剪与不区分大小写
+  const searchRes = dir.query({ query: '   ALPHA   ' }, { agent: caller });
+  assert.equal(searchRes.count, 1);
+  assert.equal(searchRes.sessions[0].sessionId, 's-norm-1');
+
+  // 非字符串 query 安全回退为空串（不过滤）
+  const nonStrQueryRes = dir.query({ query: 12345 }, { agent: caller });
+  assert.equal(nonStrQueryRes.count, 2);
+
+  // 3. top_level_only 为 false 时包含子代理
+  const allLevelsRes = dir.query({ top_level_only: false }, { agent: caller });
+  assert.equal(allLevelsRes.count, 3);
+
+  // 4. 服务缺失与空结果容错
+  const emptyDir = new SessionDirectory({});
+  const emptyRes = emptyDir.query({}, {});
+  assert.equal(emptyRes.success, true);
+  assert.equal(emptyRes.count, 0);
+  assert.equal(emptyRes.activeCount, 0);
+  assert.equal(emptyRes.idleCount, 0);
+  assert.equal(emptyRes.errorCount, 0);
+  assert.equal(emptyRes.scope, normalizeWorkspace(process.cwd()));
 });
 
 test('resolveNativeSessionStatus: running 状态判定与原生 phase 优先原则', () => {
