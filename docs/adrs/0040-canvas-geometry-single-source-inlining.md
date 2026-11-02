@@ -19,7 +19,7 @@ This coupling caused:
 3. Violation of DRY: attempts to isolate layout led to risks of manual mirror copies which ADR-0027 strictly prohibited.
 
 ### 1.2 Supersession of ADR-0027 Boundary Note
-ADR-0027 stated: "Canvas geometry calculation will not be separated into independent modules". ADR-0040 explicitly supersedes that specific non-separation boundary decision by introducing a deterministic compilation step that satisfies all constraints without introducing runtime dependencies or manual mirror copies.
+ADR-0027 stated: "Canvas geometry calculation will not be separated into independent modules". ADR-0040 explicitly supersedes that specific non-separation boundary decision by introducing a single source module (`lib/canvas-geometry.mjs`) combined with a deterministic build-time inlining step and byte-level drift gate. This satisfies all constraints without introducing runtime bundlers or manual mirror copies.
 
 ---
 
@@ -27,7 +27,7 @@ ADR-0027 stated: "Canvas geometry calculation will not be separated into indepen
 
 - Driver 1: Single source of truth in `lib/canvas-geometry.mjs` with pure ES5 compatible syntax in generated region.
 - Driver 2: Zero runtime overhead and zero bundler dependency: deterministic inlining via `scripts/embed-canvas-geometry.mjs`.
-- Driver 3: Byte-level drift gate in CI (`npm run lint` and `npm run check`) using `--check`.
+- Driver 3: Byte-level drift gate in CI (`npm run lint` and `npm run verify`) using `--check`.
 - Driver 4: Public surface stability: plugin object exports (30 keys) and `types/client.d.ts` remain unchanged.
 - Driver 5: Replay golden snapshot verification (`tests/fixtures/canvas-layout-baseline.json`) to ensure zero visual regression.
 
@@ -43,25 +43,29 @@ Isolate pure mathematical geometry primitives, layout engines, viewport transfor
 - Layout engines: `computeLayout`, `computeViewportFraming`, `computeContentBounds`.
 - Viewport and projection helpers: `worldToScreen`, `screenToWorld`, `clampZoom`, `computeZoomAtPoint`, `computeDragPan`, `viewportTransformStyle`.
 
-The core code resides between `// @generated-region-start` and `// @generated-region-end` in pure ES5 syntax.
+The core code resides between markers:
+`// <BEGIN> lib/canvas-geometry.mjs 生成区，禁止手改`
+and
+`// <END>`
+in pure ES5 syntax.
 
 ### 3.2 Deterministic Build and Drift Verification
 Implement `scripts/embed-canvas-geometry.mjs` to copy the exact generated region from `lib/canvas-geometry.mjs` into `lib/client.js`.
-- Execution: `npm run build:canvas-geometry` embeds the slice deterministically.
-- Verification: `node scripts/embed-canvas-geometry.mjs --check` fails with exit code 1 if any drift occurs.
-- Package integration: `npm run lint` and `npm run check` enforce this gate prior to testing.
+- Execution: `npm run build:canvas-geometry` embeds the slice deterministically via atomic file write (`.tmp` file followed by rename).
+- Verification: `node scripts/embed-canvas-geometry.mjs --check` outputs unified diff and fails with exit code 1 if any drift occurs.
+- Package integration: `npm run lint` and `npm run verify` enforce this gate prior to testing.
 
 ### 3.3 Component Closure Refactoring
 Refactor React component handlers in `lib/client.js` to consume the embedded headless functions:
 - Eliminate inner `getContentBounds` closure, delegate to `computeContentBounds`.
 - Delegate drag pan arithmetic to `computeDragPan`.
-- Delegate wheel zoom transformation to `computeZoomAtPoint`.
+- Delegate wheel zoom transformation to `computeZoomAtPoint` with `VIEWPORT_LIMITS.WHEEL_STEP`.
 - Delegate surface style to `viewportTransformStyle`.
 - Delegate session, post, and call edge tooltip coordinates to `worldToScreen`.
 
 ---
 
-## 4. Consequences
+## 4. Consequences and Cost Analysis
 
 ### 4.1 Positive
 - Pure Node.js headless testing is unlocked via `tests/canvas-geometry-core.test.mjs` and `tests/canvas-geometry-parity.test.mjs`.
@@ -69,5 +73,15 @@ Refactor React component handlers in `lib/client.js` to consume the embedded hea
 - Golden snapshots guarantee 100% pixel-level parity with historical baselines.
 - Zero extra dependencies, zero bundlers, and zero alterations to client bundle distribution contracts.
 
-### 4.2 Trade-offs & Mitigations
-- Inlining requires a pre-commit / build step (`npm run build:canvas-geometry`). Mitigated by wiring `--check` into lint gates.
+### 4.2 Explicit Costs
+In accordance with architectural review discipline, this architecture accepts three concrete costs:
+1. **Lint comparison overhead**: `npm run lint` adds a mandatory byte-level comparison step between the standalone source and embedded target file, with unified diff generation upon mismatch.
+2. **Dual-text, single-editable maintenance discipline**: The repository maintains two physical copies of the geometry text (`lib/canvas-geometry.mjs` and the embedded zone in `lib/client.js`), but only the single-source file is editable. Manual edits to the generated block in `lib/client.js` are strictly prohibited and trapped by CI gates.
+3. **Package line-count increase**: The standalone source file `lib/canvas-geometry.mjs` adds approximately 890 lines of source code to the distributed package artifacts.
+
+### 4.3 Rollback Path
+If this deterministic inlining architecture ever needs to be decommissioned:
+1. Delete `lib/canvas-geometry.mjs`, `scripts/embed-canvas-geometry.mjs`, and `build:canvas-geometry` script in `package.json`.
+2. Remove `node scripts/embed-canvas-geometry.mjs --check` from the `lint` command in `package.json`.
+3. In `lib/client.js`, simply strip the `// <BEGIN> ...` and `// <END>` markers and retain the inlined functions as regular handwritten source code.
+4. Because the public interface (`types/client.d.ts`, plugin dictionary keys, runtime behavior) remains identical, rolling back to purely handwritten code incurs zero breaking changes and zero downstream disruption.
