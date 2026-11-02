@@ -73,11 +73,12 @@ Refactor React component handlers in `lib/client.js` to consume the embedded hea
 - Golden snapshots guarantee 100% pixel-level parity with historical baselines.
 - Zero extra dependencies, zero bundlers, and zero alterations to client bundle distribution contracts.
 
-### 4.2 Explicit Costs
-In accordance with architectural review discipline, this architecture accepts three concrete costs:
+### 4.2 Explicit Costs and Scope Decisions
+In accordance with architectural review discipline, this architecture accepts three concrete costs and documents one key scope decision:
 1. **Lint comparison overhead**: `npm run lint` adds a mandatory byte-level comparison step between the standalone source and embedded target file, with unified diff generation upon mismatch.
 2. **Dual-text, single-editable maintenance discipline**: The repository maintains two physical copies of the geometry text (`lib/canvas-geometry.mjs` and the embedded zone in `lib/client.js`), but only the single-source file is editable. Manual edits to the generated block in `lib/client.js` are strictly prohibited and trapped by CI gates.
 3. **Package and client.js line-count increase as accepted architecture cost**: The standalone source file `lib/canvas-geometry.mjs` adds approximately 890 lines of source code, and embedding the full headless pure mathematics engine (comprehensive JSDocs, defensive argument validation, extracted viewport conversions and boundary engines) into `lib/client.js` results in a net line count increase in `lib/client.js` (from baseline 3916 to ~4050 lines). This increase is explicitly accepted as an architecture trade-off for headless testability, single-source truth, and zero runtime bundler dependencies.
+4. **Scope decision on workspace node & topology helpers (M1)**: While `createDefaultWorkspaceNode`, `promoteWorkspaceToFirst`, and `extractWorkspaceName` manipulate workspace node structures and list ordering rather than pure pixel trigonometry, they provide the structural foundation consumed directly by `computeLayout`. Consolidating them into the single-source `lib/canvas-geometry.mjs` engine ensures that `computeLayout` can be executed autonomously in headless test environments without relying on ambient browser closures or duplicate implementations outside the generated region in `lib/client.js`.
 
 ### 4.3 Rollback Path
 If this deterministic inlining architecture ever needs to be decommissioned:
