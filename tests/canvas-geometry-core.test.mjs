@@ -272,3 +272,16 @@ test('computeViewportFraming: macro and locate clamping in both directions', () 
   });
   assert.equal(locateHigh.zoom, geom.VIEWPORT_FRAMING.LOCATE_MAX_ZOOM);
 });
+
+test('canvas-geometry and client bundle security: no eval and no constructor.constructor', async () => {
+  const fs = await import('node:fs');
+  const geomSource = fs.readFileSync(new URL('../lib/canvas-geometry.mjs', import.meta.url), 'utf8');
+  const clientSource = fs.readFileSync(new URL('../lib/client.js', import.meta.url), 'utf8');
+
+  assert.equal(geomSource.includes('constructor.constructor'), false, 'canvas-geometry.mjs 不包含 constructor.constructor 全局逃逸');
+  assert.equal(/\beval\s*\(/i.test(geomSource), false, 'canvas-geometry.mjs 不包含 eval 动态代码执行');
+
+  assert.equal(clientSource.includes('constructor.constructor'), false, 'client.js 不包含 constructor.constructor 全局逃逸');
+  assert.equal(/\beval\s*\(/i.test(clientSource), false, 'client.js 不包含 eval 动态代码执行');
+});
+
