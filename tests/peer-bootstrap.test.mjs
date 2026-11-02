@@ -294,7 +294,7 @@ test('PeerBootstrapper class: supports instance and static methods', () => {
   const boardStore = createMockBoardStore();
   const bootstrapper = new PeerBootstrapper({ boardStore });
 
-  // 验证实例属性只持有 logger, boardStore, generateMessageId
+  // 验证实例属性绑定 logger, boardStore, generateMessageId
   assert.equal(bootstrapper.boardStore, boardStore);
   assert.equal(typeof bootstrapper.logger, 'object');
   assert.equal(typeof bootstrapper.generateMessageId, 'function');

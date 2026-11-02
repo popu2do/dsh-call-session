@@ -501,3 +501,43 @@ test('流水线事务屏障幂等性：同一准入租约重复 release 或 comm
   leaseB.release();
   assert.equal(leaseB.status, 'committed', '已提交租约调用 release 必须被 status 守卫无害阻断');
 });
+
+test('流水线阶段 3 边界：握手超时无因果推进时平滑收敛为 enqueued/pending 且状态为 idle', async () => {
+  PeerSessionFactory.reset();
+  const caller = createMockAgent('caller-timeout-1');
+
+  // 创建一个具有事件但不会推进因果步数的 mock target
+  let createdTarget = null;
+  const mockAgentsService = {
+    list: () => (createdTarget ? [caller, createdTarget] : [caller]),
+    create: async (payload) => {
+      createdTarget = createMockAgent(payload.sessionId, {
+        title: payload.title,
+        cwd: payload.cwd,
+        status: 'idle',
+        events: [{ type: 'session/created' }]
+      });
+      return createdTarget;
+    }
+  };
+
+  const mockCtx = {
+    agents: mockAgentsService,
+    get: (key) => (key === 'agents' ? mockAgentsService : undefined)
+  };
+
+  const factory = new PeerSessionFactory(mockCtx);
+  const result = await factory.create({
+    args: {
+      title: 'Timeout Worker',
+      initial_message: 'Long running task',
+      wait_ms: 50
+    },
+    exec: { agent: caller }
+  });
+
+  assert.equal(result.success, true);
+  assert.equal(result.deliveryState, 'enqueued');
+  assert.equal(result.executionState, 'pending');
+  assert.equal(result.status, 'idle');
+});
