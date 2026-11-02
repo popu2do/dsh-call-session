@@ -1,15 +1,40 @@
 /**
- * DSH Native Message Transport Types
+ * @module dsh-call-session/lib/native-message-transport
+ * Declarations for native message transport primitives.
  */
 
-export interface NativeUserMessageOptions {
-  messageId?: string;
-  rawMessage?: string;
-  callType?: 'task_dispatch' | 'task_report' | 'notice' | string;
+export interface CallTypeIntents {
+  readonly task_dispatch: string;
+  readonly task_report: string;
+  readonly notice: string;
+}
+
+export declare const CALL_TYPE_INTENTS: Readonly<CallTypeIntents>;
+export declare const DEFAULT_BOOTSTRAP_CALLER_ID: string;
+
+export declare function generateMessageId(): string;
+
+export declare function sanitizeContextPostIds(postIds?: unknown): string[];
+export declare function sanitizePostIds(postIds?: unknown): string[];
+
+export interface TransportPayloadOptions {
   callerSessionId?: string;
   callerTitle?: string;
+  callType?: string;
   contextPostIds?: string[];
-  form?: string;
+  cleanPostIds?: string[];
+}
+
+export declare function buildTransportPayload(rawMessage: string, options?: TransportPayloadOptions): string;
+
+export interface NativeUserMessageOptions {
+  rawMessage: string;
+  form?: 'notice' | 'session_create' | string;
+  callerSessionId?: string;
+  callerTitle?: string;
+  callType?: string;
+  contextPostIds?: string[];
+  generateMessageId?: () => string;
 }
 
 export interface NativeUserMessage {
@@ -23,14 +48,7 @@ export interface NativeUserMessage {
   };
 }
 
-export declare function generateMessageId(): string;
-
-export declare function sanitizeContextPostIds(postIds?: unknown): string[];
-export declare const sanitizePostIds: typeof sanitizeContextPostIds;
-
-export declare function formatContextRefLine(postIds: string[]): string;
-
-export declare function buildNativeUserMessage(options?: NativeUserMessageOptions): NativeUserMessage;
+export declare function buildNativeUserMessage(options: NativeUserMessageOptions): NativeUserMessage;
 
 export declare function dispatchNativeMessage(targetAgent: any, userMessage: NativeUserMessage): 'steer' | 'followup';
 
