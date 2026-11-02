@@ -351,7 +351,7 @@ test('Peer Session Reference: Sorting strictly by native latest update time desc
   assert.equal(list[5].label, '任务六', '0 timestamp must be last');
 });
 
-test('Peer Session Reference: Prioritize call-session registered sessions then by recency (ADR-0034)', async () => {
+test('Peer Session Reference: Level 2 order follows the sidebar with no collaborator pinning', async () => {
   const { plugin } = loadClientInSandbox();
 
   const sessionsById = {
@@ -380,11 +380,10 @@ test('Peer Session Reference: Prioritize call-session registered sessions then b
   );
 
   assert.equal(list.length, 3);
-  // 第一优先：call-session 注册过的已协作会话置顶（内部按更新时间倒序：4000 > 2000）
-  assert.equal(list[0].label, '已协作新任务', 'call-session registered session with updatedAt 4000 must be first');
-  assert.equal(list[1].label, '已协作旧任务', 'call-session registered session with updatedAt 2000 must be second');
-  // 第二优先：未协作会话即使更新时间更新（8000），排在已协作会话之后
-  assert.equal(list[2].label, '未协作新任务', 'Unregistered session must rank after registered sessions');
+  // 纯按更新时间倒序：8000 > 4000 > 2000，协作记录不再置顶
+  assert.equal(list[0].label, '未协作新任务', 'Newest session must lead regardless of collaboration history');
+  assert.equal(list[1].label, '已协作新任务', 'Registered session with updatedAt 4000 must follow the newer session');
+  assert.equal(list[2].label, '已协作旧任务', 'Registered session with updatedAt 2000 must rank last');
 });
 
 test('Peer Session Reference: Canonical 8-character short ID badge and title disambiguation', async () => {
@@ -642,16 +641,18 @@ test('Peer Session Reference: Node VM sandbox resilience and boundary condition 
   assert.ok(l2Malformed.length >= 1);
 });
 
-test('Peer Session Reference: Bug Repro - filter subagents with parentSessionId and review task titles', async () => {
+test('Peer Session Reference: Level 2 keeps origin-only siblings and hides every subagent session', async () => {
   const { plugin } = loadClientInSandbox();
 
   const sessionsById = {
     'session-curr': { id: 'session-curr', title: '分析dsh 同级会话功能', cwd: CURRENT_WS, status: 'running', updatedAt: 99999 },
-    // 真实子智能体样本（真实宿主中只有 parentSessionId，无 origin 或无子代理关键字）
-    'sub-1': { id: 'sub-1', title: 'Spec axis re-review for HEAD vs main', cwd: CURRENT_WS, parentSessionId: 'session-curr', updatedAt: 10000 },
-    'sub-2': { id: 'sub-2', title: 'Standards axis re-review for HEAD vs main', cwd: CURRENT_WS, parentSessionId: 'session-curr', updatedAt: 10000 },
-    'sub-3': { id: 'sub-3', title: 'agent-teams:peer-session-mention:docs-auditor', cwd: CURRENT_WS, parentSessionId: 'session-curr', updatedAt: 9000 },
-    'sub-4': { id: 'sub-4', title: 'Implement Ticket 01: Peer session discovery', cwd: CURRENT_WS, parentSessionId: 'session-curr', updatedAt: 8000 },
+    // 真实子代理样本：根会话记录带 origin 与 parentSession，标记为子代理
+    'sub-1': { id: 'sub-1', title: 'Spec axis re-review for HEAD vs main', cwd: CURRENT_WS, origin: 'subagent', parentSession: 'session-curr', updatedAt: 10000 },
+    'sub-2': { id: 'sub-2', title: 'Standards axis re-review for HEAD vs main', cwd: CURRENT_WS, origin: 'subagent', parentSession: 'session-curr', updatedAt: 10000 },
+    'sub-3': { id: 'sub-3', title: 'agent-teams:peer-session-mention:docs-auditor', cwd: CURRENT_WS, origin: 'subagent', parentSession: 'session-curr', updatedAt: 9000 },
+    'sub-4': { id: 'sub-4', title: 'Implement Ticket 01: Peer session discovery', cwd: CURRENT_WS, origin: 'subagent', parentSession: 'session-curr', updatedAt: 8000 },
+    // 带 parentSession 字段但 origin 为空的会话：左侧列表照常显示，这里也必须显示
+    'parented-root': { id: 'parented-root', title: '迁移遗留会话', cwd: CURRENT_WS, origin: null, parentSession: 'session-other', updatedAt: 15000 },
     // 真实同级协作根会话（无 parentSessionId，在 callTelemetry 中有协作记录）
     'peer-active-1': { id: 'peer-active-1', title: '优化README的 @ 功能展示...', cwd: CURRENT_WS, status: 'running', updatedAt: 50000 },
     'peer-active-2': { id: 'peer-active-2', title: '查找开发者社区技能', cwd: CURRENT_WS, status: 'idle', updatedAt: 40000 },
@@ -682,16 +683,18 @@ test('Peer Session Reference: Bug Repro - filter subagents with parentSessionId 
   assert.ok(!list.some(item => item.label.includes('agent-teams:')), 'agent-teams task must be filtered out');
   assert.ok(!list.some(item => item.label.includes('Implement Ticket')), 'Implement ticket subagent must be filtered out');
 
-  // 2. 严格断言同级会话数量
-  assert.equal(list.length, 3, 'Must only contain the 3 root peer sessions');
+  // 2. 严格断言同级会话数量：三个根会话加一个带 parentSession 但 origin 为空的会话
+  assert.equal(list.length, 4, 'Must contain the three root peers plus the parented non-subagent session');
+  assert.ok(list.some(item => item.label === '迁移遗留会话'), 'Session with a parent but no subagent origin stays visible');
 
-  // 3. 严格断言排序：call-session 协作会话排在第一优先，且组内按时间倒序
-  assert.equal(list[0].label, '优化README的 @ 功能展示...', 'First must be active collaborator 1');
-  assert.equal(list[1].label, '查找开发者社区技能', 'Second must be active collaborator 2');
-  assert.equal(list[2].label, 'task_report回传提醒机制', 'Third must be ordinary peer session');
+  // 3. 严格断言排序：纯按更新时间倒序，与左侧原生列表一致
+  assert.equal(list[0].label, '优化README的 @ 功能展示...', 'First must be the newest session');
+  assert.equal(list[1].label, '查找开发者社区技能', 'Second must follow by update time');
+  assert.equal(list[2].label, 'task_report回传提醒机制', 'Third must follow by update time');
+  assert.equal(list[3].label, '迁移遗留会话', 'Oldest visible session must rank last');
 });
 
-test('Peer Session Reference: Non-intrusive source registration and priority order without monkey-patching', async () => {
+test('Peer Session Reference: Source registration keeps order and name', async () => {
   const { plugin } = loadClientInSandbox();
 
   let registeredSource = null;
@@ -995,4 +998,114 @@ test('Peer Session Reference: section copy is plain and bilingual symmetric (ADR
   const src = getRegisteredSource();
   const level1 = await src.candidates({ sessionId: 'session-curr' }, { query: '', drilled: false });
   assert.equal(level1[0].section, '工作区');
+});
+
+test('Peer Session Reference: Native @ candidates drop every subagent and follow update-time order', async () => {
+  const { plugin } = loadClientInSandbox();
+
+  const sessionRow = (id, label) => ({
+    name: label,
+    section: 'conversation',
+    value: JSON.stringify({
+      kind: 'session',
+      label,
+      mention: `@[${label}](dsh-session:${Buffer.from(JSON.stringify(id), 'utf8').toString('base64url')})`
+    })
+  });
+
+  const sessionsById = {
+    cur: { id: 'cur', cwd: CURRENT_WS, title: 'current session', updatedAt: 20000 },
+    peer: { id: 'peer', cwd: CURRENT_WS, title: 'peer session', updatedAt: 5000 },
+    'foreign-child': { id: 'foreign-child', cwd: CURRENT_WS, title: 'Spec review', origin: 'subagent', parentId: 'other', updatedAt: 19000 },
+    'own-child': { id: 'own-child', cwd: CURRENT_WS, title: 'own subagent', origin: 'subagent', parentId: 'cur', updatedAt: 18000 },
+    'parented-peer': { id: 'parented-peer', cwd: CURRENT_WS, title: 'parented peer', origin: null, parentSessionId: 'other', updatedAt: 9000 },
+    'archived-peer': { id: 'archived-peer', cwd: CURRENT_WS, title: 'archived peer', archived: true, updatedAt: 12000 },
+    'rostered-peer': { id: 'rostered-peer', cwd: CURRENT_WS, title: 'rostered peer', updatedAt: 11000 }
+  };
+
+  const nativeRows = [
+    sessionRow('foreign-child', 'Spec review'),
+    sessionRow('peer', 'peer session'),
+    sessionRow('own-child', 'own subagent'),
+    sessionRow('parented-peer', 'parented peer'),
+    sessionRow('archived-peer', 'archived peer'),
+    sessionRow('rostered-peer', 'rostered peer'),
+    sessionRow('unknown-snapshot-peer', 'unknown snapshot peer'),
+    { name: 'session-list.ts', section: 'files', value: JSON.stringify({ kind: 'file', path: 'session-list.ts' }) },
+    { name: 'malformed-row', value: 'not-json' }
+  ];
+
+  let nativeCalls = 0;
+  const nativeSource = {
+    trigger: '@',
+    name: 'reference',
+    showGroupTitle: false,
+    candidates: async () => {
+      nativeCalls += 1;
+      return nativeRows.map((row) => ({ ...row }));
+    }
+  };
+
+  const originalCandidates = nativeSource.candidates;
+  const live = { sources: [nativeSource] };
+  let registeredSource = null;
+  const inputTriggers = {
+    live,
+    registerSource: (src) => {
+      registeredSource = src;
+      live.sources.push(src);
+      return () => {};
+    }
+  };
+
+  let disposePlugin = null;
+  const mockCtx = {
+    effect: (fn) => {
+      const disposer = fn();
+      if (typeof disposer === 'function') disposePlugin = disposer;
+    },
+    locale: {
+      register: () => {},
+      bind: () => (key) => plugin.zh[key] || key
+    },
+    slots: {
+      inject: () => {},
+      register: () => {}
+    },
+    get: (serviceName) => {
+      if (serviceName === 'inputTriggers') return inputTriggers;
+      if (serviceName === 'sessions') {
+        return { list: { getSnapshot: () => ({ byId: sessionsById }) } };
+      }
+      if (serviceName === 'workspaces') {
+        return { list: { getSnapshot: () => ({ archivedSessionIds: ['rostered-peer'] }) } };
+      }
+      return null;
+    }
+  };
+
+  plugin.apply(mockCtx);
+
+  assert.notEqual(nativeSource.candidates, originalCandidates, 'Only the host candidates function is expected to be replaced');
+  assert.equal(nativeSource.trigger, '@', 'Host trigger identity must stay untouched');
+  assert.equal(nativeSource.name, 'reference', 'Host source name must stay untouched');
+  assert.equal(nativeSource.showGroupTitle, false, 'Host display flag must stay untouched');
+
+  const filtered = await nativeSource.candidates({ sessionId: 'cur' }, { query: '', quoted: false, drilled: false });
+  assert.deepEqual(
+    Array.from(filtered, (item) => item.name),
+    ['parented peer', 'peer session', 'unknown snapshot peer', 'session-list.ts', 'malformed-row'],
+    'Every subagent row disappears, archived rows disappear, remaining session rows follow update time descending, unknown session rows keep original slot, file and malformed rows keep their slots'
+  );
+  assert.ok(!filtered.some((item) => item.name === 'Spec review' || item.name === 'own subagent'), 'No subagent row may survive, including this session own children');
+  assert.ok(!filtered.some((item) => item.name === 'archived peer' || item.name === 'rostered peer'), 'No archived or rostered dead session row may survive');
+  assert.equal(nativeCalls, 1, 'Native candidates must be invoked exactly once per fetch');
+
+  await registeredSource.candidates({ sessionId: 'cur' }, { query: '', drilled: false });
+  await nativeSource.candidates({ sessionId: 'cur' }, { query: '', drilled: false });
+  assert.equal(nativeCalls, 2, 'Repeated installs must not stack wrappers');
+
+  assert.ok(typeof disposePlugin === 'function', 'Activation must return a disposer');
+  disposePlugin();
+  assert.equal(nativeSource.candidates, originalCandidates, 'Disposing the plugin must hand the host implementation back');
 });

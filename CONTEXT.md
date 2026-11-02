@@ -124,11 +124,11 @@ _Avoid_: 会话初始化总线, 广播启动, 异步钩子
 _Avoid_: 阻塞调用, 同步RPC, 长连接轮询
 
 **因果确权 / Causal Verification**:
-在轻量握手窗口期内，不仅观测目标会话状态是否进入 running，还结合 step、step/start 与 turn 物理步进增量断言本次投递真正引起了目标执行推进，杜绝空转假确权。
+在轻量握手窗口期内，不仅观测目标会话状态是否进入 running，还结合 step、step/start 与 turn 物理步进增量断言本次投递真正引起了目标执行推进，排除空转假确权。
 _Avoid_: 状态轮询假确权, 伪就绪判定, 心跳假象
 
 **因果等待原语 / Causal Wait Primitives**:
-封装因果确权轮询、崩溃阻断与超时优雅降级的核心函数集（waitForCausalExecution / dispatchAndVerifyNativeMessage），提供统一的单播投递与启动等待保障。
+封装因果确权轮询、崩溃阻断与超时优雅降级的核心函数集，由 waitForCausalExecution 与 dispatchAndVerifyNativeMessage 组成，提供统一的单播投递与启动等待保障。
 _Avoid_: 内联轮询循环, 私有等待锁
 
 **原生三态状态协议 / Native 3-State Status Protocol**:
@@ -156,7 +156,7 @@ _Avoid_: 随机序号, 自增数字, 别名尾缀
 ### 对等准入
 
 **对等会话准入流水线 / Peer Session Admission Pipeline**:
-对等会话创建的四阶段原子流水线（validateAndAdmit、provisionPeerAgent、bootstrapAndVerify、finalizeAdmission），通过事务屏障保障租约全生命周期零泄漏与回滚语义。
+对等会话创建的四阶段原子流水线，按序执行 validateAndAdmit、provisionPeerAgent、bootstrapAndVerify 与 finalizeAdmission，通过事务屏障保障租约全生命周期零泄漏与回滚语义。
 _Avoid_: 会话流水线, 启动拦截器, 创建中转器
 
 **对等会话启动协同器 / Peer Bootstrapper**:

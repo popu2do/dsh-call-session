@@ -80,7 +80,7 @@ test('Parity: Mathematical primitives and curve paths are identical', () => {
     { text: '深度协同', maxW: 80 },
     { text: '深度思考智能体全流程协同', maxW: 80 },
     { text: 'SessionCallDispatcherEngine', maxW: 80 },
-    { text: 'DSH协同画板Canvas拓扑分析', maxW: 80 },
+    { text: 'DSH协同画布Canvas拓扑分析', maxW: 80 },
     { text: '', maxW: 80 }
   ];
   for (const tc of textCases) {
