@@ -212,3 +212,20 @@ export declare function executeSessionCreate(
   rawExec?: any,
   rawOptions?: any
 ): Promise<SessionCreateResult>;
+
+export interface ExecutePeerSessionAdmissionPipelineParams {
+  args?: SessionCreateArgs;
+  exec?: any;
+  options?: any;
+  gateway?: DshHostGateway;
+  safeguard?: SessionSafeguard;
+  directory?: SessionDirectory;
+  bootstrapper?: PeerBootstrapper;
+  boardStore?: any;
+  logger?: any;
+}
+
+export declare function executePeerSessionAdmissionPipeline(
+  ctx: any,
+  params?: ExecutePeerSessionAdmissionPipelineParams
+): Promise<SessionCreateResult>;
