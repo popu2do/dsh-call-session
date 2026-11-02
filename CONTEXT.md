@@ -145,7 +145,7 @@ _Avoid_: 动态代理引用, 跨插件私有探测, 调度型引用, 唤醒引�
 会话候选项与引用图元中绑定的前置井号 8 位十六进制规范短码，由会话原生唯一标识哈希或规范截断推导，用于在多智能体同名会话场景下提供确定性视觉消歧。
 _Avoid_: 随机序号, 自增数字, 别名尾缀
 
-### 准入生命
+### 对等准入
 
 **对等会话准入流水线 / Peer Session Admission Pipeline**:
 对等会话创建的四阶段原子流水线（validateAndAdmit、provisionPeerAgent、bootstrapAndVerify、finalizeAdmission），通过事务屏障保障租约全生命周期零泄漏与回滚语义。
