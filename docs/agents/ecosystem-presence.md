@@ -82,3 +82,12 @@ Copy submitted, verbatim, from the manifest positioning sentence:
 > 并排运行多个 DeepSeek Harness 会话，让它们互相交接任务，并在同一张只读看板上看清整场协作。
 
 Pending action: await review of pull request 959. Its automated classifier returns the fallback category for this repository, because its rules match substrings and no rule covers session coordination, so the submitted category was chosen by hand from the catalog's own boundary rules and the reasoning is stated in the request. On merge, set the status to `listed` and re-read the rendered row.
+
+## Automated Aggregators
+
+These ecosystem directories crawl npm and GitHub topics automatically without manual submission:
+
+- **`awesome-dsh-plugin.com`**: `https://awesome-dsh-plugin.com/p/{owner}/{name}/` (API: `https://awesome-dsh-plugin.com/plugins.json`; powers DSH `dshmarket`)
+- **`dsh-plugin.org`**: `https://dsh-plugin.org/plugins/{owner}/{name}`
+- **`dshai.org`**: `https://dshai.org/plugins/{owner}-{name}`
+- **`deepseekharness.io`**: `https://deepseekharness.io/plugins/{name}`
