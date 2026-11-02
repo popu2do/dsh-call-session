@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.11] - 2026-11-03
+
+### Summary
+Comprehensive architecture deepening and multi-track refinement release: extracts headless canvas geometry into a single source with deterministic embed drift verification (ADR-0040), aligns mention candidate visibility and native wrapper parity under workspace roster filtering (ADR-0041), converges native transport handshake and causal verification loops (ADR-0036), collapses peer session admission into a four-stage atomic transaction pipeline (ADR-0028), unifies session directory query execution (ADR-0024), and enforces strict tool argument rejection across all tools with zero side effects (ADR-0039 / Issue #19).
+
 ### Added
 - **Canvas Geometry Headless Extraction (ADR-0040)**:
   - Extracted pure mathematical canvas geometry functions into single source module `lib/canvas-geometry.mjs`.
@@ -14,6 +19,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Added script `npm run build:canvas-geometry` and integrated embed drift verification into `npm run lint` and `npm run check`.
   - Added standalone headless unit test suite `tests/canvas-geometry-core.test.mjs` and cross-module parity suite `tests/canvas-geometry-parity.test.mjs`.
   - Added golden layout and framing snapshot fixture `tests/fixtures/canvas-layout-baseline.json`.
+- **Native Mention Candidate Visibility Parity (ADR-0041)**:
+  - Added native candidate visibility filter in client composer `@` mention picker with strict sandbox parity.
+  - Preserved unknown session rows in native wrapper slots while excluding archived sessions via workspace roster.
+  - Added host candidate contract test suite `tests/host-candidate-contract.test.mjs` and reinforced peer session reference tests.
+- **Strict Tool Argument Validation (ADR-0039 / Issue #19)**:
+  - Declared `additionalProperties: false` across Schemastery schemas for all six tools.
+  - Rejection of undeclared arguments occurs at schema entry with zero side effects on quotas or reservations.
 
 ### Changed
 - **Client Canvas Component Geometry Delegations (`lib/client.js`)**:
@@ -22,6 +34,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Replaced cursor wheel zooming with `computeZoomAtPoint`.
   - Replaced surface transform styling with `viewportTransformStyle`.
   - Replaced session, post, and call edge tooltip projections with `worldToScreen`.
+- **Native Message Transport & Causal Verification (`lib/native-message-transport.mjs`, `lib/session-call.mjs`)**:
+  - Enforced target health probing prior to dispatch and derived initial target running state.
+  - Unified causal wait primitives (`waitForCausalExecution`, `dispatchAndVerifyNativeMessage`) to avoid false-positive acknowledgments.
+  - Aligned timeout delivery states mapping (`enqueued` / `pending`) and completed transport type declarations.
+- **Peer Session Admission Lifecycle (`lib/session-create.mjs`)**:
+  - Collapsed admission lifecycle into four sequential atomic stages: `validateAndAdmit`, `provisionPeerAgent`, `bootstrapAndVerify`, and `finalizeAdmission`.
+  - Hardened transaction barrier to guarantee lease release on any non-committed exit path.
+- **Session Directory Consolidation (`lib/session-directory.mjs`)**:
+  - Folded `session-query` execution directly into `SessionDirectory` and normalized query overloads.
+  - Extracted `isWrappedQueryOptions` helper and streamlined cross-workspace lookup.
 
 ## [0.1.10] - 2026-10-23
 
