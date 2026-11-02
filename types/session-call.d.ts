@@ -171,12 +171,21 @@ export declare function buildNativeUserMessage(options: import('../lib/native-me
  * 统一因果执行等待原语（传输层单点实现，此处仅重导出）
  */
 export declare function waitForCausalExecution(
+  targetAgent: any,
+  options?: import('../lib/native-message-transport.js').CausalWaitOptions
+): Promise<import('../lib/native-message-transport.js').CausalWaitResult>;
+export declare function waitForCausalExecution(
   options?: import('../lib/native-message-transport.js').CausalWaitOptions
 ): Promise<import('../lib/native-message-transport.js').CausalWaitResult>;
 
 /**
  * 复合派发与因果验证原语（传输层单点实现，此处仅重导出）
  */
+export declare function dispatchAndVerifyNativeMessage(
+  targetAgent: any,
+  userMessage?: any,
+  options?: import('../lib/native-message-transport.js').DispatchAndVerifyOptions
+): Promise<import('../lib/native-message-transport.js').DispatchAndVerifyResult>;
 export declare function dispatchAndVerifyNativeMessage(
   options?: import('../lib/native-message-transport.js').DispatchAndVerifyOptions
 ): Promise<import('../lib/native-message-transport.js').DispatchAndVerifyResult>;
