@@ -190,3 +190,85 @@ test('computeContentBounds: enclosing rectangle calculation and fallback', () =>
   assert.equal(calculated.maxX, 1120);
   assert.equal(calculated.maxY, 630);
 });
+
+test('computeLayout boundary conditions: single column, multi column, cross-workspace and virtual nodes', () => {
+  const workspaces = [
+    { id: '/ws/main', name: 'main', isCurrent: true, sessionIds: ['s1'] },
+    { id: '/ws/peer', name: 'peer', isCurrent: false, sessionIds: ['s2'] }
+  ];
+  const sessions = [
+    { id: 's1', workspace: '/ws/main', title: 'Main Session' },
+    { id: 's2', workspace: '/ws/peer', title: 'Peer Session' }
+  ];
+  const posts = [
+    { id: 'p1', authorSessionId: 's1', title: 'Notice 1', createdAt: 1000 }
+  ];
+  const calls = [
+    { id: 'c1', callerSessionId: 's1', targetSessionId: 's2' }
+  ];
+
+  const layout = geom.computeLayout(workspaces, sessions, posts, '/ws/main', true, calls);
+  assert.ok(layout.workspaceBounds);
+  assert.equal(layout.workspaceBounds.length, 2);
+  assert.equal(layout.workspaceBounds[0].id, '/ws/main');
+  assert.equal(layout.workspaceBounds[0].isCurrent, true);
+  assert.equal(layout.workspaceBounds[0].x, geom.LAYOUT_METRICS.START_X);
+  assert.equal(layout.workspaceBounds[0].y, geom.LAYOUT_METRICS.START_Y);
+  assert.equal(layout.workspaceBounds[0].width, geom.LAYOUT_METRICS.COLUMN_WIDTH);
+
+  assert.equal(layout.workspaceBounds[1].id, '/ws/peer');
+  assert.equal(layout.workspaceBounds[1].x, geom.LAYOUT_METRICS.START_X + geom.LAYOUT_METRICS.COLUMN_WIDTH + geom.LAYOUT_METRICS.COLUMN_GAP);
+
+  assert.ok(layout.nodePositions['s1']);
+  assert.equal(layout.nodePositions['s1'].x, layout.workspaceBounds[0].x + geom.LAYOUT_METRICS.NODE_CENTER_OFFSET_X);
+  // slot 0 centerY = START_Y + WORKSPACE_PAD_TOP + 0.5 * SESSION_SLOT_HEIGHT - NODE_RADIUS_Y = 150 + 76 + 36 - 26 = 236 or 240
+  assert.equal(layout.nodePositions['s1'].y, 240);
+
+  assert.ok(layout.blackboardBound);
+  assert.equal(layout.blackboardBound.x, geom.LAYOUT_METRICS.BLACKBOARD_X);
+  assert.equal(layout.blackboardBound.y, geom.LAYOUT_METRICS.BLACKBOARD_Y);
+  assert.equal(layout.blackboardBound.height, geom.LAYOUT_METRICS.BLACKBOARD_HEIGHT_POSTS);
+
+  assert.ok(layout.postPositions['p1']);
+  assert.equal(layout.postPositions['p1'].x, geom.LAYOUT_METRICS.POST_START_X);
+  assert.equal(layout.postPositions['p1'].y, geom.LAYOUT_METRICS.POST_START_Y);
+});
+
+test('computeViewportFraming: macro and locate clamping in both directions', () => {
+  // Macro mode: small container forces min zoom clamping
+  const smallMacro = geom.computeViewportFraming({
+    mode: 'macro',
+    bounds: { minX: 0, minY: 0, maxX: 10000, maxY: 10000 },
+    viewportWidth: 800,
+    viewportHeight: 600
+  });
+  assert.equal(smallMacro.zoom, geom.VIEWPORT_FRAMING.MACRO_MIN_ZOOM);
+
+  // Macro mode: large container forces max zoom clamping
+  const largeMacro = geom.computeViewportFraming({
+    mode: 'macro',
+    bounds: { minX: 100, minY: 100, maxX: 150, maxY: 150 },
+    viewportWidth: 2000,
+    viewportHeight: 1500
+  });
+  assert.equal(largeMacro.zoom, geom.VIEWPORT_FRAMING.MACRO_MAX_ZOOM);
+
+  // Locate mode: zoom clamping between LOCATE_MIN_ZOOM and LOCATE_MAX_ZOOM
+  const locateLow = geom.computeViewportFraming({
+    mode: 'locate',
+    anchor: { x: 500, y: 400 },
+    currentZoom: 0.2,
+    viewportWidth: 800,
+    viewportHeight: 600
+  });
+  assert.equal(locateLow.zoom, geom.VIEWPORT_FRAMING.LOCATE_MIN_ZOOM);
+
+  const locateHigh = geom.computeViewportFraming({
+    mode: 'locate',
+    anchor: { x: 500, y: 400 },
+    currentZoom: 2.0,
+    viewportWidth: 800,
+    viewportHeight: 600
+  });
+  assert.equal(locateHigh.zoom, geom.VIEWPORT_FRAMING.LOCATE_MAX_ZOOM);
+});

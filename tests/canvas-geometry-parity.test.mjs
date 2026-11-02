@@ -139,8 +139,8 @@ test('Parity: Byte-level generated region identity between canvas-geometry and c
   const geomSource = fs.readFileSync(path.join(rootDir, 'lib/canvas-geometry.mjs'), 'utf8');
   const clientSource = fs.readFileSync(path.join(rootDir, 'lib/client.js'), 'utf8');
 
-  const startMarker = '// @generated-region-start';
-  const endMarker = '// @generated-region-end';
+  const startMarker = '// <BEGIN> lib/canvas-geometry.mjs 生成区，禁止手改';
+  const endMarker = '// <END>';
 
   const geomStart = geomSource.indexOf(startMarker);
   const geomEnd = geomSource.indexOf(endMarker);

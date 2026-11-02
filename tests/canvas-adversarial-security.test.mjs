@@ -237,8 +237,9 @@ test('CSS 样式声明检查：包含 translate3d、will-change 与 contain', ()
     '抽屉动画结束帧采用 3D 变换 translate3d(0, 0, 0)'
   );
 
-  // 3. 视口画布表面平移缩放采用 translate3d 配合 scale
+  // 3. 视口画布表面平移缩放采用 translate3d 配合 scale（通过无头函数 viewportTransformStyle 统一生成）
   assert.ok(
+    clientSource.includes('transform: viewportTransformStyle({ panX: pan.x, panY: pan.y, zoom: zoom })') ||
     clientSource.includes("transform: 'translate3d(' + pan.x + 'px, ' + pan.y + 'px, 0px) scale(' + zoom + ')'"),
     '画布表面平移缩放采用 translate3d'
   );
