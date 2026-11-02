@@ -386,4 +386,5 @@ test('session-query.mjs Facade: 纯重导出与 session-directory.mjs 引用一�
   assert.equal(queryModule.resolveSessionTitle, dirModule.resolveSessionTitle);
   assert.equal(queryModule.resolveAgentsService, dirModule.resolveAgentsService);
   assert.equal(queryModule.executeSessionQuery, dirModule.executeSessionQuery);
+  assert.equal(queryModule.resolveNativeSessionStatus, dirModule.resolveNativeSessionStatus);
 });
