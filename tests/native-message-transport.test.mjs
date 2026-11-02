@@ -406,3 +406,26 @@ test('NativeMessageTransport - 复合派发：waitMs=0 返回 delivered 与 unve
   assert.equal(result.executionState, 'unverified');
   assert.equal(result.finalStatus, 'idle');
 });
+
+test('NativeMessageTransport - 实例识别与位置重载 (isAgentInstance & positional dispatch)', async () => {
+  const { isAgentInstance } = await import('../lib/native-message-transport.mjs');
+  assert.equal(isAgentInstance(null), false);
+  assert.equal(isAgentInstance({}), false);
+  assert.equal(isAgentInstance({ followup: () => {} }), true);
+  assert.equal(isAgentInstance({ steer: () => {} }), true);
+  assert.equal(isAgentInstance({ send: () => {} }), true);
+  assert.equal(isAgentInstance({ session: { events: [] } }), true);
+
+  const agent = createCausalAgent({ status: 'idle' });
+  let invoked = false;
+  agent.followup = () => { invoked = true; };
+  const userMessage = { id: 'msg-pos', role: 'user', content: [] };
+
+  // 位置参数单体调用，验证无 ReferenceError
+  const res = await dispatchAndVerifyNativeMessage(agent, userMessage, {
+    waitMs: 0,
+    resolveStatus: resolveFromAgent
+  });
+  assert.equal(invoked, true);
+  assert.equal(res.deliveryMode, 'followup');
+});
