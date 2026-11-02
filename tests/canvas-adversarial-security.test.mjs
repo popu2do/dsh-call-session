@@ -45,7 +45,11 @@ test('插槽注册唯一性、作用域隔离与无全局路由/DOM悬浮', () =
   // 5. 排查向智能体注册模型工具
   assert.equal(/ctx\.(?:tools|tool)\.register/i.test(clientSource), false, '前端代码不包含 ctx.tools.register');
 
-  // 6. 运行期模拟审查：apply 仅注册单个插槽并注入预期上下文
+  // 6. 排查全局污染与动态代码执行 (constructor.constructor 与 eval)
+  assert.equal(clientSource.includes('constructor.constructor'), false, 'client.js 不包含 constructor.constructor 全局逃逸');
+  assert.equal(/\beval\s*\(/i.test(clientSource), false, 'client.js 不包含 eval 动态代码执行');
+
+  // 7. 运行期模拟审查：apply 仅注册单个插槽并注入预期上下文
   const plugin = loadClientBundle();
   let slotInjectCount = 0;
   let registeredSlotDef = null;
