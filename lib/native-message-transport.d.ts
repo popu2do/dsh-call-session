@@ -51,6 +51,7 @@ export interface NativeUserMessage {
 
 export declare function buildNativeUserMessage(options: NativeUserMessageOptions): NativeUserMessage;
 
+export declare function isAgentInstance(target: any): boolean;
 export declare function dispatchNativeMessage(targetAgent: any, userMessage: NativeUserMessage): 'steer' | 'followup';
 
 /**
@@ -126,6 +127,10 @@ export interface CausalWaitOptions {
   initialStepStartCount?: number;
   initialTurnCount?: number;
   initialTurnEndCount?: number;
+  /** 初始因果计数器对象 */
+  initialCounters?: Partial<CausalCounters>;
+  /** 零等待或未推进时的默认投递状态（默认 'enqueued'） */
+  defaultDeliveryState?: 'delivered' | 'enqueued' | 'failed';
   /** 轮询间隔毫秒数 */
   pollIntervalMs?: number;
 }
@@ -142,6 +147,13 @@ export declare function waitForCausalExecution(
   maybeOptions?: CausalWaitOptions
 ): Promise<CausalWaitResult>;
 
+export interface DispatchedEvent {
+  deliveryMode: 'steer' | 'followup';
+  durationMs: number;
+  targetAgent: any;
+  userMessage: NativeUserMessage;
+}
+
 /**
  * 复合派发与因果验证原语入参
  */
@@ -153,6 +165,12 @@ export interface DispatchAndVerifyOptions {
   waitMs?: number;
   resolveStatus?: (agent: any) => { status: string; error?: unknown };
   pollIntervalMs?: number;
+  /** 初始因果计数器对象 */
+  initialCounters?: Partial<CausalCounters>;
+  /** 默认投递状态 */
+  defaultDeliveryState?: 'delivered' | 'enqueued' | 'failed';
+  /** 派发完成后的事件回调 */
+  onDispatched?: (event: DispatchedEvent) => void;
 }
 
 export interface DispatchAndVerifyResult extends CausalWaitResult {

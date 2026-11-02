@@ -229,3 +229,8 @@ export declare function executePeerSessionAdmissionPipeline(
   ctx: any,
   params?: ExecutePeerSessionAdmissionPipelineParams
 ): Promise<SessionCreateResult>;
+
+export declare function validateAndAdmit(deps: any, input?: any): any;
+export declare function provisionPeerAgent(deps: any, state: any): Promise<any>;
+export declare function bootstrapAndVerify(deps: any, state: any): Promise<any>;
+export declare function finalizeAdmission(deps: any, state: any): SessionCreateResult;
