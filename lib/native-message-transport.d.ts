@@ -16,6 +16,7 @@ export declare function generateMessageId(): string;
 
 export declare function sanitizeContextPostIds(postIds?: unknown): string[];
 export declare function sanitizePostIds(postIds?: unknown): string[];
+export declare function formatContextRefLine(postIds?: unknown): string;
 
 export interface TransportPayloadOptions {
   callerSessionId?: string;
@@ -28,7 +29,7 @@ export interface TransportPayloadOptions {
 export declare function buildTransportPayload(rawMessage: string, options?: TransportPayloadOptions): string;
 
 export interface NativeUserMessageOptions {
-  rawMessage: string;
+  rawMessage?: string;
   form?: 'notice' | 'session_create' | string;
   callerSessionId?: string;
   callerTitle?: string;
@@ -95,6 +96,21 @@ export interface CausalRunningFinalParams {
 
 export declare function checkCausalRunning(params: CausalRunningParams): boolean;
 export declare function checkCausalRunningFinal(params: CausalRunningFinalParams): boolean;
+
+export interface ClassifiedError {
+  category: string;
+  code: string;
+  message: string;
+  fatal?: boolean;
+  details?: unknown;
+}
+
+export declare function classifyError(rawError: any): ClassifiedError;
+export declare function resolveNativeSessionStatus(agent: any): {
+  status: 'running' | 'idle' | 'error';
+  error: ClassifiedError | null;
+};
+export declare function clampWaitMs(rawWaitMs: any, targetAgent: any): number;
 
 /**
  * 因果执行等待原语入参

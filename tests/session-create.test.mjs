@@ -42,7 +42,8 @@ function createMockCtx({
         title: options.title || options.meta?.title || '',
         cwd: options.cwd || options.meta?.cwd || 'c:/workspace/project-alpha',
         generation: options.meta?.generation || 1,
-        options: options.agentOptions || {}
+        options: options.agentOptions || {},
+        mutateStatusOnDispatch: true
       });
       if (typeof options.setup === 'function') {
         await options.setup({ agent });
