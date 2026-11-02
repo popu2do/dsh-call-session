@@ -13,7 +13,7 @@ if [ -n "$bad_docs" ]; then
 fi
 
 # 1. 机械阻断在 scripts/ 下新增非标脚手架脚本（仅允许标准维护脚本）
-bad_scripts=$(git diff --cached --name-only --diff-filter=A | grep -E '^scripts/' | grep -vE '^scripts/(scan-secrets|check-commit-msg|install-hooks)\.mjs$' || true)
+bad_scripts=$(git diff --cached --name-only --diff-filter=A | grep -E '^scripts/' | grep -vE '^scripts/(scan-secrets|check-commit-msg|install-hooks|embed-canvas-geometry)\.mjs$' || true)
 if [ -n "$bad_scripts" ]; then
   echo "hook: 严禁向 scripts/ 增加非标临时脚本 ($bad_scripts)。所有验证与契约逻辑必须编写为 tests/*.test.mjs 单元测试。" >&2
   exit 1

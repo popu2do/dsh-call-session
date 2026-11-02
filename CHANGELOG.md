@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Canvas Geometry Headless Extraction (ADR-0040)**:
+  - Extracted pure mathematical canvas geometry functions into single source module `lib/canvas-geometry.mjs`.
+  - Added deterministic inlining compilation script `scripts/embed-canvas-geometry.mjs` with `--check` drift gate.
+  - Added script `npm run build:canvas-geometry` and integrated embed drift verification into `npm run lint` and `npm run check`.
+  - Added standalone headless unit test suite `tests/canvas-geometry-core.test.mjs` and cross-module parity suite `tests/canvas-geometry-parity.test.mjs`.
+  - Added golden layout and framing snapshot fixture `tests/fixtures/canvas-layout-baseline.json`.
+
+### Changed
+- **Client Canvas Component Geometry Delegations (`lib/client.js`)**:
+  - Replaced internal closure `getContentBounds` with headless `computeContentBounds`.
+  - Replaced mouse drag coordinate accumulation with `computeDragPan`.
+  - Replaced cursor wheel zooming with `computeZoomAtPoint`.
+  - Replaced surface transform styling with `viewportTransformStyle`.
+  - Replaced session, post, and call edge tooltip projections with `worldToScreen`.
+
 ## [0.1.10] - 2026-10-23
 
 ### Summary

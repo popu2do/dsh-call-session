@@ -1,0 +1,1355 @@
+{
+  "_note": "基线 golden 快照：由 baseline cc40a51 的 lib/client.js 导出的 computeLayout 与 computeViewportFraming 直接采集，生成后禁止编辑。",
+  "_baselineCommit": "cc40a51",
+  "layoutSignature": "computeLayout(workspaces, sessions, posts, currentWorkspace, crossWorkspace, calls)",
+  "framingSignature": "computeViewportFraming(options)",
+  "layoutCases": [
+    {
+      "name": "single-workspace-single-session",
+      "args": [
+        [
+          {
+            "id": "/ws/w0",
+            "name": "w0",
+            "isCurrent": true,
+            "sessionIds": [
+              "session-a"
+            ]
+          }
+        ],
+        [
+          {
+            "id": "session-a",
+            "workspace": "/ws/w0",
+            "title": "Agent A",
+            "status": "idle"
+          }
+        ],
+        [],
+        "/ws/w0",
+        false,
+        []
+      ],
+      "expected": {
+        "workspaceBounds": [
+          {
+            "id": "/ws/w0",
+            "name": "w0",
+            "isCurrent": true,
+            "x": 40,
+            "y": 150,
+            "width": 260,
+            "height": 480
+          }
+        ],
+        "nodePositions": {
+          "session-a": {
+            "x": 170,
+            "y": 240,
+            "session": {
+              "id": "session-a",
+              "workspace": "/ws/w0",
+              "title": "Agent A",
+              "status": "idle"
+            }
+          }
+        },
+        "nodeIdIndex": {
+          "session-a": "session-a"
+        },
+        "blackboardBound": {
+          "x": 40,
+          "y": 24,
+          "width": 1080,
+          "height": 38
+        },
+        "postPositions": {}
+      }
+    },
+    {
+      "name": "standard-two-workspaces",
+      "args": [
+        [
+          {
+            "id": "/ws/w0",
+            "name": "w0",
+            "isCurrent": true,
+            "sessionIds": [
+              "session-a",
+              "session-b"
+            ]
+          },
+          {
+            "id": "/ws/w1",
+            "name": "w1",
+            "isCurrent": false,
+            "sessionIds": [
+              "session-c"
+            ]
+          }
+        ],
+        [
+          {
+            "id": "session-a",
+            "workspace": "/ws/w0",
+            "title": "Agent A",
+            "status": "idle"
+          },
+          {
+            "id": "session-b",
+            "workspace": "/ws/w0",
+            "title": "Agent B",
+            "status": "running"
+          },
+          {
+            "id": "session-c",
+            "workspace": "/ws/w1",
+            "title": "Agent C",
+            "status": "idle"
+          }
+        ],
+        [],
+        "/ws/w0",
+        true,
+        []
+      ],
+      "expected": {
+        "workspaceBounds": [
+          {
+            "id": "/ws/w0",
+            "name": "w0",
+            "isCurrent": true,
+            "x": 40,
+            "y": 150,
+            "width": 260,
+            "height": 480
+          },
+          {
+            "id": "/ws/w1",
+            "name": "w1",
+            "isCurrent": false,
+            "x": 336,
+            "y": 150,
+            "width": 260,
+            "height": 480
+          }
+        ],
+        "nodePositions": {
+          "session-a": {
+            "x": 170,
+            "y": 240,
+            "session": {
+              "id": "session-a",
+              "workspace": "/ws/w0",
+              "title": "Agent A",
+              "status": "idle"
+            }
+          },
+          "session-b": {
+            "x": 170,
+            "y": 312,
+            "session": {
+              "id": "session-b",
+              "workspace": "/ws/w0",
+              "title": "Agent B",
+              "status": "running"
+            }
+          },
+          "session-c": {
+            "x": 466,
+            "y": 240,
+            "session": {
+              "id": "session-c",
+              "workspace": "/ws/w1",
+              "title": "Agent C",
+              "status": "idle"
+            }
+          }
+        },
+        "nodeIdIndex": {
+          "session-a": "session-a",
+          "session-b": "session-b",
+          "session-c": "session-c"
+        },
+        "blackboardBound": {
+          "x": 40,
+          "y": 24,
+          "width": 1080,
+          "height": 38
+        },
+        "postPositions": {}
+      }
+    },
+    {
+      "name": "wide-five-workspaces",
+      "args": [
+        [
+          {
+            "id": "/ws/w0",
+            "name": "w0",
+            "isCurrent": true,
+            "sessionIds": [
+              "session-s0"
+            ]
+          },
+          {
+            "id": "/ws/w1",
+            "name": "w1",
+            "isCurrent": false,
+            "sessionIds": [
+              "session-s1"
+            ]
+          },
+          {
+            "id": "/ws/w2",
+            "name": "w2",
+            "isCurrent": false,
+            "sessionIds": [
+              "session-s2"
+            ]
+          },
+          {
+            "id": "/ws/w3",
+            "name": "w3",
+            "isCurrent": false,
+            "sessionIds": [
+              "session-s3"
+            ]
+          },
+          {
+            "id": "/ws/w4",
+            "name": "w4",
+            "isCurrent": false,
+            "sessionIds": [
+              "session-s4"
+            ]
+          }
+        ],
+        [
+          {
+            "id": "session-s0",
+            "workspace": "/ws/w0",
+            "title": "Agent 0",
+            "status": "running"
+          },
+          {
+            "id": "session-s1",
+            "workspace": "/ws/w1",
+            "title": "Agent 1",
+            "status": "idle"
+          },
+          {
+            "id": "session-s2",
+            "workspace": "/ws/w2",
+            "title": "Agent 2",
+            "status": "idle"
+          },
+          {
+            "id": "session-s3",
+            "workspace": "/ws/w3",
+            "title": "Agent 3",
+            "status": "idle"
+          },
+          {
+            "id": "session-s4",
+            "workspace": "/ws/w4",
+            "title": "Agent 4",
+            "status": "idle"
+          }
+        ],
+        [],
+        "/ws/w0",
+        true,
+        []
+      ],
+      "expected": {
+        "workspaceBounds": [
+          {
+            "id": "/ws/w0",
+            "name": "w0",
+            "isCurrent": true,
+            "x": 40,
+            "y": 150,
+            "width": 260,
+            "height": 480
+          },
+          {
+            "id": "/ws/w1",
+            "name": "w1",
+            "isCurrent": false,
+            "x": 336,
+            "y": 150,
+            "width": 260,
+            "height": 480
+          },
+          {
+            "id": "/ws/w2",
+            "name": "w2",
+            "isCurrent": false,
+            "x": 632,
+            "y": 150,
+            "width": 260,
+            "height": 480
+          },
+          {
+            "id": "/ws/w3",
+            "name": "w3",
+            "isCurrent": false,
+            "x": 928,
+            "y": 150,
+            "width": 260,
+            "height": 480
+          },
+          {
+            "id": "/ws/w4",
+            "name": "w4",
+            "isCurrent": false,
+            "x": 1224,
+            "y": 150,
+            "width": 260,
+            "height": 480
+          }
+        ],
+        "nodePositions": {
+          "session-s0": {
+            "x": 170,
+            "y": 240,
+            "session": {
+              "id": "session-s0",
+              "workspace": "/ws/w0",
+              "title": "Agent 0",
+              "status": "running"
+            }
+          },
+          "session-s1": {
+            "x": 466,
+            "y": 240,
+            "session": {
+              "id": "session-s1",
+              "workspace": "/ws/w1",
+              "title": "Agent 1",
+              "status": "idle"
+            }
+          },
+          "session-s2": {
+            "x": 762,
+            "y": 240,
+            "session": {
+              "id": "session-s2",
+              "workspace": "/ws/w2",
+              "title": "Agent 2",
+              "status": "idle"
+            }
+          },
+          "session-s3": {
+            "x": 1058,
+            "y": 240,
+            "session": {
+              "id": "session-s3",
+              "workspace": "/ws/w3",
+              "title": "Agent 3",
+              "status": "idle"
+            }
+          },
+          "session-s4": {
+            "x": 1354,
+            "y": 240,
+            "session": {
+              "id": "session-s4",
+              "workspace": "/ws/w4",
+              "title": "Agent 4",
+              "status": "idle"
+            }
+          }
+        },
+        "nodeIdIndex": {
+          "session-s0": "session-s0",
+          "session-s1": "session-s1",
+          "session-s2": "session-s2",
+          "session-s3": "session-s3",
+          "session-s4": "session-s4"
+        },
+        "blackboardBound": {
+          "x": 40,
+          "y": 24,
+          "width": 1524,
+          "height": 38
+        },
+        "postPositions": {}
+      }
+    },
+    {
+      "name": "empty-topology-anchor",
+      "args": [
+        [],
+        [],
+        [],
+        "/ws/empty",
+        true,
+        []
+      ],
+      "expected": {
+        "workspaceBounds": [
+          {
+            "id": "/ws/empty",
+            "name": "empty",
+            "isCurrent": true,
+            "x": 40,
+            "y": 150,
+            "width": 260,
+            "height": 480
+          }
+        ],
+        "nodePositions": {},
+        "nodeIdIndex": {},
+        "blackboardBound": {
+          "x": 40,
+          "y": 24,
+          "width": 1080,
+          "height": 38
+        },
+        "postPositions": {}
+      }
+    },
+    {
+      "name": "blackboard-post-grid",
+      "args": [
+        [
+          {
+            "id": "/ws/w0",
+            "name": "w0",
+            "isCurrent": true,
+            "sessionIds": [
+              "session-a"
+            ]
+          },
+          {
+            "id": "/ws/w1",
+            "name": "w1",
+            "isCurrent": false,
+            "sessionIds": [
+              "session-c"
+            ]
+          }
+        ],
+        [
+          {
+            "id": "session-a",
+            "workspace": "/ws/w0",
+            "title": "Agent A",
+            "status": "idle"
+          },
+          {
+            "id": "session-c",
+            "workspace": "/ws/w1",
+            "title": "Agent C",
+            "status": "idle"
+          }
+        ],
+        [
+          {
+            "id": "post-0",
+            "status": "active",
+            "createdAt": 1700000000000,
+            "authorSessionId": "session-a",
+            "content": "post post-0"
+          },
+          {
+            "id": "post-1",
+            "status": "settled",
+            "createdAt": 1700000001000,
+            "authorSessionId": "session-a",
+            "content": "post post-1"
+          },
+          {
+            "id": "post-2",
+            "status": "settled",
+            "createdAt": 1700000002000,
+            "authorSessionId": "session-a",
+            "content": "post post-2"
+          },
+          {
+            "id": "post-3",
+            "status": "active",
+            "createdAt": 1700000003000,
+            "authorSessionId": "session-a",
+            "content": "post post-3"
+          },
+          {
+            "id": "post-4",
+            "status": "settled",
+            "createdAt": 1700000004000,
+            "authorSessionId": "session-a",
+            "content": "post post-4"
+          },
+          {
+            "id": "post-5",
+            "status": "settled",
+            "createdAt": 1700000005000,
+            "authorSessionId": "session-a",
+            "content": "post post-5"
+          },
+          {
+            "id": "post-6",
+            "status": "active",
+            "createdAt": 1700000006000,
+            "authorSessionId": "session-a",
+            "content": "post post-6"
+          },
+          {
+            "id": "post-7",
+            "status": "settled",
+            "createdAt": 1700000007000,
+            "authorSessionId": "session-a",
+            "content": "post post-7"
+          },
+          {
+            "id": "post-8",
+            "status": "settled",
+            "createdAt": 1700000008000,
+            "authorSessionId": "session-a",
+            "content": "post post-8"
+          },
+          {
+            "id": "post-9",
+            "status": "active",
+            "createdAt": 1700000009000,
+            "authorSessionId": "session-a",
+            "content": "post post-9"
+          },
+          {
+            "id": "post-10",
+            "status": "settled",
+            "createdAt": 1700000010000,
+            "authorSessionId": "session-a",
+            "content": "post post-10"
+          },
+          {
+            "id": "post-11",
+            "status": "settled",
+            "createdAt": 1700000011000,
+            "authorSessionId": "session-a",
+            "content": "post post-11"
+          }
+        ],
+        "/ws/w0",
+        true,
+        []
+      ],
+      "expected": {
+        "workspaceBounds": [
+          {
+            "id": "/ws/w0",
+            "name": "w0",
+            "isCurrent": true,
+            "x": 40,
+            "y": 150,
+            "width": 260,
+            "height": 480
+          },
+          {
+            "id": "/ws/w1",
+            "name": "w1",
+            "isCurrent": false,
+            "x": 336,
+            "y": 150,
+            "width": 260,
+            "height": 480
+          }
+        ],
+        "nodePositions": {
+          "session-a": {
+            "x": 170,
+            "y": 240,
+            "session": {
+              "id": "session-a",
+              "workspace": "/ws/w0",
+              "title": "Agent A",
+              "status": "idle"
+            }
+          },
+          "session-c": {
+            "x": 466,
+            "y": 240,
+            "session": {
+              "id": "session-c",
+              "workspace": "/ws/w1",
+              "title": "Agent C",
+              "status": "idle"
+            }
+          }
+        },
+        "nodeIdIndex": {
+          "session-a": "session-a",
+          "session-c": "session-c"
+        },
+        "blackboardBound": {
+          "x": 40,
+          "y": 24,
+          "width": 1080,
+          "height": 96
+        },
+        "postPositions": {
+          "post-9": {
+            "x": 56,
+            "y": 52,
+            "width": 180,
+            "height": 48,
+            "post": {
+              "id": "post-9",
+              "status": "active",
+              "createdAt": 1700000009000,
+              "authorSessionId": "session-a",
+              "content": "post post-9"
+            }
+          },
+          "post-6": {
+            "x": 252,
+            "y": 52,
+            "width": 180,
+            "height": 48,
+            "post": {
+              "id": "post-6",
+              "status": "active",
+              "createdAt": 1700000006000,
+              "authorSessionId": "session-a",
+              "content": "post post-6"
+            }
+          },
+          "post-3": {
+            "x": 448,
+            "y": 52,
+            "width": 180,
+            "height": 48,
+            "post": {
+              "id": "post-3",
+              "status": "active",
+              "createdAt": 1700000003000,
+              "authorSessionId": "session-a",
+              "content": "post post-3"
+            }
+          },
+          "post-0": {
+            "x": 644,
+            "y": 52,
+            "width": 180,
+            "height": 48,
+            "post": {
+              "id": "post-0",
+              "status": "active",
+              "createdAt": 1700000000000,
+              "authorSessionId": "session-a",
+              "content": "post post-0"
+            }
+          },
+          "post-11": {
+            "x": 840,
+            "y": 52,
+            "width": 180,
+            "height": 48,
+            "post": {
+              "id": "post-11",
+              "status": "settled",
+              "createdAt": 1700000011000,
+              "authorSessionId": "session-a",
+              "content": "post post-11"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "virtual-archived-endpoints",
+      "args": [
+        [
+          {
+            "id": "/ws/w0",
+            "name": "w0",
+            "isCurrent": true,
+            "sessionIds": [
+              "session-a"
+            ]
+          }
+        ],
+        [
+          {
+            "id": "session-a",
+            "workspace": "/ws/w0",
+            "title": "Agent A",
+            "status": "idle"
+          }
+        ],
+        [],
+        "/ws/w0",
+        true,
+        [
+          {
+            "id": "call-1",
+            "callerSessionId": "session-a",
+            "callerWorkspace": "/ws/w0",
+            "targetSessionId": "session-ghost",
+            "targetWorkspace": "/ws/w0",
+            "targetTitle": "Ghost Agent",
+            "targetArchived": true,
+            "status": "settled"
+          }
+        ]
+      ],
+      "expected": {
+        "workspaceBounds": [
+          {
+            "id": "/ws/w0",
+            "name": "w0",
+            "isCurrent": true,
+            "x": 40,
+            "y": 150,
+            "width": 260,
+            "height": 480
+          }
+        ],
+        "nodePositions": {
+          "session-a": {
+            "x": 170,
+            "y": 240,
+            "session": {
+              "id": "session-a",
+              "workspace": "/ws/w0",
+              "title": "Agent A",
+              "status": "idle"
+            }
+          },
+          "session-ghost": {
+            "x": 170,
+            "y": 312,
+            "session": {
+              "id": "session-ghost",
+              "shortId": "ghost",
+              "title": "Ghost Agent",
+              "workspace": "/ws/w0",
+              "state": "offline",
+              "status": "offline",
+              "isArchived": true,
+              "isVirtual": true
+            }
+          }
+        },
+        "nodeIdIndex": {
+          "session-a": "session-a",
+          "session-ghost": "session-ghost"
+        },
+        "blackboardBound": {
+          "x": 40,
+          "y": 24,
+          "width": 1080,
+          "height": 38
+        },
+        "postPositions": {}
+      }
+    },
+    {
+      "name": "cross-workspace-false-single-column",
+      "args": [
+        [
+          {
+            "id": "/ws/w0",
+            "name": "w0",
+            "isCurrent": false,
+            "sessionIds": [
+              "session-a"
+            ]
+          },
+          {
+            "id": "/ws/w1",
+            "name": "w1",
+            "isCurrent": true,
+            "sessionIds": [
+              "session-b"
+            ]
+          },
+          {
+            "id": "/ws/w2",
+            "name": "w2",
+            "isCurrent": false,
+            "sessionIds": [
+              "session-c"
+            ]
+          }
+        ],
+        [
+          {
+            "id": "session-a",
+            "workspace": "/ws/w0",
+            "title": "Agent A",
+            "status": "idle"
+          },
+          {
+            "id": "session-b",
+            "workspace": "/ws/w1",
+            "title": "Agent B",
+            "status": "running"
+          },
+          {
+            "id": "session-c",
+            "workspace": "/ws/w2",
+            "title": "Agent C",
+            "status": "idle"
+          }
+        ],
+        [],
+        "/ws/w1",
+        false,
+        []
+      ],
+      "expected": {
+        "workspaceBounds": [
+          {
+            "id": "/ws/w1",
+            "name": "w1",
+            "isCurrent": true,
+            "x": 40,
+            "y": 150,
+            "width": 260,
+            "height": 480
+          }
+        ],
+        "nodePositions": {
+          "session-b": {
+            "x": 170,
+            "y": 240,
+            "session": {
+              "id": "session-b",
+              "workspace": "/ws/w1",
+              "title": "Agent B",
+              "status": "running"
+            }
+          }
+        },
+        "nodeIdIndex": {
+          "session-b": "session-b"
+        },
+        "blackboardBound": {
+          "x": 40,
+          "y": 24,
+          "width": 1080,
+          "height": 38
+        },
+        "postPositions": {}
+      }
+    },
+    {
+      "name": "missing-current-workspace-unshift",
+      "args": [
+        [
+          {
+            "id": "/ws/other",
+            "name": "other",
+            "isCurrent": false,
+            "sessionIds": [
+              "session-o"
+            ]
+          }
+        ],
+        [
+          {
+            "id": "session-o",
+            "workspace": "/ws/other",
+            "title": "Agent O",
+            "status": "idle"
+          },
+          {
+            "id": "session-x",
+            "workspace": "/ws/target",
+            "title": "Agent X",
+            "status": "running"
+          }
+        ],
+        [],
+        "/ws/target",
+        true,
+        []
+      ],
+      "expected": {
+        "workspaceBounds": [
+          {
+            "id": "/ws/target",
+            "name": "target",
+            "isCurrent": true,
+            "x": 40,
+            "y": 150,
+            "width": 260,
+            "height": 480
+          },
+          {
+            "id": "/ws/other",
+            "name": "other",
+            "isCurrent": false,
+            "x": 336,
+            "y": 150,
+            "width": 260,
+            "height": 480
+          }
+        ],
+        "nodePositions": {
+          "session-x": {
+            "x": 170,
+            "y": 240,
+            "session": {
+              "id": "session-x",
+              "workspace": "/ws/target",
+              "title": "Agent X",
+              "status": "running"
+            }
+          },
+          "session-o": {
+            "x": 466,
+            "y": 240,
+            "session": {
+              "id": "session-o",
+              "workspace": "/ws/other",
+              "title": "Agent O",
+              "status": "idle"
+            }
+          }
+        },
+        "nodeIdIndex": {
+          "session-x": "session-x",
+          "session-o": "session-o"
+        },
+        "blackboardBound": {
+          "x": 40,
+          "y": 24,
+          "width": 1080,
+          "height": 38
+        },
+        "postPositions": {}
+      }
+    },
+    {
+      "name": "tall-column-eight-sessions",
+      "args": [
+        [
+          {
+            "id": "/ws/tall",
+            "name": "tall",
+            "isCurrent": true,
+            "sessionIds": [
+              "session-t0",
+              "session-t1",
+              "session-t2",
+              "session-t3",
+              "session-t4",
+              "session-t5",
+              "session-t6",
+              "session-t7"
+            ]
+          }
+        ],
+        [
+          {
+            "id": "session-t0",
+            "workspace": "/ws/tall",
+            "title": "Agent T0",
+            "status": "running"
+          },
+          {
+            "id": "session-t1",
+            "workspace": "/ws/tall",
+            "title": "Agent T1",
+            "status": "idle"
+          },
+          {
+            "id": "session-t2",
+            "workspace": "/ws/tall",
+            "title": "Agent T2",
+            "status": "running"
+          },
+          {
+            "id": "session-t3",
+            "workspace": "/ws/tall",
+            "title": "Agent T3",
+            "status": "idle"
+          },
+          {
+            "id": "session-t4",
+            "workspace": "/ws/tall",
+            "title": "Agent T4",
+            "status": "running"
+          },
+          {
+            "id": "session-t5",
+            "workspace": "/ws/tall",
+            "title": "Agent T5",
+            "status": "idle"
+          },
+          {
+            "id": "session-t6",
+            "workspace": "/ws/tall",
+            "title": "Agent T6",
+            "status": "running"
+          },
+          {
+            "id": "session-t7",
+            "workspace": "/ws/tall",
+            "title": "Agent T7",
+            "status": "idle"
+          }
+        ],
+        [],
+        "/ws/tall",
+        true,
+        []
+      ],
+      "expected": {
+        "workspaceBounds": [
+          {
+            "id": "/ws/tall",
+            "name": "tall",
+            "isCurrent": true,
+            "x": 40,
+            "y": 150,
+            "width": 260,
+            "height": 676
+          }
+        ],
+        "nodePositions": {
+          "session-t0": {
+            "x": 170,
+            "y": 240,
+            "session": {
+              "id": "session-t0",
+              "workspace": "/ws/tall",
+              "title": "Agent T0",
+              "status": "running"
+            }
+          },
+          "session-t1": {
+            "x": 170,
+            "y": 312,
+            "session": {
+              "id": "session-t1",
+              "workspace": "/ws/tall",
+              "title": "Agent T1",
+              "status": "idle"
+            }
+          },
+          "session-t2": {
+            "x": 170,
+            "y": 384,
+            "session": {
+              "id": "session-t2",
+              "workspace": "/ws/tall",
+              "title": "Agent T2",
+              "status": "running"
+            }
+          },
+          "session-t3": {
+            "x": 170,
+            "y": 456,
+            "session": {
+              "id": "session-t3",
+              "workspace": "/ws/tall",
+              "title": "Agent T3",
+              "status": "idle"
+            }
+          },
+          "session-t4": {
+            "x": 170,
+            "y": 528,
+            "session": {
+              "id": "session-t4",
+              "workspace": "/ws/tall",
+              "title": "Agent T4",
+              "status": "running"
+            }
+          },
+          "session-t5": {
+            "x": 170,
+            "y": 600,
+            "session": {
+              "id": "session-t5",
+              "workspace": "/ws/tall",
+              "title": "Agent T5",
+              "status": "idle"
+            }
+          },
+          "session-t6": {
+            "x": 170,
+            "y": 672,
+            "session": {
+              "id": "session-t6",
+              "workspace": "/ws/tall",
+              "title": "Agent T6",
+              "status": "running"
+            }
+          },
+          "session-t7": {
+            "x": 170,
+            "y": 744,
+            "session": {
+              "id": "session-t7",
+              "workspace": "/ws/tall",
+              "title": "Agent T7",
+              "status": "idle"
+            }
+          }
+        },
+        "nodeIdIndex": {
+          "session-t0": "session-t0",
+          "session-t1": "session-t1",
+          "session-t2": "session-t2",
+          "session-t3": "session-t3",
+          "session-t4": "session-t4",
+          "session-t5": "session-t5",
+          "session-t6": "session-t6",
+          "session-t7": "session-t7"
+        },
+        "blackboardBound": {
+          "x": 40,
+          "y": 24,
+          "width": 1080,
+          "height": 38
+        },
+        "postPositions": {}
+      }
+    }
+  ],
+  "framingCases": [
+    {
+      "name": "macro-standard-bounds",
+      "options": {
+        "mode": "macro",
+        "viewportWidth": 1200,
+        "viewportHeight": 700,
+        "bounds": {
+          "minX": 40,
+          "minY": 24,
+          "maxX": 1180,
+          "maxY": 650
+        }
+      },
+      "expected": {
+        "zoom": 0.9648562300319489,
+        "panX": 11.437699680511209,
+        "panY": 24.843450479233226
+      }
+    },
+    {
+      "name": "macro-huge-content-min-clamp",
+      "options": {
+        "mode": "macro",
+        "viewportWidth": 1200,
+        "viewportHeight": 700,
+        "bounds": {
+          "minX": 0,
+          "minY": 0,
+          "maxX": 20000,
+          "maxY": 9000
+        }
+      },
+      "expected": {
+        "zoom": 0.3,
+        "panX": -2400,
+        "panY": -1000
+      }
+    },
+    {
+      "name": "macro-tiny-content-max-clamp",
+      "options": {
+        "mode": "macro",
+        "viewportWidth": 1200,
+        "viewportHeight": 700,
+        "bounds": {
+          "minX": 100,
+          "minY": 100,
+          "maxX": 140,
+          "maxY": 150
+        }
+      },
+      "expected": {
+        "zoom": 1.2,
+        "panX": 450,
+        "panY": 200
+      }
+    },
+    {
+      "name": "locate-anchored-fit",
+      "options": {
+        "mode": "locate",
+        "viewportWidth": 1200,
+        "viewportHeight": 700,
+        "bounds": {
+          "minX": 40,
+          "minY": 24,
+          "maxX": 1180,
+          "maxY": 650
+        },
+        "anchor": {
+          "x": 200,
+          "y": 300
+        },
+        "currentZoom": 1
+      },
+      "expected": {
+        "zoom": 1,
+        "panX": -10,
+        "panY": 26
+      }
+    },
+    {
+      "name": "locate-zoom-clamped-high",
+      "options": {
+        "mode": "locate",
+        "viewportWidth": 1200,
+        "viewportHeight": 700,
+        "bounds": {
+          "minX": 40,
+          "minY": 24,
+          "maxX": 1180,
+          "maxY": 650
+        },
+        "anchor": {
+          "x": 200,
+          "y": 300
+        },
+        "currentZoom": 3
+      },
+      "expected": {
+        "zoom": 1.2,
+        "panX": 0,
+        "panY": -4.799999999999997
+      }
+    },
+    {
+      "name": "locate-zoom-clamped-low",
+      "options": {
+        "mode": "locate",
+        "viewportWidth": 1200,
+        "viewportHeight": 700,
+        "bounds": {
+          "minX": 40,
+          "minY": 24,
+          "maxX": 1180,
+          "maxY": 650
+        },
+        "anchor": {
+          "x": 200,
+          "y": 300
+        },
+        "currentZoom": 0.1
+      },
+      "expected": {
+        "zoom": 0.8,
+        "panX": 112,
+        "panY": 110
+      }
+    },
+    {
+      "name": "locate-without-anchor",
+      "options": {
+        "mode": "locate",
+        "viewportWidth": 1200,
+        "viewportHeight": 700,
+        "bounds": {
+          "minX": 40,
+          "minY": 24,
+          "maxX": 1180,
+          "maxY": 650
+        }
+      },
+      "expected": {
+        "zoom": 0.9648562300319489,
+        "panX": 11.437699680511209,
+        "panY": 24.843450479233226
+      }
+    },
+    {
+      "name": "locate-tall-content-overflow",
+      "options": {
+        "mode": "locate",
+        "viewportWidth": 1200,
+        "viewportHeight": 700,
+        "bounds": {
+          "minX": 40,
+          "minY": 24,
+          "maxX": 1180,
+          "maxY": 2400
+        },
+        "anchor": {
+          "x": 200,
+          "y": 2100
+        },
+        "currentZoom": 1
+      },
+      "expected": {
+        "zoom": 1,
+        "panX": -10,
+        "panY": -1750
+      }
+    },
+    {
+      "name": "locate-tall-content-top-anchored",
+      "options": {
+        "mode": "locate",
+        "viewportWidth": 1200,
+        "viewportHeight": 700,
+        "bounds": {
+          "minX": 40,
+          "minY": 24,
+          "maxX": 1180,
+          "maxY": 2400
+        },
+        "anchor": {
+          "x": 200,
+          "y": 60
+        },
+        "currentZoom": 1
+      },
+      "expected": {
+        "zoom": 1,
+        "panX": -10,
+        "panY": 290
+      }
+    },
+    {
+      "name": "macro-invalid-viewport-fallback",
+      "options": {
+        "mode": "macro",
+        "viewportWidth": 0,
+        "viewportHeight": -5,
+        "bounds": {
+          "minX": 40,
+          "minY": 24,
+          "maxX": 1180,
+          "maxY": 650
+        }
+      },
+      "expected": {
+        "zoom": 0.7929824561403509,
+        "panX": 16.280701754385966,
+        "panY": 60.76491228070176
+      }
+    },
+    {
+      "name": "macro-missing-bounds-fallback",
+      "options": {
+        "mode": "macro",
+        "viewportWidth": 1200,
+        "viewportHeight": 700
+      },
+      "expected": {
+        "zoom": 0.9648562300319489,
+        "panX": 40.383386581469644,
+        "panY": 24.843450479233226
+      }
+    },
+    {
+      "name": "no-options",
+      "options": null,
+      "expected": {
+        "zoom": 0.837037037037037,
+        "panX": 14.518518518518519,
+        "panY": 45.918518518518525
+      }
+    }
+  ]
+}
