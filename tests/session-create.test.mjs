@@ -26,7 +26,8 @@ function createMockCtx({
   agentPresets = null,
   sessionController = null,
   sessionTitle = null,
-  registeredWorkspaces = ['c:/workspace/project-alpha', 'c:/workspace/project-beta']
+  registeredWorkspaces = ['c:/workspace/project-alpha', 'c:/workspace/project-beta'],
+  mutateStatusOnDispatch = true
 } = {}) {
   const archivedSet = new Set(archivedIds);
   const createdAgents = [];
@@ -43,7 +44,7 @@ function createMockCtx({
         cwd: options.cwd || options.meta?.cwd || 'c:/workspace/project-alpha',
         generation: options.meta?.generation || 1,
         options: options.agentOptions || {},
-        mutateStatusOnDispatch: true
+        mutateStatusOnDispatch
       });
       if (typeof options.setup === 'function') {
         await options.setup({ agent });
@@ -1871,5 +1872,29 @@ test('executeSessionCreate: 目标会话创建后若处于异常状态直接阻�
   assert.equal(res.error.code, 'PROMPT_ASSEMBLY_ERROR');
   assert.equal(res.error.category, 'ASSEMBLY');
   assert.equal(unhealthyAgent.received.length, 0, '阻断时不应向异常目标派发任何初始消息');
+});
+
+test('executeSessionCreate: ADR-0031 §4.2 握手超时或无因果推进时严格保持 enqueued 与 pending', async () => {
+  resetRateLimits();
+  const caller = createMockAgent('caller-timeout-test');
+  const ctx = createMockCtx({
+    agentsList: [caller],
+    mutateStatusOnDispatch: false
+  });
+
+  const res = await executeSessionCreate({
+    ctx,
+    args: {
+      title: 'Slow Peer',
+      initial_message: 'Start task',
+      wait_ms: 10
+    },
+    exec: { agent: caller }
+  });
+
+  assert.equal(res.success, true);
+  assert.equal(res.deliveryState, 'enqueued', '未在时限内确权时应为 enqueued');
+  assert.equal(res.executionState, 'pending', '未在时限内因果推进时应为 pending');
+  assert.equal(res.status, 'idle', '会话状态应保持当前实际相态 idle');
 });
 

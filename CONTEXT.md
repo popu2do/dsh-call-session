@@ -123,6 +123,14 @@ _Avoid_: 会话初始化总线, 广播启动, 异步钩子
 在单播任务派发或同级会话创建时，默认施加轻量时间窗口等待接收方物理运行确认或秒崩阻断的调度原语。
 _Avoid_: 阻塞调用, 同步RPC, 长连接轮询
 
+**因果确权 / Causal Verification**:
+在轻量握手窗口期内，不仅观测目标会话状态是否进入 running，还结合 step、step/start 与 turn 物理步进增量断言本次投递真正引起了目标执行推进，杜绝空转假确权。
+_Avoid_: 状态轮询假确权, 伪就绪判定, 心跳假象
+
+**因果等待原语 / Causal Wait Primitives**:
+封装因果确权轮询、崩溃阻断与超时优雅降级的核心函数集（waitForCausalExecution / dispatchAndVerifyNativeMessage），提供统一的单播投递与启动等待保障。
+_Avoid_: 内联轮询循环, 私有等待锁
+
 **原生三态状态协议 / Native 3-State Status Protocol**:
 基于 DSH 宿主原生相态与权威事件账本推导出的会话三态模型，将状态映射为 running、idle 与 error，崩溃事件发生时精准反映故障，并在后续新轮次顺利完成时自然冲刷自愈。
 _Avoid_: 崩溃持久锁定, 外部健康监测, 心跳总线
