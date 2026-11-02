@@ -6,6 +6,11 @@ import {
   buildTransportPayload,
   buildNativeUserMessage,
   dispatchNativeMessage,
+  extractCausalCounters,
+  checkCausalRunning,
+  checkCausalRunningFinal,
+  waitForCausalExecution,
+  dispatchAndVerifyNativeMessage,
   CALL_TYPE_INTENTS
 } from '../lib/native-message-transport.mjs';
 
@@ -163,4 +168,241 @@ test('NativeMessageTransport - 状态感知原生通道派发 (dispatchNativeMes
   // 异常拦截
   assert.throws(() => dispatchNativeMessage(null, userMsg), /[InvalidParameter]/);
   assert.throws(() => dispatchNativeMessage({ id: 'broken', status: 'idle' }, userMsg), /[ServiceUnavailable]/);
+});
+
+/**
+ * 构造最小可观测 Agent 桩：phase 与 session.events 共同构成因果计数器来源。
+ */
+function createCausalAgent({ status = 'idle', phase, events = [] } = {}) {
+  const agent = { id: 'agent-causal', status, session: { events }, followup() {} };
+  if (phase) agent.phase = phase;
+  return agent;
+}
+
+function resolveFromAgent(agent) {
+  return { status: agent.status, error: agent.error ?? null };
+}
+
+test('NativeMessageTransport - 因果断言单一实现：目录模块重导出与传输层同一引用', async () => {
+  const directory = await import('../lib/session-directory.mjs');
+  assert.equal(directory.checkCausalRunning, checkCausalRunning);
+  assert.equal(directory.checkCausalRunningFinal, checkCausalRunningFinal);
+
+  const counters = extractCausalCounters({
+    phase: { turn: 2, step: 3 },
+    session: { events: [{ type: 'step/start' }, { type: 'turn/end' }, { type: 'step/start' }] }
+  });
+  assert.equal(counters.turn, 2);
+  assert.equal(counters.step, 3);
+  assert.equal(counters.stepStartCount, 2);
+  assert.equal(counters.events.length, 3);
+});
+
+test('NativeMessageTransport - 因果等待：窗口内观测到推进即确权 (waitForCausalExecution)', async () => {
+  const agent = createCausalAgent({ status: 'idle', phase: { kind: 'idle', turn: 0, step: 0 } });
+  const timer = setTimeout(() => {
+    agent.status = 'running';
+    agent.phase = { kind: 'running', turn: 1, step: 1 };
+    agent.session.events.push({ type: 'step/start' });
+  }, 20);
+
+  const result = await waitForCausalExecution({
+    targetAgent: agent,
+    waitMs: 500,
+    resolveStatus: resolveFromAgent,
+    pollIntervalMs: 5
+  });
+  clearTimeout(timer);
+
+  assert.equal(result.deliveryState, 'delivered');
+  assert.equal(result.executionState, 'running');
+  assert.equal(result.finalStatus, 'running');
+  assert.equal(result.executionError, null);
+});
+
+test('NativeMessageTransport - 因果等待：初始已运行必须观测步进增量 (waitForCausalExecution)', async () => {
+  // 运行态但计数器原地不动：等待窗口内不得确权
+  const steady = createCausalAgent({ status: 'running', phase: { kind: 'running', turn: 1, step: 0 } });
+  const noProgress = await waitForCausalExecution({
+    targetAgent: steady,
+    waitMs: 120,
+    resolveStatus: resolveFromAgent,
+    initialTargetRunning: true,
+    initialStepCount: 0,
+    initialStepStartCount: 0,
+    initialTurnCount: 1,
+    pollIntervalMs: 5
+  });
+  assert.equal(noProgress.deliveryState, 'enqueued');
+  assert.equal(noProgress.executionState, 'pending');
+
+  // 同一基线，step 在窗口内前移即视为推进
+  const advancing = createCausalAgent({ status: 'running', phase: { kind: 'running', turn: 1, step: 0 } });
+  const timer = setTimeout(() => {
+    advancing.phase = { kind: 'running', turn: 1, step: 1 };
+  }, 20);
+  const progressed = await waitForCausalExecution({
+    targetAgent: advancing,
+    waitMs: 500,
+    resolveStatus: resolveFromAgent,
+    initialTargetRunning: true,
+    initialStepCount: 0,
+    initialStepStartCount: 0,
+    initialTurnCount: 1,
+    pollIntervalMs: 5
+  });
+  clearTimeout(timer);
+  assert.equal(progressed.deliveryState, 'delivered');
+  assert.equal(progressed.executionState, 'running');
+});
+
+test('NativeMessageTransport - 因果等待：装配期崩溃在首个轮询周期即刻阻断 (waitForCausalExecution)', async () => {
+  const agent = createCausalAgent({ status: 'error', events: [{ type: 'turn/end' }] });
+  agent.error = { category: 'MODEL', code: 'MODEL_INVALID', message: 'model not found' };
+
+  const startedAt = Date.now();
+  const result = await waitForCausalExecution({
+    targetAgent: agent,
+    waitMs: 2000,
+    resolveStatus: resolveFromAgent,
+    initialTurnEndCount: 0,
+    pollIntervalMs: 5
+  });
+
+  assert.equal(result.deliveryState, 'failed');
+  assert.equal(result.executionState, 'crashed');
+  assert.equal(result.finalStatus, 'error');
+  assert.equal(result.executionError.message, 'model not found');
+  assert.ok(Date.now() - startedAt < 1000, '崩溃必须在首个轮询周期即时捕获返回，远小于 2000ms 等待窗口');
+});
+
+test('NativeMessageTransport - 因果等待：窗口期满未推进平滑收敛为排队态 (waitForCausalExecution)', async () => {
+  const agent = createCausalAgent({ status: 'idle', phase: { kind: 'idle', turn: 0, step: 0 } });
+  let pollCount = 0;
+  const countingResolve = (a) => {
+    pollCount += 1;
+    return resolveFromAgent(a);
+  };
+  const result = await waitForCausalExecution({
+    targetAgent: agent,
+    waitMs: 60,
+    resolveStatus: countingResolve,
+    pollIntervalMs: 15
+  });
+
+  assert.equal(result.deliveryState, 'enqueued');
+  assert.equal(result.executionState, 'pending');
+  assert.equal(result.finalStatus, 'idle');
+  assert.ok(pollCount >= 3, '必须经过多个轮询周期完成完整窗口探测后才收敛为排队态');
+});
+
+test('NativeMessageTransport - 因果等待：waitMs=0 单次直采且零延时 (waitForCausalExecution)', async () => {
+  let resolveCalls = 0;
+  const countingResolve = (agent) => {
+    resolveCalls += 1;
+    return resolveFromAgent(agent);
+  };
+
+  const runningAgent = createCausalAgent({ status: 'running', phase: { kind: 'running', turn: 1, step: 1 } });
+  const runningResult = await waitForCausalExecution({
+    targetAgent: runningAgent,
+    waitMs: 0,
+    resolveStatus: countingResolve
+  });
+
+  assert.equal(resolveCalls, 1, 'waitMs=0 必须单次采样立即返回，不得发起轮询');
+  assert.equal(runningResult.deliveryState, 'enqueued');
+  assert.equal(runningResult.executionState, 'running');
+  assert.equal(runningResult.finalStatus, 'running');
+
+  const idleAgent = createCausalAgent({ status: 'idle' });
+  const idleResult = await waitForCausalExecution({
+    targetAgent: idleAgent,
+    waitMs: 0,
+    resolveStatus: countingResolve
+  });
+  assert.equal(resolveCalls, 2, 'waitMs=0 仅单次采样');
+  assert.equal(idleResult.deliveryState, 'enqueued');
+  assert.equal(idleResult.executionState, 'unverified');
+  assert.equal(idleResult.finalStatus, 'idle');
+});
+
+test('NativeMessageTransport - 复合派发：原生通道与因果确权联动 (dispatchAndVerifyNativeMessage)', async () => {
+  const userMessage = { id: 'msg-causal', role: 'user', content: [{ type: 'text', text: 'do work' }] };
+  const dispatched = [];
+  const agent = createCausalAgent({ status: 'idle', phase: { kind: 'idle', turn: 0, step: 0 } });
+  agent.followup = (msg) => { dispatched.push(msg); };
+
+  const timer = setTimeout(() => {
+    agent.status = 'running';
+    agent.phase = { kind: 'running', turn: 1, step: 1 };
+  }, 20);
+
+  const result = await dispatchAndVerifyNativeMessage({
+    targetAgent: agent,
+    userMessage,
+    callType: 'task_dispatch',
+    waitMs: 500,
+    resolveStatus: resolveFromAgent,
+    pollIntervalMs: 5
+  });
+  clearTimeout(timer);
+
+  assert.equal(dispatched.length, 1);
+  assert.equal(dispatched[0], userMessage);
+  assert.equal(result.deliveryMode, 'followup');
+  assert.equal(result.deliveryState, 'delivered');
+  assert.equal(result.executionState, 'running');
+  assert.equal(result.finalStatus, 'running');
+});
+
+test('NativeMessageTransport - 复合派发：task_report 与 notice 零等待直采 (dispatchAndVerifyNativeMessage)', async () => {
+  const userMessage = { id: 'msg-report', role: 'user', content: [] };
+
+  for (const callType of ['task_report', 'notice']) {
+    const agent = createCausalAgent({ status: 'running', phase: { kind: 'running', turn: 1, step: 1 } });
+    let steerCount = 0;
+    agent.steer = () => { steerCount += 1; };
+
+    let resolveInvoked = false;
+    const trackingResolve = (a) => {
+      resolveInvoked = true;
+      return resolveFromAgent(a);
+    };
+    const result = await dispatchAndVerifyNativeMessage({
+      targetAgent: agent,
+      userMessage,
+      callType,
+      waitMs: 3000,
+      resolveStatus: trackingResolve
+    });
+
+    assert.equal(steerCount, 1, callType + ' 必须走 steer 通道');
+    assert.equal(result.deliveryMode, 'steer');
+    assert.equal(result.deliveryState, 'delivered');
+    assert.equal(result.executionState, 'unverified');
+    assert.equal(result.finalStatus, 'running');
+    assert.equal(resolveInvoked, false, callType + ' 必须零等待直接返回，且当目标已在运行时不触发冗余解析');
+  }
+});
+
+test('NativeMessageTransport - 复合派发：waitMs=0 返回 delivered 与 unverified (dispatchAndVerifyNativeMessage)', async () => {
+  const userMessage = { id: 'msg-zero', role: 'user', content: [] };
+  const agent = createCausalAgent({ status: 'idle' });
+  let followupCount = 0;
+  agent.followup = () => { followupCount += 1; };
+
+  const result = await dispatchAndVerifyNativeMessage({
+    targetAgent: agent,
+    userMessage,
+    callType: 'task_dispatch',
+    waitMs: 0,
+    resolveStatus: resolveFromAgent
+  });
+
+  assert.equal(followupCount, 1);
+  assert.equal(result.deliveryMode, 'followup');
+  assert.equal(result.deliveryState, 'delivered');
+  assert.equal(result.executionState, 'unverified');
+  assert.equal(result.finalStatus, 'idle');
 });
