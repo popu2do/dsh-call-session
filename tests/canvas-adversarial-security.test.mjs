@@ -45,7 +45,11 @@ test('插槽注册唯一性、作用域隔离与无全局路由/DOM悬浮', () =
   // 5. 排查向智能体注册模型工具
   assert.equal(/ctx\.(?:tools|tool)\.register/i.test(clientSource), false, '前端代码不包含 ctx.tools.register');
 
-  // 6. 运行期模拟审查：apply 仅注册单个插槽并注入预期上下文
+  // 6. 排查全局污染与动态代码执行 (constructor.constructor 与 eval)
+  assert.equal(clientSource.includes('constructor.constructor'), false, 'client.js 不包含 constructor.constructor 全局逃逸');
+  assert.equal(/\beval\s*\(/i.test(clientSource), false, 'client.js 不包含 eval 动态代码执行');
+
+  // 7. 运行期模拟审查：apply 仅注册单个插槽并注入预期上下文
   const plugin = loadClientBundle();
   let slotInjectCount = 0;
   let registeredSlotDef = null;
@@ -237,9 +241,9 @@ test('CSS 样式声明检查：包含 translate3d、will-change 与 contain', ()
     '抽屉动画结束帧采用 3D 变换 translate3d(0, 0, 0)'
   );
 
-  // 3. 视口画布表面平移缩放采用 translate3d 配合 scale
+  // 3. 视口画布表面平移缩放采用 translate3d 配合 scale（通过无头函数 viewportTransformStyle 统一生成）
   assert.ok(
-    clientSource.includes("transform: 'translate3d(' + pan.x + 'px, ' + pan.y + 'px, 0px) scale(' + zoom + ')'"),
+    clientSource.includes('transform: viewportTransformStyle({ panX: pan.x, panY: pan.y, zoom: zoom })'),
     '画布表面平移缩放采用 translate3d'
   );
 
