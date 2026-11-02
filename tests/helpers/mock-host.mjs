@@ -19,7 +19,8 @@ function createMockAgentsService(agentList = []) {
         title: payload.title,
         cwd: payload.cwd,
         generation: payload.meta?.generation ?? 1,
-        options: payload.agentOptions
+        options: payload.agentOptions,
+        mutateStatusOnDispatch: true
       });
       list.push(target);
       return target;

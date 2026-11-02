@@ -144,3 +144,13 @@ _Avoid_: 动态代理引用, 跨插件私有探测, 调度型引用, 唤醒引�
 **规范短 ID 徽标 / Canonical Short ID Badge**:
 会话候选项与引用图元中绑定的前置井号 8 位十六进制规范短码，由会话原生唯一标识哈希或规范截断推导，用于在多智能体同名会话场景下提供确定性视觉消歧。
 _Avoid_: 随机序号, 自增数字, 别名尾缀
+
+### 对等准入
+
+**对等会话准入流水线 / Peer Session Admission Pipeline**:
+对等会话创建的四阶段原子流水线（validateAndAdmit、provisionPeerAgent、bootstrapAndVerify、finalizeAdmission），通过事务屏障保障租约全生命周期零泄漏与回滚语义。
+_Avoid_: 会话流水线, 启动拦截器, 创建中转器
+
+**对等会话启动协同器 / Peer Bootstrapper**:
+负责在对等会话实例就绪后执行启动协同的门面，实例持有日志记录器与黑板存储等只读基础设施，无跨调用可变状态。
+_Avoid_: 启动管理器, 会话引导器
