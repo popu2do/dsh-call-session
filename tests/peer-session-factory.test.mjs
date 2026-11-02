@@ -285,40 +285,29 @@ test('流水线阶段 2 边界：provisionPeerAgent 开辟异常触发准入租�
   const nextTimestamp = checkRateLimit('caller-stage-2');
   assert.equal(typeof nextTimestamp, 'number', '开辟失败回滚后必须完整返还限频配额');
 
-  // 直接驱动 provisionPeerAgent 验证异常路径下先 lease.release() 再重抛
-  let leaseReleaseCalled = false;
-  const fakeLease = {
-    title: 'Direct Provision Test',
-    generation: 1,
-    release: () => { leaseReleaseCalled = true; }
-  };
-
-  const mockThrowGateway = {
-    resolveEffectiveModel: () => ({}),
-    resolvePresetSetup: async () => ({ presetId: undefined, setup: undefined }),
-    createRootAgent: async () => { throw new Error('Direct gateway exploded'); }
+  // 验证真实 AdmissionLease 状态已变为 released 且限频配额已返还
+  let activeLeaseRef = null;
+  const trackingSafeguard = {
+    admit: (...admitArgs) => {
+      const lease = SessionSafeguard.prototype.admit.apply(new SessionSafeguard(), admitArgs);
+      activeLeaseRef = lease;
+      return lease;
+    }
   };
 
   await assert.rejects(
     async () => {
-      await provisionPeerAgent(
-        { gateway: mockThrowGateway },
-        {
-          lease: fakeLease,
-          args: {},
-          callerAgent: caller,
-          creatorSessionId: 'caller-stage-2',
-          targetCwd: 'c:/workspace/app',
-          targetWorkspace: 'c:/workspace/app',
-          agentsService: failingAgentsSvc,
-          exec
-        }
-      );
+      await executePeerSessionAdmissionPipeline(ctx, {
+        args: { title: 'Failing Provision Peer With Real Lease' },
+        exec,
+        safeguard: trackingSafeguard
+      });
     },
-    /Direct gateway exploded/
+    /Host agent provisioning disk full/
   );
 
-  assert.equal(leaseReleaseCalled, true, 'provisionPeerAgent 异常时必须显式调用 lease.release()');
+  assert.ok(activeLeaseRef, '必须成功签发真实准入租约');
+  assert.equal(activeLeaseRef.status, 'released', '开辟失败后真实准入租约状态必须为 released');
   resetRateLimits();
 });
 
@@ -369,13 +358,23 @@ test('流水线阶段 3 边界：bootstrapAndVerify 初帧崩溃阻断提交并�
     get: (n) => (n === 'agents' ? crashingAgentsSvc : undefined)
   };
 
+  let stage3LeaseRef = null;
+  const trackingSafeguard = {
+    admit: (...admitArgs) => {
+      const lease = SessionSafeguard.prototype.admit.apply(new SessionSafeguard(), admitArgs);
+      stage3LeaseRef = lease;
+      return lease;
+    }
+  };
+
   const res = await executePeerSessionAdmissionPipeline(ctx, {
     args: {
       title: 'Crashing Bootstrap Peer',
       initial_message: 'Begin work',
       wait_ms: 100
     },
-    exec
+    exec,
+    safeguard: trackingSafeguard
   });
 
   assert.equal(res.success, false, '初帧崩溃时必须返回 success: false');
@@ -383,6 +382,8 @@ test('流水线阶段 3 边界：bootstrapAndVerify 初帧崩溃阻断提交并�
   assert.equal(res.deliveryState, 'failed');
   assert.equal(res.executionState, 'crashed');
   assert.ok(res.error, '必须包含结构化崩溃错误信息');
+  assert.ok(stage3LeaseRef, '必须成功签发真实准入租约');
+  assert.equal(stage3LeaseRef.status, 'released', '初帧崩溃后真实准入租约状态必须为 released');
 
   // 验证配额已原子返还
   const resumedAt = checkRateLimit('caller-stage-3');
