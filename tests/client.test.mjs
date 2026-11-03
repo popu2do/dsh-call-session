@@ -289,7 +289,7 @@ test('L3 Read-Only Inspector Drawer: Read-only integrity', () => {
     entity: {
       kind: 'call',
       id: 'call-999',
-      callType: 'task_dispatch',
+      callType: 'task_soft',
       deliveryMode: 'followup',
       durationMs: 38,
       timestamp: Date.now(),
@@ -419,7 +419,7 @@ test('Drawer Mutation Resistance: Element Traversal and Mutation Action Check', 
     {
       kind: 'call',
       id: 'call-001',
-      callType: 'task_dispatch',
+      callType: 'task_soft',
       deliveryMode: 'steer',
       durationMs: 42,
       timestamp: Date.now(),
@@ -767,7 +767,7 @@ test('Three Relationship Edge Classes: Edge generation and boundary tolerance (m
         id: 'call-valid-with-ctx',
         callerSessionId: 's1',
         targetSessionId: 's2',
-        callType: 'task_dispatch',
+        callType: 'task_soft',
         contextPostIds: ['post-valid'],
         timestamp: Date.now() - 5000,
         status: 'active'
@@ -796,7 +796,7 @@ test('Three Relationship Edge Classes: Edge generation and boundary tolerance (m
         id: 'call-orphan-caller',
         callerSessionId: 'session-ghost-caller',
         targetSessionId: 's2',
-        callType: 'task_dispatch',
+        callType: 'task_soft',
         contextPostIds: ['post-valid'],
         timestamp: Date.now() - 5000,
         status: 'active'
@@ -805,7 +805,7 @@ test('Three Relationship Edge Classes: Edge generation and boundary tolerance (m
         id: 'call-orphan-target',
         callerSessionId: 's1',
         targetSessionId: 'session-ghost-target',
-        callType: 'task_dispatch',
+        callType: 'task_soft',
         contextPostIds: ['post-valid'],
         timestamp: Date.now() - 5000,
         status: 'active'
@@ -1446,7 +1446,7 @@ test('协作看板缺陷回归验证：session.offline 端到端消费、抽屉�
       targetSessionId: 'session-c2-87654321',
       callerOffline: true,
       targetOffline: false,
-      callType: 'task_dispatch',
+      callType: 'task_soft',
       deliveryMode: 'steer',
       durationMs: 120
     },
@@ -1984,7 +1984,7 @@ test('Topology Relationship Edges Contrast & WCAG 2.1 Compliance (PRD §3.1, §4
         id: 'call-1',
         callerSessionId: 'session-call-src',
         targetSessionId: 'session-call-dst',
-        callType: 'task_dispatch',
+        callType: 'task_soft',
         deliveryMode: 'steer',
         durationMs: 120,
         timestamp: Date.now(),
@@ -2837,7 +2837,7 @@ test('ADR-0019 常态按需显影与历史调用连线抑制测试', () => {
     posts: [],
     calls: [
       // 状态 active 的新鲜调用 (5s 内)：常态下必须渲染
-      { id: 'call-fresh', callerSessionId: 's1', targetSessionId: 's2', callType: 'task_dispatch', timestamp: now - 5000, status: 'active' },
+      { id: 'call-fresh', callerSessionId: 's1', targetSessionId: 's2', callType: 'task_soft', timestamp: now - 5000, status: 'active' },
       // 已结算调用：常态下返回 null，避免连线冗余
       { id: 'call-settled', callerSessionId: 's1', targetSessionId: 's2', callType: 'task_report', timestamp: now - 3000, status: 'settled' },
       // 历史过期调用 (>15s)：常态下必须完全抑制（返回 null）
@@ -2883,7 +2883,7 @@ test('ADR-0019 & Task t5 反向调用链路与动效不变式全量验收: 目�
     posts: [],
     calls: [
       // 活跃新鲜调用 (<= 15s)
-      { id: 'call-fresh', callerSessionId: 's1', targetSessionId: 's2', callType: 'task_dispatch', timestamp: now - 3000, status: 'active' },
+      { id: 'call-fresh', callerSessionId: 's1', targetSessionId: 's2', callType: 'task_soft', timestamp: now - 3000, status: 'active' },
       // 已结算调用 (settled)
       { id: 'call-settled', callerSessionId: 's1', targetSessionId: 's2', callType: 'task_report', timestamp: now - 5000, status: 'settled' },
       // 历史过期调用 (> 15s)
@@ -3473,7 +3473,7 @@ test('ADR-0026 顶栏精简、紧凑指标与双态连线模式切换验证', ()
         id: 'call-settled-1',
         callerSessionId: 'session-s1',
         targetSessionId: 'session-s2',
-        callType: 'task_dispatch',
+        callType: 'task_soft',
         status: 'settled',
         timestamp: Date.now() - 30000
       }

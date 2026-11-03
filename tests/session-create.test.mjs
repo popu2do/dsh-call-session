@@ -15,7 +15,7 @@ import {
 import { createMockAgent } from './helpers/mock-agent.mjs';
 
 
-const HEADER_REGEX = /^\[From: .+? \(.+?\) \| CallType: (task_dispatch|task_report|notice)\](\n> Context Ref: .+?)?\n\n/;
+const HEADER_REGEX = /^\[From: .+? \(.+?\) \| CallType: (notice|task_soft|task_hard|task_report)\](\n> Context Ref: .+?)?\n\n/;
 
 function createMockCtx({
   agentsList = [],
@@ -1677,7 +1677,7 @@ test('executeSessionCreate: 首帧消息规范注入传输层报头且出参携�
   assert.match(receivedMsg.content[0].text, HEADER_REGEX, '新会话接收的首帧消息必须严格匹配标准客观报头正则');
   assert.ok(
     receivedMsg.content[0].text.startsWith(
-      `[From: ${caller.id} (${caller.title}) | CallType: task_dispatch]\n> Context Ref: #post-init\n\nStart architecture review`
+      `[From: ${caller.id} (${caller.title}) | CallType: task_soft]\n> Context Ref: #post-init\n\nStart architecture review`
     ),
     '新会话接收的首帧消息必须规范注入传输层客观报头'
   );

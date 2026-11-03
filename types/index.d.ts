@@ -126,7 +126,7 @@ export declare const DISPATCHER_CONSTANTS: Readonly<{
     SUMMARY_MAX_LENGTH: number;
     MESSAGE_MAX_LENGTH: number;
   }>;
-  CALL_TYPES: readonly ['task_dispatch', 'task_report', 'notice'];
+  CALL_TYPES: readonly ['notice', 'task_soft', 'task_hard', 'task_report'];
 }>;
 
 /**
