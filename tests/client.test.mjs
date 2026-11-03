@@ -876,7 +876,7 @@ test('Three Relationship Edge Classes: Edge generation and boundary tolerance (m
   const callG = validCallNodes[0];
   const strokePath = callG.children[1];
   assert.ok(strokePath.props.d.startsWith('M '), '调用边必须包含路径点');
-  assert.equal(strokePath.props.markerEnd, 'url(#dsh-arrow-dispatch)');
+  assert.equal(strokePath.props.markerEnd, 'url(#dsh-arrow-soft)');
 });
 
 test('Text Truncation by Rendered Width: Chinese, English, and mixed inputs (PRD 5.4)', () => {
