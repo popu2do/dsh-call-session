@@ -222,6 +222,9 @@ export function apply(ctx, config = {}) {
     ctx.on('session/remove', (sessionId) => {
       callTelemetry.cleanupSession(typeof sessionId === 'string' ? sessionId : sessionId?.id);
     });
+    ctx.on('session/dispose', ({ session }) => {
+      callTelemetry.cleanupSession(session?.id);
+    });
   }
 
   if (typeof ctx.on === 'function') {
@@ -264,12 +267,21 @@ export function apply(ctx, config = {}) {
 
   if (typeof ctx.on === 'function') {
     const turnReminderCounts = new Map();
+    function cleanupSessionReminders(sid) {
+      if (!sid) return;
+      for (const key of turnReminderCounts.keys()) {
+        if (key.startsWith(sid + ':') || key === sid) {
+          turnReminderCounts.delete(key);
+        }
+      }
+    }
+
     ctx.on('agent/turn-stopping', async ({ agent }) => {
       const sessionId = resolveAgentSessionId(agent);
       if (!sessionId) return;
       const pendingHardTasks = callTelemetry.getPendingTasksForSession(sessionId).filter(t => t.callType === 'task_hard');
       if (pendingHardTasks.length === 0) {
-        turnReminderCounts.delete(sessionId);
+        cleanupSessionReminders(sessionId);
         return;
       }
 
@@ -290,15 +302,6 @@ export function apply(ctx, config = {}) {
         await agent.steer(reminder);
       }
     });
-
-    const cleanupSessionReminders = (sid) => {
-      if (!sid) return;
-      for (const key of turnReminderCounts.keys()) {
-        if (key.startsWith(sid + ':') || key === sid) {
-          turnReminderCounts.delete(key);
-        }
-      }
-    };
 
     ctx.on('session/dispose', ({ session }) => cleanupSessionReminders(session?.id));
     ctx.on('session/archive', (sessionId) => cleanupSessionReminders(sessionId));
