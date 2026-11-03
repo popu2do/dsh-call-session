@@ -154,7 +154,7 @@ test('2. Telemetry Ledger: task_soft and task_hard record obligations, task_repo
   assert.equal(queryRec2.status, 'settled');
 });
 
-test('3. Lifecycle Cascade: cleanupSession removes pending tasks and settles records', () => {
+test('3. Lifecycle Cascade: cleanupSession removes pending tasks and settles records', async () => {
   const telemetry = new CallTelemetryRingBuffer(200);
   telemetry.record({
     id: 'c-1',
@@ -169,6 +169,23 @@ test('3. Lifecycle Cascade: cleanupSession removes pending tasks and settles rec
   assert.equal(telemetry.getPendingTasksForSession('session-b').length, 0);
   const c1 = telemetry.query().find(r => r.id === 'c-1');
   assert.equal(c1.status, 'settled');
+
+  // Verify session/dispose event hook triggers telemetry cleanup
+  const ctx = createMockContext();
+  apply(ctx, { locale: 'zh' });
+  ctx.callTelemetry.record({
+    id: 'c-disp',
+    callerSessionId: 'session-caller',
+    targetSessionId: 'session-target',
+    callType: 'task_hard'
+  });
+  assert.equal(ctx.callTelemetry.getPendingTasksForSession('session-target').length, 1);
+  const disposeHandlers = ctx.getEventHandlers('session/dispose');
+  assert.ok(disposeHandlers.length > 0, 'session/dispose event handler must be registered');
+  for (const h of disposeHandlers) {
+    await h({ session: { id: 'session-target' } });
+  }
+  assert.equal(ctx.callTelemetry.getPendingTasksForSession('session-target').length, 0, 'session/dispose must cascade cleanup pending tasks');
 });
 
 test('4. Dynamic Context: task:remind injects context in systemPrompt', () => {
@@ -241,4 +258,30 @@ test('5. Hard task interception: agent/turn-stopping triggers steer on pending t
   assert.ok(steeredMessage, 'task_hard must trigger steer');
   assert.match(steeredMessage, /Master/);
   assert.match(steeredMessage, /task_report/);
+
+  // Report 1: FIFO settles task_soft, task_hard remains pending and still steers
+  ctx.callTelemetry.record({
+    callerSessionId: 'agent-worker',
+    targetSessionId: 'agent-master',
+    callType: 'task_report',
+    messagePayload: 'Soft task completed'
+  });
+  steeredMessage = null;
+  for (const h of handlers) {
+    await h({ agent: callee, turn: 3 });
+  }
+  assert.ok(steeredMessage, 'task_hard is still pending after first report');
+
+  // Report 2: FIFO settles task_hard, turn-stopping no longer steers and cleans up
+  ctx.callTelemetry.record({
+    callerSessionId: 'agent-worker',
+    targetSessionId: 'agent-master',
+    callType: 'task_report',
+    messagePayload: 'Hard task completed'
+  });
+  steeredMessage = null;
+  for (const h of handlers) {
+    await h({ agent: callee, turn: 4 });
+  }
+  assert.equal(steeredMessage, null, 'settled task_hard must not steer on turn-stopping');
 });
