@@ -256,7 +256,7 @@ test('Web Canvas Route: GET 返回只读全景快照与查询参数透传', asyn
     targetSessionId: 'session-bbbbbbbb-2',
     callerWorkspace: 'c:/workspace/app',
     targetWorkspace: 'c:/workspace/app',
-    callType: 'task_dispatch',
+    callType: 'task_soft',
     deliveryMode: 'followup',
     messagePayload: 'inspect the canvas'
   });
@@ -299,7 +299,7 @@ test('Web Canvas Route: GET 返回只读全景快照与查询参数透传', asyn
   assert.ok(Array.isArray(snapshot.posts));
   assert.ok(Array.isArray(snapshot.workspaces));
   assert.equal(snapshot.calls.length, 1);
-  assert.equal(snapshot.calls[0].callType, 'task_dispatch');
+  assert.equal(snapshot.calls[0].callType, 'task_soft');
   assert.equal(snapshot.metrics.totalSessions, 2);
   assert.equal(snapshot.metrics.runningSessions, 1);
 
@@ -319,7 +319,7 @@ test('Web Canvas Route: 无 crossWorkspace 参数时默认返回全量多工作�
     targetSessionId: 'session-peer-2',
     targetTitle: 'Peer Dev',
     targetWorkspace: 'c:/workspace/proj-peer',
-    callType: 'task_dispatch',
+    callType: 'task_soft',
     deliveryMode: 'followup',
     durationMs: 5,
     contextPostIds: [],
@@ -516,7 +516,7 @@ test('Web Canvas Route: 非顶层会话、其连线与相关计数在出站前�
     targetSessionId,
     targetTitle,
     targetWorkspace: 'c:/workspace/proj-main',
-    callType: 'task_dispatch',
+    callType: 'task_soft',
     deliveryMode: 'followup',
     durationMs: 5,
     contextPostIds: [],
@@ -595,7 +595,7 @@ test('Web Canvas Route: 离开 roster 的隐藏端点沿用记录来源，只剩
     targetSessionId,
     targetTitle,
     targetWorkspace: 'c:/workspace/proj-workers',
-    callType: 'task_dispatch',
+    callType: 'task_soft',
     deliveryMode: 'followup',
     durationMs: 3,
     contextPostIds: [],
@@ -651,7 +651,7 @@ test('Web Canvas Route: 归档到 archivedSessionIds 的隐藏端点不得凭 se
     targetSessionId: 'session-worker',
     targetTitle: 'Worker',
     targetWorkspace: 'c:/workspace/proj-main',
-    callType: 'task_dispatch',
+    callType: 'task_soft',
     deliveryMode: 'followup',
     durationMs: 4,
     contextPostIds: [],
@@ -772,7 +772,7 @@ test('Web Canvas Route: 出站会话必带 isTopLevel 标记 (ADR-0013 §2.2.1)'
     targetSessionId: 'session-departed',
     targetTitle: 'Departed',
     targetWorkspace: 'c:/workspace/proj-main',
-    callType: 'task_dispatch',
+    callType: 'task_soft',
     deliveryMode: 'followup',
     durationMs: 2,
     contextPostIds: [],

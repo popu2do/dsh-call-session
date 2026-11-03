@@ -4,9 +4,10 @@
  */
 
 export interface CallTypeIntents {
-  readonly task_dispatch: string;
-  readonly task_report: string;
   readonly notice: string;
+  readonly task_soft: string;
+  readonly task_hard: string;
+  readonly task_report: string;
 }
 
 export declare const CALL_TYPE_INTENTS: Readonly<CallTypeIntents>;
@@ -161,7 +162,7 @@ export interface DispatchAndVerifyOptions {
   targetAgent?: any;
   userMessage?: NativeUserMessage;
   message?: NativeUserMessage;
-  callType?: 'task_dispatch' | 'task_report' | 'notice' | string;
+  callType?: 'notice' | 'task_soft' | 'task_hard' | 'task_report' | string;
   waitMs?: number;
   resolveStatus?: (agent: any) => { status: string; error?: unknown };
   pollIntervalMs?: number;

@@ -194,7 +194,7 @@ test('Strict arguments validation: declared arguments for all six tools behave a
   const callRes = await callTool.execute({
     target_session_id: 'session-target-1',
     message: 'hello target',
-    call_type: 'task_dispatch',
+    call_type: 'task_soft',
     context_post_ids: []
   }, exec);
   assert.equal(callRes.success, true);

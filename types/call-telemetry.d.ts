@@ -4,7 +4,16 @@
  */
 
 /** 单播呼叫意图分类 */
-export type CanvasCallType = 'task_dispatch' | 'task_report' | 'notice';
+export type CanvasCallType = 'notice' | 'task_soft' | 'task_hard' | 'task_report';
+
+export interface PendingTaskRecord {
+  callId: string;
+  callerSessionId: string;
+  callerTitle: string;
+  targetSessionId: string;
+  callType: 'task_soft' | 'task_hard';
+  timestamp: number;
+}
 
 /** 原生交付模式 */
 export type CanvasDeliveryMode = 'steer' | 'followup';

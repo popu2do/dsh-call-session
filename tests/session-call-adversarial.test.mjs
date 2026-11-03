@@ -394,7 +394,7 @@ test('session_call 逆境测试: 握手轮询中途目标被销毁或注销时�
   const res = await executeSessionCall(ctx, {
     target_session_id: 'target-vanishing-agent-5678',
     message: 'Test mid-flight vanish',
-    call_type: 'task_dispatch',
+    call_type: 'task_soft',
     wait_ms: 100
   }, exec);
 
@@ -414,7 +414,7 @@ test('session_call 边界测试: 极值与异常 wait_ms (0, 负数, 溢出, NaN
   const res0 = await executeSessionCall(ctx, {
     target_session_id: 'target-adv-boundary',
     message: 'Zero wait test',
-    call_type: 'task_dispatch',
+    call_type: 'task_soft',
     wait_ms: 0
   }, exec);
   const dur0 = Date.now() - start0;
@@ -426,7 +426,7 @@ test('session_call 边界测试: 极值与异常 wait_ms (0, 负数, 溢出, NaN
   const resNeg = await executeSessionCall(ctx, {
     target_session_id: 'target-adv-boundary',
     message: 'Negative wait test',
-    call_type: 'task_dispatch',
+    call_type: 'task_soft',
     wait_ms: -500
   }, exec);
   assert.equal(resNeg.success, true);
@@ -436,7 +436,7 @@ test('session_call 边界测试: 极值与异常 wait_ms (0, 负数, 溢出, NaN
   const resNan = await executeSessionCall(ctx, {
     target_session_id: 'target-adv-boundary',
     message: 'NaN wait test',
-    call_type: 'task_dispatch',
+    call_type: 'task_soft',
     wait_ms: NaN
   }, exec);
   assert.equal(resNan.success, true);
@@ -472,7 +472,7 @@ test('session_call 逆境测试: 历史陈旧错误与当前轮次严格隔离�
   const res = await executeSessionCall(ctx, {
     target_session_id: 'target-history-agent-9999',
     message: 'Run turn 4 normally',
-    call_type: 'task_dispatch',
+    call_type: 'task_soft',
     wait_ms: 100
   }, exec);
 
@@ -483,7 +483,7 @@ test('session_call 逆境测试: 历史陈旧错误与当前轮次严格隔离�
   assert.equal(res.targetStatus, 'running');
 });
 
-test('session_call 并发竞态测试: 多调用方同时发起 task_dispatch 轻量握手无状态踩踏 (ADR-0031)', async () => {
+test('session_call 并发竞态测试: 多调用方同时发起 task_soft 轻量握手无状态踩踏 (ADR-0031)', async () => {
   const caller1 = createMockAgent('caller-race-1');
   const caller2 = createMockAgent('caller-race-2');
   const caller3 = createMockAgent('caller-race-3');

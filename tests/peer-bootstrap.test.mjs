@@ -58,7 +58,7 @@ test('formatInitialMessage: builds standard UserMessage structure', () => {
   assert.equal(msg.role, 'user');
   assert.deepEqual(msg.content, [{
     type: 'text',
-    text: '[From: session-master-1234 (CaptainAgent) | CallType: task_dispatch]\n\nAnalyze system architecture'
+    text: '[From: session-master-1234 (CaptainAgent) | CallType: task_soft]\n\nAnalyze system architecture'
   }]);
   assert.equal(msg.source.kind, 'plugin:dsh-call-session');
   assert.notEqual(msg.source.kind, 'plugin');
@@ -74,7 +74,7 @@ test('formatInitialMessage: builds standard UserMessage structure', () => {
   assert.ok(typeof msgDefault.id === 'string' && msgDefault.id.length > 0);
   assert.deepEqual(msgDefault.content, [{
     type: 'text',
-    text: '[From: root-session (Session) | CallType: task_dispatch]\n\nHello world'
+    text: '[From: root-session (Session) | CallType: task_soft]\n\nHello world'
   }]);
   assert.equal(msgDefault.source.summary, '[Peer Session Bootstrap] from Session: Hello world');
 });
@@ -90,7 +90,7 @@ test('formatInitialMessage: formats contextPostIds with # and prefix ref', () =>
   assert.ok(msg);
   assert.equal(
     msg.content[0].text,
-    '[From: session-investigator-001 (Investigator) | CallType: task_dispatch]\n> Context Ref: #post-101, #post-202, #post-303\n\nInvestigate deadlock'
+    '[From: session-investigator-001 (Investigator) | CallType: task_soft]\n> Context Ref: #post-101, #post-202, #post-303\n\nInvestigate deadlock'
   );
   assert.equal(msg.source.summary, '[Peer Session Bootstrap] from Investigator: Investigate deadlock');
 });

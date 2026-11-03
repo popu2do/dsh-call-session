@@ -59,10 +59,10 @@ function buildHtml(locale) {
   ];
 
   const calls = [
-    { id: 'c1', callerSessionId: 'coord', targetSessionId: 'arch', timestamp: Date.now() - 5000, status: 'active', callType: 'task_dispatch' },
+    { id: 'c1', callerSessionId: 'coord', targetSessionId: 'arch', timestamp: Date.now() - 5000, status: 'active', callType: 'task_soft' },
     { id: 'c2', callerSessionId: 'arch', targetSessionId: 'coord', timestamp: Date.now() - 10000, status: 'active', callType: 'task_report' },
-    { id: 'c3', callerSessionId: 'coord', targetSessionId: 'etl', timestamp: Date.now() - 15000, status: 'active', callType: 'task_dispatch' },
-    { id: 'c4', callerSessionId: 'etl', targetSessionId: 'ui', timestamp: Date.now() - 20000, status: 'active', callType: 'task_dispatch' },
+    { id: 'c3', callerSessionId: 'coord', targetSessionId: 'etl', timestamp: Date.now() - 15000, status: 'active', callType: 'task_soft' },
+    { id: 'c4', callerSessionId: 'etl', targetSessionId: 'ui', timestamp: Date.now() - 20000, status: 'active', callType: 'task_soft' },
     { id: 'c5', callerSessionId: 'coord', targetSessionId: 'sec', timestamp: Date.now() - 25000, status: 'active', callType: 'notice' }
   ];
 

@@ -47,7 +47,7 @@ function callRecord(overrides) {
     callerTitle: 'Agent A',
     targetWorkspace: '/ws/w0',
     targetTitle: 'Agent B',
-    callType: 'task_dispatch',
+    callType: 'task_soft',
     status: 'active',
     timestamp: Date.now(),
     contextPostIds: []

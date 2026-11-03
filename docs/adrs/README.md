@@ -46,6 +46,7 @@
 
 | ID | Title | Status | Date | Primary Anchors | Document |
 | :--- | :--- | :--- | :--- | :--- | :--- |
+| **ADR-0042** | CallType Refactoring, Pending Task Ledger, and Report Obligation Protocol | **Accepted** - Current | 2026-11-03 | `lib/native-message-transport.mjs`, `lib/call-telemetry.mjs`, `index.mjs` | [0042-call-type-refactoring-and-report-obligation-protocol.md](./0042-call-type-refactoring-and-report-obligation-protocol.md) |
 | **ADR-0039** | Strict Tool Input Parameter Rejection and Zero-Side-Effect Gateways | **Accepted** - Current | 2026-10-30 | `lib/tools-registry.mjs`, `lib/locales/` | [0039-strict-tool-input-rejection-and-zero-side-effect-gateways.md](./0039-strict-tool-input-rejection-and-zero-side-effect-gateways.md) |
 | **ADR-0032** | Initial Message Transport Header Alignment and Convergence Metadata Specification | **Accepted** - Current | 2026-10-18 | `lib/native-message-transport.mjs`, `lib/peer-bootstrap.mjs` | [0032-initial-message-transport-header-alignment-and-convergence-metadata.md](./0032-initial-message-transport-header-alignment-and-convergence-metadata.md) |
 | **ADR-0029** | Consolidated Native Message Transport and Bootstrap Facade Folding | **Accepted** - Current | 2026-10-14 | `lib/native-message-transport.mjs`, `lib/session-call.mjs` | [0029-consolidated-native-message-transport-and-bootstrap-facade-folding.md](./0029-consolidated-native-message-transport-and-bootstrap-facade-folding.md) |
