@@ -136,6 +136,15 @@ function setupMockContext(plugin, options = {}) {
   };
 }
 
+/**
+ * 宿主注入给插件的 console：只收 warn，用来断言降级告警的条数与内容，
+ * 顺带把降级测试的噪声挡在真实 stdout 之外。
+ */
+function recordingConsole() {
+  const warnings = [];
+  return { warnings, warn: (...args) => warnings.push(args) };
+}
+
 test('Peer Session Reference: Workspace roster reader sits beside the session reader and honours the empty-list contract', () => {
   const source = readClientSource();
   const sessionReaderAt = source.indexOf('function resolveSessionsById(');
@@ -204,13 +213,19 @@ test('Peer Session Reference: Workspace roster reader degrades to an empty roste
    * Mounts the plugin over a hand-written workspaces double and returns every
    * Level 2 candidate and wrapped native row set it produces, so a degradation
    * shows up as "the existing filtering still ran" rather than as a thrown error.
+   * hostCalls counts only the host implementation answering a native fetch, so a
+   * drilled request that never reaches the host stays visible as a zero.
    */
+  let hostCalls = 0;
   async function probe(workspacesService, sessionsService) {
     const nativeSource = {
       trigger: '@',
       name: 'reference',
       showGroupTitle: false,
-      candidates: async () => [sessionRow('peer', 'peer session'), sessionRow('dead', 'dead session')]
+      candidates: async () => {
+        hostCalls += 1;
+        return [sessionRow('peer', 'peer session'), sessionRow('dead', 'dead session')];
+      }
     };
     const live = { sources: [nativeSource] };
     let registeredSource = null;
@@ -235,8 +250,11 @@ test('Peer Session Reference: Workspace roster reader degrades to an empty roste
       { sessionId: 'session-curr' },
       { query: CURRENT_WS, drilled: true }
     );
+    const drilledBefore = hostCalls;
+    const drilled = await nativeSource.candidates({ sessionId: 'session-curr' }, { query: '', drilled: true });
+    const drilledAfter = hostCalls;
     const native = await nativeSource.candidates({ sessionId: 'session-curr' }, { query: '', drilled: false });
-    return { level2, native };
+    return { level2, native, drilled, drilledBefore, drilledAfter };
   }
 
   const sessionsById = {
@@ -279,13 +297,20 @@ test('Peer Session Reference: Workspace roster reader degrades to an empty roste
   ];
 
   for (const [label, workspacesService] of cases) {
-    const { level2, native } = await probe(workspacesService, sessionsService);
+    const { level2, native, drilled, drilledBefore, drilledAfter } = await probe(workspacesService, sessionsService);
     const level2Labels = Array.from(level2, (item) => item.label);
     assert.deepEqual(
       level2Labels,
       [],
       'An empty roster must degrade Level 2 to an empty list for ' + label + ': got ' + JSON.stringify(level2Labels)
     );
+    // 空名册只影响二级成员来源，宿主自己的 drilled 标志照旧必须掐断原生源
+    assert.deepEqual(
+      Array.from(drilled),
+      [],
+      'A degraded roster must still suppress the native source when the host marks the request drilled for ' + label
+    );
+    assert.equal(drilledBefore, drilledAfter, 'A drilled request must not reach the host candidates even with an empty roster for ' + label);
     assert.deepEqual(
       Array.from(native, (item) => item.name),
       expectedNative,
@@ -462,7 +487,7 @@ test('Peer Session Reference: Level 1 workspace discovery, drill contract, and c
 
   // 名册把当前工作区刻意排在第二位，置顶行为无法靠名册顺序巧合通过
   const rosterItems = [
-    workspaceItem({ workspaceId: 'ws-cluster', path: CLUSTER_WS, sessionIds: ['session-cl-1', 'session-cl-2'] }),
+    workspaceItem({ workspaceId: 'ws-cluster', path: CLUSTER_WS, title: '集群工作区', sessionIds: ['session-cl-1', 'session-cl-2'] }),
     workspaceItem({ workspaceId: 'ws-current', path: CURRENT_WS, sessionIds: ['session-curr', 'session-local-1', 'session-local-2'] }),
     workspaceItem({ workspaceId: 'ws-gateway', path: GATEWAY_WS, sessionIds: ['session-gw-1'] })
   ];
@@ -508,8 +533,8 @@ test('Peer Session Reference: Level 1 workspace discovery, drill contract, and c
 
   assert.deepEqual(
     Array.from(level1.slice(1), (item) => item.name),
-    ['dsh-agent-cluster', 'dsh-gateway'],
-    'Remaining workspaces must keep roster order'
+    ['集群工作区', 'dsh-gateway'],
+    'Remaining workspaces must keep roster order and carry their roster title'
   );
   assert.ok(level1.slice(1).every(item => item.description === undefined), 'Only the current workspace may carry a description');
   assert.ok(level1.slice(1).every(item => JSON.parse(item.value).isCurrent === false), 'Non-current roster entries must stay unflagged');
@@ -743,12 +768,13 @@ test('Peer Session Reference: Canonical 8-character short ID badge and title dis
     'session-curr': { id: 'session-curr', cwd: CURRENT_WS, updatedAt: 9999 },
     'session-dup-a': { id: 'session-dup-a-11223344', title: '性能优化专项', cwd: CURRENT_WS, status: 'running', updatedAt: 3000 },
     'session-dup-b': { id: 'session-dup-b-55667788', title: '性能优化专项', cwd: CURRENT_WS, status: 'idle', updatedAt: 2000 },
-    'session-notitle': { id: 'session-notitle-99aabbcc', cwd: CURRENT_WS, status: 'error', updatedAt: 1000 },
+    // 去掉 session- 前缀只剩 3 位，必须靠补零凑满 8 位：补几位、补在左边还是右边，这条用例都会红
+    'session-xyz': { id: 'session-xyz', cwd: CURRENT_WS, status: 'error', updatedAt: 1000 },
     'session-offline': { id: 'session-offline-ddeeff00', title: '已断开任务', cwd: CURRENT_WS, status: 'offline', updatedAt: 500 }
   };
 
   const src = currentWorkspaceContext(plugin, sessionsById, {
-    workspaceSessions: ['session-dup-a', 'session-dup-b', 'session-notitle', 'session-offline']
+    workspaceSessions: ['session-dup-a', 'session-dup-b', 'session-xyz', 'session-offline']
   });
 
   const list = await src.candidates(
@@ -758,11 +784,13 @@ test('Peer Session Reference: Canonical 8-character short ID badge and title dis
 
   assert.equal(list.length, 4);
 
-  // 8位规范短 ID 格式：# 开头且总长度为 9
+  // 8 位规范短 ID：# 后接恰好 8 位小写字母数字，位数、大小写与补零位置都在断言里
   for (const item of list) {
-    assert.ok(item.name.startsWith('#'), 'Candidate name must start with #');
-    assert.equal(item.name.length, 9, 'Short ID format #12345678 must be exactly 9 characters');
+    assert.match(item.name, /^#[0-9a-z]{8}$/, 'Short ID must be # plus exactly 8 lowercase alphanumeric characters: got ' + item.name);
   }
+  // 字符集是取值而不是形状：短码取自去掉 session- 前缀后的 id 前八位，换字符集或换截取起点都会让这两条红
+  assert.ok(list[0].name.includes('dup'), 'The short code must derive from the id itself, not from a counter or a hash of it');
+  assert.match(list[2].name, /^#xyz0{5}$/, 'A short id must be right-padded with zeroes to exactly 8 characters');
 
   // 同名消歧：标题相同但短 ID 必定不同
   assert.equal(list[0].label, '性能优化专项');
@@ -770,7 +798,7 @@ test('Peer Session Reference: Canonical 8-character short ID badge and title dis
   assert.notEqual(list[0].name, list[1].name, 'Duplicate titles must produce distinct short IDs');
 
   // 无标题会话回退为 Agent #xxxxxxxx
-  assert.equal(list[2].label, 'Agent ' + list[2].name, 'Missing title must fall back to Agent #shortId');
+  assert.match(list[2].label, /^Agent #xyz0{5}$/, 'Missing title must fall back to Agent #shortId');
 
   // 动态状态与相对更新时间排版 (Q3 A 决策)
   assert.ok(list[0].description.startsWith('运行中 · '), 'Running session must display running status prefix with relative time');
@@ -1407,10 +1435,11 @@ test('Peer Session Reference: level 1 keeps workspaces with live sessions and pr
     'session-mixed-dead': { id: 'session-mixed-dead', title: '混合区名单任务', cwd: MIXED_WS, status: 'idle', updatedAt: 4500 }
   };
 
-  // 名册顺序刻意不是当前工作区在前，也不是路径字母序
+  // 名册顺序刻意不是当前工作区在前，也不是路径字母序；
+  // 集群项标题刻意不同于路径末段，一级命名只认名册 title，按路径取名会被这条测红
   const rosterItems = [
     workspaceItem({ workspaceId: 'ws-mixed', path: MIXED_WS, sessionIds: ['session-mixed-live', 'session-mixed-dead'] }),
-    workspaceItem({ workspaceId: 'ws-cluster', path: CLUSTER_WS, sessionIds: ['session-cl-live'] }),
+    workspaceItem({ workspaceId: 'ws-cluster', path: CLUSTER_WS, title: '集群工作区', sessionIds: ['session-cl-live'] }),
     workspaceItem({ workspaceId: 'ws-current', path: CURRENT_WS, sessionIds: ['session-curr'] })
   ];
 
@@ -1429,9 +1458,12 @@ test('Peer Session Reference: level 1 keeps workspaces with live sessions and pr
   // 当前工作区置顶，其余保持名册顺序，不按路径字母序重排
   assert.deepEqual(
     Array.from(level1, (item) => item.name),
-    ['dsh-call-session', 'dsh-mixed', 'dsh-agent-cluster'],
+    ['dsh-call-session', 'dsh-mixed', '集群工作区'],
     'Level 1 must pin the current workspace first and keep the rest in roster order'
   );
+  // 一级命名取自主机名册 title，不是路径末段
+  assert.equal(level1[2].label, '集群工作区', 'Level 1 must name a roster entry by its roster title, not by the path tail');
+  assert.notEqual(level1[2].name, CLUSTER_WS.split('/').pop(), 'A roster title that differs from the path tail must win');
   assert.equal(level1[0].description, '当前', 'Current workspace must stay marked with 当前');
   assert.equal(JSON.parse(level1[1].value).isCurrent, false, 'Non-current workspaces must stay unflagged');
   assert.equal(level1[1].description, undefined, 'Non-current roster entries must not carry a description');
@@ -1535,7 +1567,8 @@ test('Peer Session Reference: Native @ candidates drop every subagent and follow
     get: (serviceName) => {
       if (serviceName === 'inputTriggers') return inputTriggers;
       if (serviceName === 'sessions') {
-        return { list: { getSnapshot: () => ({ byId: sessionsById }) } };
+        // 宿主快照恒为 { byId, ids }；手写的裸 { byId } 不是合法形状，这里照会话快照助手来构造
+        return { list: { getSnapshot: () => sessionsSnapshot(sessionsById) } };
       }
       if (serviceName === 'workspaces') {
         return { list: { getSnapshot: () => ({ archivedSessionIds: ['rostered-peer'] }) } };
@@ -1561,13 +1594,85 @@ test('Peer Session Reference: Native @ candidates drop every subagent and follow
   assert.ok(!filtered.some((item) => item.name === 'archived peer' || item.name === 'rostered peer'), 'No archived or rostered dead session row may survive');
   assert.equal(nativeCalls, 1, 'Native candidates must be invoked exactly once per fetch');
 
+  // 宿主行与左侧侧栏同一条判据：非当前会话的空白会话在快照里查得到，也必须跟着侧栏一起消失
+  sessionsById['blank-peer'] = { id: 'blank-peer', cwd: CURRENT_WS, title: 'blank peer', blank: true, updatedAt: 13000 };
+  // 当前会话自己的会话记录是空白的（刚开还没说话），id 必须与 request 对得上，否则测的就不是「当前会话」这条分支
+  sessionsById['blank-cur'] = { id: 'cur', cwd: CURRENT_WS, title: 'blank current', blank: true, updatedAt: 21000 };
+  nativeRows.push(sessionRow('blank-peer', 'blank peer'), sessionRow('blank-cur', 'blank current'));
+  const withBlank = await nativeSource.candidates({ sessionId: 'cur' }, { query: '', drilled: false });
+  assert.ok(!withBlank.some((item) => item.name === 'blank peer'), 'A blank session that is not the current one must disappear like it does in the sidebar');
+  assert.ok(withBlank.some((item) => item.name === 'blank current'), 'The current session keeps its row even while blank, exactly like the sidebar');
+  const callsAfterBlankFetch = nativeCalls;
+
   await registeredSource.candidates({ sessionId: 'cur' }, { query: '', drilled: false });
   await nativeSource.candidates({ sessionId: 'cur' }, { query: '', drilled: false });
-  assert.equal(nativeCalls, 2, 'Repeated installs must not stack wrappers');
+  // 空白会话那次 fetch 已经打过一次宿主实现，这里改看相对增量：再各接一次 fetch 只应再落一次，装两层就会翻倍
+  assert.equal(nativeCalls - callsAfterBlankFetch, 1, 'Repeated installs must not stack wrappers');
 
   assert.ok(typeof disposePlugin === 'function', 'Activation must return a disposer');
   disposePlugin();
   assert.equal(nativeSource.candidates, originalCandidates, 'Disposing the plugin must hand the host implementation back');
+});
+
+test('Peer Session Reference: A broken native filter degrades to the untouched host rows and warns once', async () => {
+  // 每次加载都是全新模块作用域，一次性告警标志因此天然为 false，不会被同进程内别的用例污染
+  const sandboxConsole = recordingConsole();
+  const { plugin } = loadClientInSandbox({ console: sandboxConsole });
+
+  const sessionRow = (id, label) => ({
+    name: label,
+    section: 'conversation',
+    value: JSON.stringify({
+      kind: 'session',
+      label,
+      mention: `@[${label}](dsh-session:${Buffer.from(JSON.stringify(id), 'utf8').toString('base64url')})`
+    })
+  });
+
+  const rows = [sessionRow('peer', 'peer session'), { name: 'session-list.ts', section: 'files', value: '{"kind":"file","path":"session-list.ts"}' }];
+
+  // 让会话快照索引自身就是一个既取不到 id 也走不进的畸形值：筛子一碰它就抛，正好落在降级分支上
+  const hostileById = new Proxy(
+    {},
+    {
+      get() {
+        throw new TypeError('session row unavailable');
+      }
+    }
+  );
+
+  const nativeSource = {
+    trigger: '@',
+    name: 'reference',
+    showGroupTitle: false,
+    candidates: async () => rows.map((row) => ({ ...row }))
+  };
+
+  plugin.apply({
+    effect: (fn) => {
+      fn();
+    },
+    locale: { register: () => {}, bind: () => (key) => plugin.zh[key] || key },
+    slots: { inject: () => {}, register: () => {} },
+    get: (serviceName) => {
+      // 宿主 reference 源本来就已挂在 live 上，插件只需取到同一份列表就能补挂筛子
+      if (serviceName === 'inputTriggers') return { live: { sources: [nativeSource] }, registerSource: () => () => {} };
+      if (serviceName === 'sessions') return { list: { getSnapshot: () => ({ byId: hostileById, ids: ['peer'] }) } };
+      if (serviceName === 'workspaces') return { list: { getSnapshot: () => ({ items: [], archivedSessionIds: [] }) } };
+      return null;
+    }
+  });
+
+  const degraded = await nativeSource.candidates({ sessionId: 'cur' }, { query: '', drilled: false });
+  assert.deepEqual(
+    Array.from(degraded, (item) => item.name),
+    ['peer session', 'session-list.ts'],
+    'When the filter itself breaks, the host rows must come back exactly as the host produced them'
+  );
+  const warnings = sandboxConsole.warnings;
+  assert.equal(warnings.length, 1, 'ADR-0041 4.2 asks for one visible warning when the filter degrades');
+  assert.match(String(warnings[0][0]), /candidate filter degraded/, 'The warning must name the degraded candidate filter');
+  assert.match(String(warnings[0][1]), /session row unavailable/, 'The warning must carry the failure it swallowed');
 });
 
 test('Peer Session Reference: Level 2 membership follows the drilled workspace sessionIds, not cwd', async () => {
