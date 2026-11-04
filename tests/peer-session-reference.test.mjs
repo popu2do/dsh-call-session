@@ -6,7 +6,8 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, '..');
 
-import { loadClientBundle, loadClientInSandbox } from './helpers/canvas-harness.mjs';
+import { loadClientBundle, loadClientInSandbox, readClientSource } from './helpers/canvas-harness.mjs';
+import { rosterScenarios, sessionsSnapshot, workspacesSnapshot } from './helpers/mock-host.mjs';
 
 const CURRENT_WS = '/repos/TSPR/dsh-call-session';
 const CLUSTER_WS = '/repos/infra/dsh-agent-cluster';
@@ -16,12 +17,15 @@ const SPACE_WS = '/repos/projects/project with spaces';
 function setupMockContext(plugin, options = {}) {
   const {
     sessionsById = {},
+    sessionsIds = null,
     locale = 'zh',
     hasInputTriggers = true,
     hasSessionsService = true,
     initialActiveCalls = 0,
     hasWorkspacesService = false,
     workspacesList = null,
+    workspacesItems = null,
+    archivedSessionIds = [],
     workspacesListThrows = false
   } = options;
 
@@ -55,11 +59,23 @@ function setupMockContext(plugin, options = {}) {
         if (!hasSessionsService) return null;
         return {
           list: {
-            getSnapshot: () => ({ byId: sessionsById })
+            getSnapshot: () => sessionsSnapshot(sessionsById, sessionsIds || undefined)
           }
         };
       }
       if (serviceName === 'workspaces') {
+        // A roster declared through workspacesItems stands in for the real workspaces
+        // snapshot, which always carries items alongside archivedSessionIds.
+        if (workspacesItems) {
+          return {
+            list: {
+              getSnapshot: () => {
+                if (workspacesListThrows) throw new Error('workspaces list snapshot unavailable');
+                return workspacesSnapshot({ items: workspacesItems, archivedSessionIds });
+              }
+            }
+          };
+        }
         if (!hasWorkspacesService) return null;
         return {
           list: {
@@ -102,6 +118,237 @@ function setupMockContext(plugin, options = {}) {
     recordedPosts
   };
 }
+
+test('Peer Session Reference: Workspace roster reader sits beside the session reader and honours the empty-list contract', () => {
+  const source = readClientSource();
+  const sessionReaderAt = source.indexOf('function resolveSessionsById(');
+  const rosterReaderAt = source.indexOf('function resolveWorkspaceRoster(');
+  assert.ok(sessionReaderAt >= 0, 'The session reader must stay in lib/client.js');
+  assert.ok(rosterReaderAt >= 0, 'A workspace roster reader must sit in lib/client.js beside the session reader');
+  assert.ok(
+    Math.abs(rosterReaderAt - sessionReaderAt) < 2000,
+    'The roster reader must sit beside the session reader rather than elsewhere in the module'
+  );
+});
+
+test('Peer Session Reference: One candidate computation reads the workspace roster snapshot once', async () => {
+  const { plugin } = loadClientInSandbox();
+  const scenarios = rosterScenarios();
+
+  let reads = 0;
+  let registeredSource = null;
+  plugin.apply({
+    effect: (fn) => fn(),
+    locale: { register: () => {}, bind: () => (key) => plugin.zh[key] || key },
+    slots: { inject: () => {}, register: () => {} },
+    get: (serviceName) => {
+      if (serviceName === 'inputTriggers') {
+        return { registerSource: (src) => { registeredSource = src; return () => {}; } };
+      }
+      if (serviceName === 'sessions') {
+        return { list: { getSnapshot: () => ({ byId: scenarios.sessions }) } };
+      }
+      if (serviceName === 'workspaces') {
+        return {
+          list: {
+            getSnapshot: () => {
+              reads += 1;
+              return { items: scenarios.items, archivedSessionIds: ['session-roster-archived'] };
+            }
+          }
+        };
+      }
+      return null;
+    }
+  });
+
+  await registeredSource.candidates({ sessionId: 'session-curr' }, { query: '', drilled: false });
+  assert.equal(reads, 1, 'One Level 1 computation must read the workspace roster snapshot exactly once');
+
+  reads = 0;
+  await registeredSource.candidates({ sessionId: 'session-curr' }, { query: scenarios.currentWs, drilled: true });
+  assert.equal(reads, 1, 'One Level 2 computation must read the workspace roster snapshot exactly once');
+});
+
+test('Peer Session Reference: Workspace roster reader degrades to an empty roster without throwing', async () => {
+  const { plugin } = loadClientInSandbox();
+
+  const sessionRow = (id, label) => ({
+    name: label,
+    section: 'conversation',
+    value: JSON.stringify({
+      kind: 'session',
+      label,
+      mention: '@[' + label + '](dsh-session:' + Buffer.from(JSON.stringify(id), 'utf8').toString('base64url') + ')'
+    })
+  });
+
+  /**
+   * Mounts the plugin over a hand-written workspaces double and returns every
+   * Level 2 candidate and wrapped native row set it produces, so a degradation
+   * shows up as "the existing filtering still ran" rather than as a thrown error.
+   */
+  async function probe(workspacesService, sessionsService) {
+    const nativeSource = {
+      trigger: '@',
+      name: 'reference',
+      showGroupTitle: false,
+      candidates: async () => [sessionRow('peer', 'peer session'), sessionRow('dead', 'dead session')]
+    };
+    const live = { sources: [nativeSource] };
+    let registeredSource = null;
+    plugin.apply({
+      effect: (fn) => fn(),
+      locale: { register: () => {}, bind: () => (key) => plugin.zh[key] || key },
+      slots: { inject: () => {}, register: () => {} },
+      get: (serviceName) => {
+        if (serviceName === 'inputTriggers') {
+          return {
+            live,
+            registerSource: (src) => { registeredSource = src; live.sources.push(src); return () => {}; }
+          };
+        }
+        if (serviceName === 'sessions') return sessionsService;
+        if (serviceName === 'workspaces') return workspacesService;
+        return null;
+      }
+    });
+
+    const level2 = await registeredSource.candidates(
+      { sessionId: 'session-curr' },
+      { query: CURRENT_WS, drilled: true }
+    );
+    const native = await nativeSource.candidates({ sessionId: 'session-curr' }, { query: '', drilled: false });
+    return { level2, native };
+  }
+
+  const sessionsById = {
+    'session-curr': { id: 'session-curr', title: '当前会话', cwd: CURRENT_WS, status: 'running', updatedAt: 9000 },
+    'session-live': { id: 'session-live', title: '存活任务', cwd: CURRENT_WS, status: 'idle', updatedAt: 5000 },
+    'peer': { id: 'peer', title: 'peer session', cwd: CURRENT_WS, status: 'idle', updatedAt: 4000 },
+    'dead': { id: 'dead', title: 'dead session', cwd: CURRENT_WS, status: 'idle', updatedAt: 3000 }
+  };
+  const sessionsService = { list: { getSnapshot: () => ({ byId: sessionsById, ids: Object.keys(sessionsById) }) } };
+
+  const expectedLevel2 = ['存活任务', 'peer session', 'dead session'];
+  const expectedNative = ['peer session', 'dead session'];
+
+  const cases = [
+    ['missing workspaces service', null],
+    ['snapshot without items', { list: { getSnapshot: () => ({ archivedSessionIds: [] }) } }],
+    ['items that is not an array', { list: { getSnapshot: () => ({ items: 'ws-current' }) } }],
+    ['throwing snapshot read', { list: { getSnapshot: () => { throw new Error('workspaces list snapshot unavailable'); } } }],
+    ['workspaces service without a list', {}]
+  ];
+
+  for (const [label, workspacesService] of cases) {
+    const { level2, native } = await probe(workspacesService, sessionsService);
+    const level2Labels = Array.from(level2, (item) => item.label);
+    assert.deepEqual(
+      level2Labels,
+      expectedLevel2,
+      'Roster read must degrade to an empty list for ' + label + ': got ' + JSON.stringify(level2Labels)
+    );
+    assert.deepEqual(
+      Array.from(native, (item) => item.name),
+      expectedNative,
+      'Roster read must degrade to an empty list for ' + label + ', leaving the native wrapper filtering on'
+    );
+  }
+});
+
+test('Peer Session Reference: Harness declares roster items, archived roster ids and session ids without touching plugin internals', async () => {
+  const { plugin } = loadClientInSandbox();
+  const scenarios = rosterScenarios();
+
+  // 名册外会话照旧留在 byId，但不在任何名册项里
+  const sessionsById = Object.assign({}, scenarios.sessions, {
+    'session-unrostered': { id: 'session-unrostered', title: '名册外会话', status: 'idle', updatedAt: 5000 },
+    // 名册 id 声明归档，快照里没有任何归档标记
+    'session-roster-archived': { id: 'session-roster-archived', title: '名册归档会话', cwd: scenarios.currentWs, status: 'idle', updatedAt: 3000 }
+  });
+
+  const { getRegisteredSource } = setupMockContext(plugin, {
+    sessionsById,
+    sessionsIds: ['session-curr', 'session-ghost'],
+    workspacesItems: scenarios.items,
+    archivedSessionIds: ['session-roster-archived']
+  });
+  const src = getRegisteredSource();
+
+  // 名册可声明但本窗口解不出会话：下钻直接空列表，不依赖 byId 里的 cwd 聚合
+  const unreachable = await src.candidates(
+    { sessionId: 'session-curr' },
+    { query: scenarios.unreachableWs, drilled: true }
+  );
+  assert.ok(Array.isArray(unreachable), 'Roster items must be reachable without a matching byId entry');
+
+  // 名册 id 声明归档的会话不进二级列表（快照字段本可放过它），其余成员照常展开
+  const current = await src.candidates(
+    { sessionId: 'session-curr' },
+    { query: scenarios.currentWs, drilled: true }
+  );
+  const currentLabels = Array.from(current, (item) => item.label);
+  assert.deepEqual(
+    currentLabels,
+    ['空白会话', '可见成员'],
+    'Roster archived ids must reach Level 2 filtering for every declared member of the drilled workspace'
+  );
+
+  // sessions.ids 声明了 byId 里没有的会话，读取不得因此抛错或补齐成行
+  assert.ok(!currentLabels.includes('Agent #ghost000'), 'Session ids without a byId entry must not synthesize rows');
+});
+
+test('Peer Session Reference: Roster fixtures construct all seven required scenarios', () => {
+  const scenarios = rosterScenarios();
+  const byId = scenarios.sessions;
+  const rosterIds = Array.isArray(scenarios.items) ? scenarios.items.flatMap((item) => item.sessionIds) : [];
+
+  // 1. 五个名册项，而 byId 只能解出一个工作区的会话
+  assert.equal(scenarios.items.length, 5, 'The fixture must declare five roster items');
+  const resolvableWorkspaces = scenarios.items.filter((item) =>
+    item.sessionIds.some((id) => byId[id] !== undefined && byId[id].cwd !== undefined && byId[id].cwd === item.path)
+  );
+  assert.equal(resolvableWorkspaces.length, 1, 'byId must resolve sessions whose cwd matches for exactly one roster item');
+
+  // 2. sessionIds 成员缺 cwd
+  const noCwd = rosterIds.filter((id) => byId[id] !== undefined && byId[id].cwd === undefined && byId[id].workspace === undefined);
+  assert.deepEqual(Array.from(noCwd), ['session-no-cwd'], 'One rostered session must carry no cwd');
+
+  // 3. cwd 指向 A 而 sessionIds 归属 B
+  const crossCwd = scenarios.items.filter((item) =>
+    item.sessionIds.some((id) => byId[id] !== undefined && byId[id].cwd !== undefined && byId[id].cwd !== item.path)
+  );
+  assert.equal(crossCwd.length, 1, 'One rostered session must carry a cwd naming a different workspace');
+  assert.equal(crossCwd[0].path, scenarios.crossCwdWs, 'The cross-cwd member must be rostered under the gateway workspace');
+
+  // 4. 不在任何名册的会话
+  const unrostered = Object.keys(byId).filter((id) => !rosterIds.includes(id));
+  assert.deepEqual(Array.from(unrostered), ['session-unrostered'], 'One session must stay outside every roster');
+
+  // 5. 非当前会话的空白会话
+  const currentItem = scenarios.items.find((item) => item.path === scenarios.currentWs);
+  const blankRostered = currentItem.sessionIds.filter((id) => byId[id] && byId[id].blank === true);
+  assert.deepEqual(Array.from(blankRostered), ['session-blank'], 'One rostered session must be blank and outside the current session');
+  assert.notEqual(currentItem.sessionIds[0], 'session-blank', 'The blank session must not be the current session');
+
+  // 6. 同时以快照字段和名册 id 声明的归档会话
+  const snapshotArchived = rosterIds.filter((id) => byId[id] && byId[id].archived === true);
+  const rosterArchived = rosterIds.filter((id) => scenarios.archivedSessionIds.includes(id) && byId[id] && byId[id].archived !== true);
+  assert.deepEqual(Array.from(snapshotArchived), ['session-snapshot-archived'], 'One rostered session must be archived through a snapshot field');
+  assert.deepEqual(Array.from(rosterArchived), ['session-roster-archived'], 'One rostered session must be archived through a roster id only');
+
+  // 7. 下钻工作区 sessionIds 全部不可解析，二级必然为空
+  const unreachable = scenarios.items.find((item) => item.path === scenarios.unreachableWs);
+  assert.ok(
+    unreachable && unreachable.sessionIds.length > 0 && unreachable.sessionIds.every((id) => byId[id] === undefined),
+    'The drilled cluster workspace must name only session ids the sessions snapshot cannot resolve'
+  );
+
+  // 名册顺序与字母序刻意不同，后续断言无法靠巧合通过
+  const sortedPaths = scenarios.workspaces.slice().sort((a, b) => a.localeCompare(b));
+  assert.notDeepEqual(Array.from(scenarios.workspaces), Array.from(sortedPaths), 'Roster order must differ from path-alphabetical order');
+});
 
 test('Peer Session Reference: Dictionary entries in zh and en are symmetrical and complete (ADR-0023)', () => {
   const plugin = loadClientBundle();
