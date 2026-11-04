@@ -781,7 +781,16 @@ test('Peer Session Reference: Canonical 8-character short ID badge and title dis
 
 test('Peer Session Reference: Drill header, root switching, and workspace header', () => {
   const { plugin } = loadClientInSandbox();
-  const { getRegisteredSource } = setupMockContext(plugin);
+  // 下钻标题的目标工作区从名册解析，因此这条用例必须给出与二级成员一致的名册
+  const { getRegisteredSource } = setupMockContext(plugin, {
+    sessionsById: {
+      'session-curr': { id: 'session-curr', title: '当前会话', cwd: CURRENT_WS, status: 'running', updatedAt: 9000 },
+      'session-live': { id: 'session-live', title: '存活任务', cwd: CURRENT_WS, status: 'idle', updatedAt: 5000 }
+    },
+    workspacesItems: [
+      workspaceItem({ workspaceId: 'ws-current', path: CURRENT_WS, sessionIds: ['session-curr', 'session-live'] })
+    ]
+  });
   const src = getRegisteredSource();
 
   // 未下钻时返回 undefined
@@ -1656,3 +1665,259 @@ test('Peer Session Reference: Level 2 applies the sidebar visibility rule to ros
     'Level 2 must drop both roster-archived and snapshot-flagged archived members'
   );
 });
+
+test('Peer Session Reference: a drilled request resolves the native reference source to an empty array without asking the host', async () => {
+  const { plugin } = loadClientInSandbox();
+
+  const sessionsById = {
+    'session-curr': { id: 'session-curr', title: '当前会话', cwd: CURRENT_WS, status: 'running', updatedAt: 9000 },
+    'session-subagent': { id: 'session-subagent', title: 'peer session', cwd: CURRENT_WS, origin: 'subagent', updatedAt: 8000 }
+  };
+  const nativeRows = [
+    { name: '进入目录', section: 'files', value: JSON.stringify({ kind: 'dir', path: CURRENT_WS + '/lib' }) },
+    {
+      name: 'peer session',
+      section: '对话',
+      value: JSON.stringify({
+        kind: 'session',
+        label: 'peer session',
+        mention: '@[peer session](dsh-session:' + Buffer.from(JSON.stringify('session-subagent'), 'utf8').toString('base64url') + ')'
+      })
+    }
+  ];
+
+  let hostCalls = 0;
+  const nativeSource = {
+    trigger: '@',
+    name: 'reference',
+    showGroupTitle: false,
+    candidates: async () => {
+      hostCalls += 1;
+      return nativeRows.map((row) => ({ ...row }));
+    }
+  };
+  const live = { sources: [nativeSource] };
+  let registeredSource = null;
+
+  plugin.apply({
+    effect: (fn) => fn(),
+    locale: { register: () => {}, bind: () => (key) => plugin.zh[key] || key },
+    slots: { inject: () => {}, register: () => {} },
+    get: (serviceName) => {
+      if (serviceName === 'inputTriggers') {
+        return {
+          live,
+          registerSource: (src) => {
+            registeredSource = src;
+            live.sources.push(src);
+            return () => {};
+          }
+        };
+      }
+      if (serviceName === 'sessions') return { list: { getSnapshot: () => sessionsSnapshot(sessionsById) } };
+      if (serviceName === 'workspaces') {
+        return {
+          list: {
+            getSnapshot: () => workspacesSnapshot({
+              items: [workspaceItem({ workspaceId: 'ws-current', path: CURRENT_WS, sessionIds: ['session-curr'] })],
+              archivedSessionIds: []
+            })
+          }
+        };
+      }
+      return null;
+    }
+  });
+
+  // 下钻：宿主既不产出“对话”会话行，也不产出“工作区”下钻标题与“进入目录”目录行
+  const drilled = await nativeSource.candidates({ sessionId: 'session-curr' }, { query: CURRENT_WS, drilled: true });
+  assert.deepEqual(Array.from(drilled), [], 'A drilled request must carry no native reference candidates');
+  assert.equal(hostCalls, 0, 'A drilled request must not invoke the host candidate generator at all');
+
+  // 插件自己的二级列表照旧产出该工作区的成员
+  const level2 = await registeredSource.candidates({ sessionId: 'session-curr' }, { query: CURRENT_WS, drilled: true });
+  assert.deepEqual(Array.from(level2, (item) => item.label), [], 'The current session stays out of its own Level 2');
+
+  // 未下钻：宿主原实现的文件与会话候选原样流出，包装层的筛子照常工作
+  const undrilled = await nativeSource.candidates({ sessionId: 'session-curr' }, { query: '', drilled: false });
+  assert.deepEqual(
+    Array.from(undrilled, (item) => item.name),
+    ['进入目录'],
+    'An undrilled request must still deliver the host rows, with only the excluded session dropped'
+  );
+  assert.equal(hostCalls, 1, 'An undrilled request must invoke the host candidate generator once');
+});
+
+test('Peer Session Reference: one level predicate decides both the plugin menu and the native wrapper', async () => {
+  const { plugin } = loadClientInSandbox();
+
+  const sessionsById = {
+    'session-curr': { id: 'session-curr', title: '当前会话', cwd: CURRENT_WS, status: 'running', updatedAt: 9000 },
+    'session-live': { id: 'session-live', title: '存活任务', cwd: CURRENT_WS, status: 'idle', updatedAt: 5000 }
+  };
+
+  const nativeRows = [
+    { name: '进入目录', section: 'files', value: JSON.stringify({ kind: 'dir', path: CURRENT_WS + '/lib' }) }
+  ];
+  const nativeSource = {
+    trigger: '@',
+    name: 'reference',
+    showGroupTitle: false,
+    candidates: async () => nativeRows.map((row) => ({ ...row }))
+  };
+  const live = { sources: [nativeSource] };
+  let registeredSource = null;
+
+  plugin.apply({
+    effect: (fn) => fn(),
+    locale: { register: () => {}, bind: () => (key) => plugin.zh[key] || key },
+    slots: { inject: () => {}, register: () => {} },
+    get: (serviceName) => {
+      if (serviceName === 'inputTriggers') {
+        return {
+          live,
+          registerSource: (src) => {
+            registeredSource = src;
+            live.sources.push(src);
+            return () => {};
+          }
+        };
+      }
+      if (serviceName === 'sessions') return { list: { getSnapshot: () => sessionsSnapshot(sessionsById) } };
+      if (serviceName === 'workspaces') {
+        return {
+          list: {
+            getSnapshot: () => workspacesSnapshot({
+              items: [
+                workspaceItem({ workspaceId: 'ws-current', path: CURRENT_WS, sessionIds: ['session-curr', 'session-live'] }),
+                workspaceItem({ workspaceId: 'ws-cluster', path: CLUSTER_WS, sessionIds: [] })
+              ],
+              archivedSessionIds: []
+            })
+          }
+        };
+      }
+      return null;
+    }
+  });
+
+  // 手敲路径：宿主的 drilled 标志为 false，查询串却点名了名册工作区，仍必须按二级处理
+  const typedRequest = { query: CLUSTER_WS, drilled: false };
+  const typedLevel2 = await registeredSource.candidates({ sessionId: 'session-curr' }, typedRequest);
+  assert.deepEqual(Array.from(typedLevel2), [], 'A hand-typed workspace path must expand Level 2, not fall back to the workspace list');
+  const typedHeader = registeredSource.header({ sessionId: 'session-curr' }, typedRequest);
+  assert.equal(
+    typedHeader[1].label,
+    'dsh-agent-cluster',
+    'A hand-typed workspace path must name the drilled workspace in the plugin header'
+  );
+  assert.equal(JSON.parse(typedHeader[1].value).path, CLUSTER_WS);
+  assert.deepEqual(
+    Array.from(await nativeSource.candidates({ sessionId: 'session-curr' }, typedRequest)),
+    [],
+    'A hand-typed workspace path must suppress the native directory rows and drill header just like a real drill'
+  );
+
+  // 未点名任何名册工作区的普通查询：仍是二级之外的普通引用，宿主文件候选照常流出
+  const filterRequest = { query: 'ses', drilled: false };
+  const filterLevel1 = await registeredSource.candidates({ sessionId: 'session-curr' }, filterRequest);
+  assert.deepEqual(
+    Array.from(filterLevel1, (item) => item.label),
+    ['dsh-call-session'],
+    'A plain query that names no workspace keeps the workspace list'
+  );
+  assert.deepEqual(
+    Array.from(await nativeSource.candidates({ sessionId: 'session-curr' }, filterRequest), (item) => item.name),
+    ['进入目录'],
+    'A plain query that names no workspace keeps the host file candidates'
+  );
+});
+test('Peer Session Reference: the drill header follows the same level predicate as the menu and the native wrapper', () => {
+  const { plugin } = loadClientInSandbox();
+  const { getRegisteredSource } = setupMockContext(plugin, {
+    sessionsById: {
+      'session-curr': { id: 'session-curr', title: '当前会话', cwd: CURRENT_WS, status: 'running', updatedAt: 9000 }
+    },
+    workspacesItems: [
+      workspaceItem({ workspaceId: 'ws-current', path: CURRENT_WS, sessionIds: ['session-curr'] }),
+      workspaceItem({ workspaceId: 'ws-cluster', path: CLUSTER_WS, sessionIds: [] })
+    ]
+  });
+  const src = getRegisteredSource();
+
+  // 手敲名册路径：宿主 drilled 为假，查询串点名了名册工作区，头部必须给出两条下钻标题
+  const typedHeader = src.header({ sessionId: 'session-curr' }, { query: CLUSTER_WS, drilled: false });
+  assert.ok(Array.isArray(typedHeader), 'A hand-typed workspace path must expose both drill header entries');
+  assert.equal(typedHeader.length, 2, 'The drill header keeps exactly the root entry and the target workspace entry');
+  assert.equal(typedHeader[0].label, '工作区根目录');
+  assert.equal(JSON.parse(typedHeader[0].value).kind, 'workspace-root');
+  assert.equal(typedHeader[1].label, 'dsh-agent-cluster', 'The drill header names the hand-typed workspace, not the current cwd');
+  assert.equal(typedHeader[1].current, true);
+  assert.equal(
+    JSON.parse(typedHeader[1].value).path,
+    CLUSTER_WS,
+    'The drill header points at the hand-typed workspace root so the level can be changed'
+  );
+
+  // 老路径：drilled 为真且查询串点名了名册工作区，头部仍指向点名的那一个
+  const drilledHeader = src.header({ sessionId: 'session-curr' }, { query: CURRENT_WS, drilled: true });
+  assert.equal(drilledHeader[1].label, 'dsh-call-session', 'A drilled request keeps naming the drilled workspace');
+  assert.equal(JSON.parse(drilledHeader[1].value).path, CURRENT_WS);
+
+  // 一级与无法解析的目标：保持不出标题，不编造工作区
+  assert.equal(
+    src.header({ sessionId: 'session-curr' }, { query: 'ses', drilled: false }),
+    undefined,
+    'A plain query that names no workspace must not invent a drill header'
+  );
+  assert.equal(src.header({ sessionId: 'session-curr' }, { query: '', drilled: false }), undefined);
+  assert.equal(src.header({ sessionId: 'session-curr' }, null), undefined);
+});
+
+test('Peer Session Reference: the drill header reads the workspace roster snapshot once per request', () => {
+  const { plugin } = loadClientInSandbox();
+
+  let reads = 0;
+  let registeredSource = null;
+  plugin.apply({
+    effect: (fn) => fn(),
+    locale: { register: () => {}, bind: () => (key) => plugin.zh[key] || key },
+    slots: { inject: () => {}, register: () => {} },
+    get: (serviceName) => {
+      if (serviceName === 'inputTriggers') {
+        return { registerSource: (src) => { registeredSource = src; return () => {}; } };
+      }
+      if (serviceName === 'sessions') {
+        return {
+          list: {
+            getSnapshot: () => sessionsSnapshot({
+              'session-curr': { id: 'session-curr', title: '当前会话', cwd: CURRENT_WS, status: 'running', updatedAt: 9000 }
+            })
+          }
+        };
+      }
+      if (serviceName === 'workspaces') {
+        return {
+          list: {
+            getSnapshot: () => {
+              reads += 1;
+              return workspacesSnapshot({
+                items: [
+                  workspaceItem({ workspaceId: 'ws-current', path: CURRENT_WS, sessionIds: ['session-curr'] }),
+                  workspaceItem({ workspaceId: 'ws-cluster', path: CLUSTER_WS, sessionIds: [] })
+                ],
+                archivedSessionIds: []
+              });
+            }
+          }
+        };
+      }
+      return null;
+    }
+  });
+
+  const typedRequest = { query: CLUSTER_WS, drilled: false };
+  registeredSource.header({ sessionId: 'session-curr' }, typedRequest);
+  assert.equal(reads, 1, 'One drill header computation must read the workspace roster snapshot exactly once');
+});
+
