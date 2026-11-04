@@ -14,6 +14,23 @@ const CLUSTER_WS = '/repos/infra/dsh-agent-cluster';
 const GATEWAY_WS = '/repos/infra/dsh-gateway';
 const SPACE_WS = '/repos/projects/project with spaces';
 
+/**
+ * Mounts a single workspace whose sessionIds list exactly the given ids, the way
+ * the host roster declares membership. Level 2 reads membership from here and
+ * from nowhere else, so every fixture that asserts a member must declare it.
+ */
+function currentWorkspaceContext(plugin, sessionsById, options = {}) {
+  const workspaceSessions = options.workspaceSessions || Object.keys(sessionsById);
+  const context = setupMockContext(plugin, {
+    sessionsById,
+    workspacesItems: [
+      workspaceItem({ workspaceId: 'ws-current', path: CURRENT_WS, sessionIds: workspaceSessions })
+    ],
+    archivedSessionIds: options.archivedSessionIds || []
+  });
+  return context.getRegisteredSource();
+}
+
 function setupMockContext(plugin, options = {}) {
   const {
     sessionsById = {},
@@ -232,7 +249,27 @@ test('Peer Session Reference: Workspace roster reader degrades to an empty roste
 
   const expectedLevel2 = ['存活任务', 'peer session', 'dead session'];
   const expectedNative = ['peer session', 'dead session'];
+  const rosterItems = [
+    workspaceItem({ workspaceId: 'ws-current', path: CURRENT_WS, sessionIds: ['session-curr', 'session-live', 'peer', 'dead'] })
+  ];
 
+  // 名册在场时二级按 sessionIds 展开，包装层的原生筛子照常工作
+  const intact = await probe(
+    { list: { getSnapshot: () => ({ items: rosterItems, archivedSessionIds: [] }) } },
+    sessionsService
+  );
+  assert.deepEqual(
+    Array.from(intact.level2, (item) => item.label),
+    expectedLevel2,
+    'An intact roster must expand Level 2 from sessionIds'
+  );
+  assert.deepEqual(
+    Array.from(intact.native, (item) => item.name),
+    expectedNative,
+    'An intact roster must leave the native wrapper filtering in place'
+  );
+
+  // 名册读取失败即空名册：二级没有任何成员来源，退化为空列表而不是回落到 cwd 归属
   const cases = [
     ['missing workspaces service', null],
     ['snapshot without items', { list: { getSnapshot: () => ({ archivedSessionIds: [] }) } }],
@@ -246,8 +283,8 @@ test('Peer Session Reference: Workspace roster reader degrades to an empty roste
     const level2Labels = Array.from(level2, (item) => item.label);
     assert.deepEqual(
       level2Labels,
-      expectedLevel2,
-      'Roster read must degrade to an empty list for ' + label + ': got ' + JSON.stringify(level2Labels)
+      [],
+      'An empty roster must degrade Level 2 to an empty list for ' + label + ': got ' + JSON.stringify(level2Labels)
     );
     assert.deepEqual(
       Array.from(native, (item) => item.name),
@@ -264,7 +301,7 @@ test('Peer Session Reference: Harness declares roster items, archived roster ids
   // 名册外会话照旧留在 byId，但不在任何名册项里
   const sessionsById = Object.assign({}, scenarios.sessions, {
     'session-unrostered': { id: 'session-unrostered', title: '名册外会话', status: 'idle', updatedAt: 5000 },
-    // 名册 id 声明归档，快照里没有任何归档标记
+    // 名册 id 声明归档，快照里没有任何归档标记：只有名单能判它归档
     'session-roster-archived': { id: 'session-roster-archived', title: '名册归档会话', cwd: scenarios.currentWs, status: 'idle', updatedAt: 3000 }
   });
 
@@ -305,8 +342,12 @@ test('Peer Session Reference: Harness declares roster items, archived roster ids
   const currentLabels = Array.from(current, (item) => item.label);
   assert.deepEqual(
     currentLabels,
-    ['空白会话', '可见成员'],
-    'Roster archived ids must reach Level 2 filtering for every declared member of the drilled workspace'
+    ['可见成员'],
+    'Sidebar visibility must drop rostered-but-archived, blank and snapshot-archived members alike'
+  );
+  assert.ok(
+    !currentLabels.includes('当前会话标题'),
+    'The current session must never list itself under its own workspace'
   );
 
   // sessions.ids 声明了 byId 里没有的会话，读取不得因此抛错或补齐成行
@@ -575,7 +616,18 @@ test('Peer Session Reference: Tab drill-down and Level 2 flat session expansion 
     'session-remote-1': { id: 'session-remote-1', title: '远端节点巡检', cwd: CLUSTER_WS, status: 'idle', updatedAt: 6000 }
   };
 
-  const { getRegisteredSource } = setupMockContext(plugin, { sessionsById });
+  // 名册即成员来源：本地工作区声明本机会话，远端工作区声明远端会话
+  const { getRegisteredSource } = setupMockContext(plugin, {
+    sessionsById,
+    workspacesItems: [
+      workspaceItem({
+        workspaceId: 'ws-current',
+        path: CURRENT_WS,
+        sessionIds: ['session-local-1', 'session-local-2', 'session-local-3', 'session-child-1', 'session-archived-1']
+      }),
+      workspaceItem({ workspaceId: 'ws-remote', path: CLUSTER_WS, sessionIds: ['session-remote-1'] })
+    ]
+  });
   const src = getRegisteredSource();
 
   // 下钻当前工作区
@@ -640,8 +692,9 @@ test('Peer Session Reference: Sorting strictly by native latest update time desc
     'session-t6': { id: 'session-t6', title: '任务六', cwd: CURRENT_WS, status: 'idle' } // 无时间戳，为 0
   };
 
-  const { getRegisteredSource } = setupMockContext(plugin, { sessionsById });
-  const src = getRegisteredSource();
+  const src = currentWorkspaceContext(plugin, sessionsById, {
+    workspaceSessions: ['session-t1', 'session-t2', 'session-t3', 'session-t4', 'session-t5', 'session-t6']
+  });
 
   const list = await src.candidates(
     { sessionId: 'session-curr' },
@@ -667,18 +720,9 @@ test('Peer Session Reference: Level 2 order follows the sidebar with no collabor
     'session-registered-newer': { id: 'session-registered-newer', title: '已协作新任务', cwd: CURRENT_WS, status: 'idle', updatedAt: 4000 }
   };
 
-  // 注入已参与 call-session 调用的连线快照
-  const mockCalls = [
-    { callerSessionId: 'session-curr', targetSessionId: 'session-registered-older' },
-    { callerSessionId: 'session-registered-newer', targetSessionId: 'session-curr' }
-  ];
-
-  const { getRegisteredSource } = setupMockContext(plugin, {
-    sessionsById,
-    initialActiveCalls: 1,
-    recordedCalls: mockCalls
+  const src = currentWorkspaceContext(plugin, sessionsById, {
+    workspaceSessions: ['session-unregistered-recent', 'session-registered-older', 'session-registered-newer']
   });
-  const src = getRegisteredSource();
 
   const list = await src.candidates(
     { sessionId: 'session-curr' },
@@ -703,8 +747,9 @@ test('Peer Session Reference: Canonical 8-character short ID badge and title dis
     'session-offline': { id: 'session-offline-ddeeff00', title: '已断开任务', cwd: CURRENT_WS, status: 'offline', updatedAt: 500 }
   };
 
-  const { getRegisteredSource } = setupMockContext(plugin, { sessionsById });
-  const src = getRegisteredSource();
+  const src = currentWorkspaceContext(plugin, sessionsById, {
+    workspaceSessions: ['session-dup-a', 'session-dup-b', 'session-notitle', 'session-offline']
+  });
 
   const list = await src.candidates(
     { sessionId: 'session-curr' },
@@ -790,8 +835,9 @@ test('Peer Session Reference: Session selection, pure slice reference URI, and c
     'session-target': { id: 'session-target', title: '核心协调器', cwd: CURRENT_WS, status: 'idle', updatedAt: 2000 }
   };
 
-  const { getRegisteredSource } = setupMockContext(plugin, { sessionsById });
-  const src = getRegisteredSource();
+  const src = currentWorkspaceContext(plugin, sessionsById, {
+    workspaceSessions: ['session-target']
+  });
 
   const candidates = await src.candidates(
     { sessionId: 'session-curr' },
@@ -945,16 +991,27 @@ test('Peer Session Reference: Node VM sandbox resilience and boundary condition 
 
   const { getRegisteredSource: getMalformedSource } = setupMockContext(plugin, {
     sessionsById: malformedSessions,
-    workspacesItems: [workspaceItem({ workspaceId: 'ws-win', path: windowsPath, sessionIds: ['win-path'] })]
+    workspacesItems: [
+      workspaceItem({ workspaceId: 'ws-win', path: windowsPath, sessionIds: ['win-path'] }),
+      workspaceItem({ workspaceId: 'ws-current', path: CURRENT_WS, sessionIds: ['negative-time', 'missing-fields'] })
+    ]
   });
   const srcMalformed = getMalformedSource();
 
   const l1Malformed = await srcMalformed.candidates({ sessionId: 'valid-curr' }, { drilled: false });
-  assert.equal(l1Malformed.length, 1, 'A malformed session snapshot must not disturb the roster-derived Level 1');
-  assert.equal(l1Malformed[0].name, 'workspace', 'Windows backslash path must extract the workspace name');
+  assert.equal(l1Malformed.length, 2, 'A malformed session snapshot must not disturb the roster-derived Level 1');
+  const windowsEntry = l1Malformed.find((item) => JSON.parse(item.value).path === windowsPath);
+  assert.ok(windowsEntry, 'Windows backslash path must survive roster normalization');
+  assert.equal(windowsEntry.name, 'workspace', 'Windows backslash path must extract the workspace name');
 
   const l2Malformed = await srcMalformed.candidates({ sessionId: 'valid-curr' }, { query: CURRENT_WS, drilled: true });
-  assert.ok(l2Malformed.length >= 1);
+  const l2Labels = Array.from(l2Malformed, (item) => item.label);
+  assert.deepEqual(
+    l2Labels,
+    ['Agent ' + l2Malformed[0].name, '异常时间'],
+    'Level 2 must resolve each declared id and tolerate sessions without a usable title'
+  );
+  assert.equal(l2Labels[1], '异常时间', 'A negative timestamp sorts below a session with no timestamp');
 });
 
 test('Peer Session Reference: Level 2 keeps origin-only siblings and hides every subagent session', async () => {
@@ -976,17 +1033,9 @@ test('Peer Session Reference: Level 2 keeps origin-only siblings and hides every
     'peer-normal-1': { id: 'peer-normal-1', title: 'task_report回传提醒机制', cwd: CURRENT_WS, status: 'idle', updatedAt: 20000 }
   };
 
-  const mockCalls = [
-    { callerSessionId: 'session-curr', targetSessionId: 'peer-active-1' },
-    { callerSessionId: 'peer-active-2', targetSessionId: 'session-curr' }
-  ];
-
-  const { getRegisteredSource } = setupMockContext(plugin, {
-    sessionsById,
-    initialActiveCalls: 1,
-    recordedCalls: mockCalls
+  const src = currentWorkspaceContext(plugin, sessionsById, {
+    workspaceSessions: ['sub-1', 'sub-2', 'sub-3', 'sub-4', 'parented-root', 'peer-active-1', 'peer-active-2', 'peer-normal-1']
   });
-  const src = getRegisteredSource();
 
   const list = await src.candidates(
     { sessionId: 'session-curr' },
@@ -1056,12 +1105,12 @@ test('Peer Session Reference: archived roster read degrades to snapshot-field fi
   const { getRegisteredSource } = setupMockContext(plugin, { sessionsById });
   const src = getRegisteredSource();
 
+  // 服务缺失即空名册：没有成员来源，二级只能是空列表，快照字段判定无从生效
   const level2 = await src.candidates(
     { sessionId: 'session-curr' },
     { query: CURRENT_WS, drilled: true }
   );
-  assert.equal(level2.length, 1, 'Missing workspaces service must not block Level 2 candidates');
-  assert.equal(level2[0].label, '存活任务', 'Snapshot-field archived exclusion must keep working without the service');
+  assert.deepEqual(Array.from(level2), [], 'A missing workspaces service must degrade Level 2 to an empty list');
 
   // 名册缺失退化为空名册：一级为空数组且不抛错，不再回落到 cwd 汇聚
   const level1 = await src.candidates(
@@ -1091,8 +1140,7 @@ test('Peer Session Reference: archived roster read failure keeps candidates flow
     { sessionId: 'session-curr' },
     { query: CURRENT_WS, drilled: true }
   );
-  assert.equal(level2.length, 1, 'Throwing workspaces list snapshot must not block Level 2 candidates');
-  assert.equal(level2[0].label, '存活任务', 'Read failure must degrade to snapshot-field filtering');
+  assert.deepEqual(Array.from(level2), [], 'A throwing workspaces snapshot must degrade Level 2 to an empty list');
 
   const level1 = await src.candidates(
     { sessionId: 'session-curr' },
@@ -1110,8 +1158,16 @@ test('Peer Session Reference: snapshot without archivedSessionIds degrades to ba
     'session-flagged': { id: 'session-flagged', title: '标记归档任务', cwd: CURRENT_WS, archived: true, status: 'archived', updatedAt: 6000 }
   };
 
-  // 基线：无 workspaces 服务
-  const baseline = setupMockContext(plugin, { sessionsById });
+  const rosterItems = [
+    workspaceItem({ workspaceId: 'ws-current', path: CURRENT_WS, sessionIds: ['session-live', 'session-flagged'] })
+  ];
+
+  // 基线：名册在场且名单字段在场
+  const baseline = setupMockContext(plugin, {
+    sessionsById,
+    workspacesItems: rosterItems,
+    archivedSessionIds: []
+  });
   const baselineSrc = baseline.getRegisteredSource();
   const baselineLevel2 = await baselineSrc.candidates(
     { sessionId: 'session-curr' },
@@ -1126,7 +1182,7 @@ test('Peer Session Reference: snapshot without archivedSessionIds degrades to ba
   const degraded = setupMockContext(plugin, {
     sessionsById,
     hasWorkspacesService: true,
-    workspacesList: {}
+    workspacesList: { items: rosterItems }
   });
   const degradedSrc = degraded.getRegisteredSource();
   const degradedLevel2 = await degradedSrc.candidates(
@@ -1145,13 +1201,22 @@ test('Peer Session Reference: snapshot without archivedSessionIds degrades to ba
   );
   assert.equal(degradedLevel2.length, 1, 'Field-flagged archived exclusion must keep working without the roster field');
   assert.equal(degradedLevel2[0].label, '存活任务');
+  assert.deepEqual(
+    Array.from(baselineLevel2, (item) => item.label),
+    ['存活任务'],
+    'Level 2 must exclude the snapshot-flagged archived member'
+  );
 
   assert.deepEqual(
     degradedLevel1.map((item) => [item.label, item.name]),
     baselineLevel1.map((item) => [item.label, item.name]),
     'Snapshot without the roster field must produce Level 1 candidates identical to the missing-service baseline'
   );
-  assert.deepEqual(Array.from(degradedLevel1), [], 'A snapshot without the roster field must degrade Level 1 to an empty list');
+  assert.deepEqual(
+    Array.from(degradedLevel1, (item) => JSON.parse(item.value).path),
+    [CURRENT_WS],
+    'Level 1 must list the workspace declared by the roster items'
+  );
 });
 
 test('Peer Session Reference: level 2 excludes rostered sessions even without snapshot archived markers (ADR-0034 archived exclusion)', async () => {
@@ -1207,7 +1272,17 @@ test('Peer Session Reference: level 2 excludes both rostered and snapshot-flagge
   const { getRegisteredSource } = setupMockContext(plugin, {
     sessionsById,
     hasWorkspacesService: true,
-    workspacesList: { items: [], pinnedSessionIds: [], archivedSessionIds: ['session-rostered'] }
+    workspacesList: {
+      items: [
+        workspaceItem({
+          workspaceId: 'ws-current',
+          path: CURRENT_WS,
+          sessionIds: ['session-live', 'session-flagged', 'session-rostered']
+        })
+      ],
+      pinnedSessionIds: [],
+      archivedSessionIds: ['session-rostered']
+    }
   });
   const src = getRegisteredSource();
 
@@ -1219,7 +1294,7 @@ test('Peer Session Reference: level 2 excludes both rostered and snapshot-flagge
   assert.equal(level2[0].label, '存活任务');
 });
 
-test('Peer Session Reference: level 2 without workspaces service keeps rostered sessions visible as current behavior (ADR-0034 archived exclusion)', async () => {
+test('Peer Session Reference: level 2 without workspaces service degrades to an empty member list (ADR-0034 archived exclusion)', async () => {
   const { plugin } = loadClientInSandbox();
 
   const sessionsById = {
@@ -1228,7 +1303,7 @@ test('Peer Session Reference: level 2 without workspaces service keeps rostered 
     'session-rostered': { id: 'session-rostered', title: '名单归档任务', cwd: CURRENT_WS, status: 'idle', updatedAt: 6000 }
   };
 
-  // 服务缺失：名单为空，归档判定退化为现状字段，候选与既有行为一致
+  // 服务缺失：名册为空，二级没有成员来源，cwd 归属不得顶替
   const { getRegisteredSource } = setupMockContext(plugin, { sessionsById });
   const src = getRegisteredSource();
 
@@ -1236,9 +1311,7 @@ test('Peer Session Reference: level 2 without workspaces service keeps rostered 
     { sessionId: 'session-curr' },
     { query: CURRENT_WS, drilled: true }
   );
-  assert.equal(level2.length, 2, 'Degraded level 2 keeps the rostered session visible exactly like the pre-roster behavior');
-  assert.ok(level2.some(item => item.label === '名单归档任务'));
-  assert.ok(level2.some(item => item.label === '存活任务'));
+  assert.deepEqual(Array.from(level2), [], 'A missing workspaces service must not fall back to cwd membership');
 });
 
 test('Peer Session Reference: level 1 lists every roster entry including workspaces with no visible session (ADR-0034 workspace convergence)', async () => {
@@ -1282,6 +1355,36 @@ test('Peer Session Reference: level 1 lists every roster entry including workspa
     { query: DEAD_WS, drilled: true }
   );
   assert.equal(deadLevel2.length, 0, 'Drilling a dead workspace must yield zero rostered candidates');
+});
+
+test('Peer Session Reference: the current cwd is the drill target only when the query names no workspace', async () => {
+  const { plugin } = loadClientInSandbox();
+
+  const sessionsById = {
+    'session-curr': { id: 'session-curr', title: '当前会话', cwd: CURRENT_WS, status: 'running', updatedAt: 9000 },
+    'session-live': { id: 'session-live', title: '存活任务', cwd: CURRENT_WS, status: 'idle', updatedAt: 5000 }
+  };
+
+  const { getRegisteredSource } = setupMockContext(plugin, {
+    sessionsById,
+    workspacesItems: [
+      workspaceItem({ workspaceId: 'ws-current', path: CURRENT_WS, sessionIds: ['session-curr', 'session-live'] }),
+      workspaceItem({ workspaceId: 'ws-cluster', path: CLUSTER_WS, sessionIds: [] })
+    ]
+  });
+  const src = getRegisteredSource();
+
+  // 查询串没点名工作区：下钻落到当前会话的 cwd
+  const bare = await src.candidates({ sessionId: 'session-curr' }, { query: '', drilled: true });
+  assert.deepEqual(
+    Array.from(bare, (item) => JSON.parse(item.value).sessionId),
+    ['session-live'],
+    'An empty query must drill the current cwd'
+  );
+
+  // 查询串点名了名册工作区：即便它不在 byId 的任何 cwd 里，目标仍是它
+  const named = await src.candidates({ sessionId: 'session-curr' }, { query: CLUSTER_WS, drilled: true });
+  assert.deepEqual(Array.from(named), [], 'A named roster workspace with no reachable member must drill to an empty list');
 });
 
 test('Peer Session Reference: level 1 keeps workspaces with live sessions and preserves pinning and ordering (ADR-0034 workspace convergence)', async () => {
@@ -1456,4 +1559,100 @@ test('Peer Session Reference: Native @ candidates drop every subagent and follow
   assert.ok(typeof disposePlugin === 'function', 'Activation must return a disposer');
   disposePlugin();
   assert.equal(nativeSource.candidates, originalCandidates, 'Disposing the plugin must hand the host implementation back');
+});
+
+test('Peer Session Reference: Level 2 membership follows the drilled workspace sessionIds, not cwd', async () => {
+  const { plugin } = loadClientInSandbox();
+  const scenarios = rosterScenarios();
+
+  const { getRegisteredSource } = setupMockContext(plugin, {
+    sessionsById: scenarios.sessions,
+    workspacesItems: scenarios.items,
+    archivedSessionIds: scenarios.archivedSessionIds
+  });
+  const src = getRegisteredSource();
+
+  const level2Of = (wsPath) => src.candidates({ sessionId: 'session-curr' }, { query: wsPath, drilled: true });
+  const idsOf = (rows) => Array.from(rows, (item) => JSON.parse(item.value).sessionId);
+
+  // #36 报告点名的漏出：ws-unreachable 的 sessionIds 全不可解析，归属别处的会话
+  // （cwd 指向它的 session-cross-cwd）不得替名册项撑起二级列表
+  assert.deepEqual(
+    Array.from(await level2Of(scenarios.unreachableWs)),
+    [],
+    'A drilled workspace whose sessionIds are all unresolvable must yield an empty Level 2'
+  );
+
+  // cwd 指向 reachablePath 的成员归属 crossCwdPath，只能出现在它被名册归入的工作区下
+  assert.deepEqual(idsOf(await level2Of(scenarios.crossCwdWs)), ['session-cross-cwd']);
+
+  // 名册成员快照缺 cwd 时仍然归属它的工作区
+  assert.deepEqual(idsOf(await level2Of(scenarios.spacedWs)), ['session-no-cwd']);
+});
+
+test('Peer Session Reference: Level 2 applies the sidebar visibility rule to rostered members', async () => {
+  const { plugin } = loadClientInSandbox();
+
+  const sessionsById = {
+    'session-curr': { id: 'session-curr', title: '当前会话', cwd: CURRENT_WS, status: 'running', updatedAt: 9000 },
+    'session-live': { id: 'session-live', title: '可见成员', cwd: CURRENT_WS, status: 'idle', updatedAt: 8000 },
+    // 快照 summary 明确声明子代理来源
+    'session-subagent': { id: 'session-subagent', title: '子代理成员', cwd: CURRENT_WS, origin: 'subagent', updatedAt: 7000 },
+    // 快照 summary 没有 origin，只有 header 声明子代理来源
+    'session-subagent-header': {
+      id: 'session-subagent-header',
+      title: '头部子代理成员',
+      cwd: CURRENT_WS,
+      header: { origin: 'subagent' },
+      updatedAt: 6500
+    },
+    // 空白会话：左侧列表不显示，二级同样丢弃
+    'session-blank': { id: 'session-blank', title: '空白成员', cwd: CURRENT_WS, blank: true, updatedAt: 6000 }
+  };
+
+  const { getRegisteredSource } = setupMockContext(plugin, {
+    sessionsById,
+    workspacesItems: [
+      workspaceItem({
+        workspaceId: 'ws-current',
+        path: CURRENT_WS,
+        sessionIds: [
+          'session-curr',
+          'session-live',
+          'session-subagent',
+          'session-subagent-header',
+          'session-blank'
+        ]
+      })
+    ],
+    archivedSessionIds: ['session-rostered-archived']
+  });
+  const src = getRegisteredSource();
+
+  const level2 = await src.candidates({ sessionId: 'session-curr' }, { query: CURRENT_WS, drilled: true });
+
+  // 当前会话不出现在自己的二级列表；子代理两种来源声明都被丢弃；空白会话丢弃
+  assert.deepEqual(
+    Array.from(level2, (item) => JSON.parse(item.value).sessionId),
+    ['session-live'],
+    'Level 2 must keep only members the sidebar shows: no self, no subagent (summary or header origin), no blank'
+  );
+
+  // 归档名单与快照字段两条归档判据都必须生效
+  const archivedSessions = {
+    'session-curr': sessionsById['session-curr'],
+    'session-live': sessionsById['session-live'],
+    'session-rostered-archived': { id: 'session-rostered-archived', title: '名单归档成员', cwd: CURRENT_WS, updatedAt: 4000 },
+    'session-flagged-archived': { id: 'session-flagged-archived', title: '字段归档成员', cwd: CURRENT_WS, archived: true, updatedAt: 3000 }
+  };
+  const archivedSource = currentWorkspaceContext(plugin, archivedSessions, {
+    workspaceSessions: ['session-live', 'session-rostered-archived', 'session-flagged-archived'],
+    archivedSessionIds: ['session-rostered-archived']
+  });
+  const visibleOnly = await archivedSource.candidates({ sessionId: 'session-curr' }, { query: CURRENT_WS, drilled: true });
+  assert.deepEqual(
+    Array.from(visibleOnly, (item) => JSON.parse(item.value).sessionId),
+    ['session-live'],
+    'Level 2 must drop both roster-archived and snapshot-flagged archived members'
+  );
 });
