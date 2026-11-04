@@ -1656,3 +1656,168 @@ test('Peer Session Reference: Level 2 applies the sidebar visibility rule to ros
     'Level 2 must drop both roster-archived and snapshot-flagged archived members'
   );
 });
+
+test('Peer Session Reference: a drilled request resolves the native reference source to an empty array without asking the host', async () => {
+  const { plugin } = loadClientInSandbox();
+
+  const sessionsById = {
+    'session-curr': { id: 'session-curr', title: '当前会话', cwd: CURRENT_WS, status: 'running', updatedAt: 9000 },
+    'session-subagent': { id: 'session-subagent', title: 'peer session', cwd: CURRENT_WS, origin: 'subagent', updatedAt: 8000 }
+  };
+  const nativeRows = [
+    { name: '进入目录', section: 'files', value: JSON.stringify({ kind: 'dir', path: CURRENT_WS + '/lib' }) },
+    {
+      name: 'peer session',
+      section: '对话',
+      value: JSON.stringify({
+        kind: 'session',
+        label: 'peer session',
+        mention: '@[peer session](dsh-session:' + Buffer.from(JSON.stringify('session-subagent'), 'utf8').toString('base64url') + ')'
+      })
+    }
+  ];
+
+  let hostCalls = 0;
+  const nativeSource = {
+    trigger: '@',
+    name: 'reference',
+    showGroupTitle: false,
+    candidates: async () => {
+      hostCalls += 1;
+      return nativeRows.map((row) => ({ ...row }));
+    }
+  };
+  const live = { sources: [nativeSource] };
+  let registeredSource = null;
+
+  plugin.apply({
+    effect: (fn) => fn(),
+    locale: { register: () => {}, bind: () => (key) => plugin.zh[key] || key },
+    slots: { inject: () => {}, register: () => {} },
+    get: (serviceName) => {
+      if (serviceName === 'inputTriggers') {
+        return {
+          live,
+          registerSource: (src) => {
+            registeredSource = src;
+            live.sources.push(src);
+            return () => {};
+          }
+        };
+      }
+      if (serviceName === 'sessions') return { list: { getSnapshot: () => sessionsSnapshot(sessionsById) } };
+      if (serviceName === 'workspaces') {
+        return {
+          list: {
+            getSnapshot: () => workspacesSnapshot({
+              items: [workspaceItem({ workspaceId: 'ws-current', path: CURRENT_WS, sessionIds: ['session-curr'] })],
+              archivedSessionIds: []
+            })
+          }
+        };
+      }
+      return null;
+    }
+  });
+
+  // 下钻：宿主既不产出“对话”会话行，也不产出“工作区”下钻标题与“进入目录”目录行
+  const drilled = await nativeSource.candidates({ sessionId: 'session-curr' }, { query: CURRENT_WS, drilled: true });
+  assert.deepEqual(Array.from(drilled), [], 'A drilled request must carry no native reference candidates');
+  assert.equal(hostCalls, 0, 'A drilled request must not invoke the host candidate generator at all');
+
+  // 插件自己的二级列表照旧产出该工作区的成员
+  const level2 = await registeredSource.candidates({ sessionId: 'session-curr' }, { query: CURRENT_WS, drilled: true });
+  assert.deepEqual(Array.from(level2, (item) => item.label), [], 'The current session stays out of its own Level 2');
+
+  // 未下钻：宿主原实现的文件与会话候选原样流出，包装层的筛子照常工作
+  const undrilled = await nativeSource.candidates({ sessionId: 'session-curr' }, { query: '', drilled: false });
+  assert.deepEqual(
+    Array.from(undrilled, (item) => item.name),
+    ['进入目录'],
+    'An undrilled request must still deliver the host rows, with only the excluded session dropped'
+  );
+  assert.equal(hostCalls, 1, 'An undrilled request must invoke the host candidate generator once');
+});
+
+test('Peer Session Reference: one level predicate decides both the plugin menu and the native wrapper', async () => {
+  const { plugin } = loadClientInSandbox();
+
+  const sessionsById = {
+    'session-curr': { id: 'session-curr', title: '当前会话', cwd: CURRENT_WS, status: 'running', updatedAt: 9000 },
+    'session-live': { id: 'session-live', title: '存活任务', cwd: CURRENT_WS, status: 'idle', updatedAt: 5000 }
+  };
+
+  const nativeRows = [
+    { name: '进入目录', section: 'files', value: JSON.stringify({ kind: 'dir', path: CURRENT_WS + '/lib' }) }
+  ];
+  const nativeSource = {
+    trigger: '@',
+    name: 'reference',
+    showGroupTitle: false,
+    candidates: async () => nativeRows.map((row) => ({ ...row }))
+  };
+  const live = { sources: [nativeSource] };
+  let registeredSource = null;
+
+  plugin.apply({
+    effect: (fn) => fn(),
+    locale: { register: () => {}, bind: () => (key) => plugin.zh[key] || key },
+    slots: { inject: () => {}, register: () => {} },
+    get: (serviceName) => {
+      if (serviceName === 'inputTriggers') {
+        return {
+          live,
+          registerSource: (src) => {
+            registeredSource = src;
+            live.sources.push(src);
+            return () => {};
+          }
+        };
+      }
+      if (serviceName === 'sessions') return { list: { getSnapshot: () => sessionsSnapshot(sessionsById) } };
+      if (serviceName === 'workspaces') {
+        return {
+          list: {
+            getSnapshot: () => workspacesSnapshot({
+              items: [
+                workspaceItem({ workspaceId: 'ws-current', path: CURRENT_WS, sessionIds: ['session-curr', 'session-live'] }),
+                workspaceItem({ workspaceId: 'ws-cluster', path: CLUSTER_WS, sessionIds: [] })
+              ],
+              archivedSessionIds: []
+            })
+          }
+        };
+      }
+      return null;
+    }
+  });
+
+  // 手敲路径：宿主的 drilled 标志为 false，查询串却点名了名册工作区，仍必须按二级处理
+  const typedRequest = { query: CLUSTER_WS, drilled: false };
+  const typedLevel2 = await registeredSource.candidates({ sessionId: 'session-curr' }, typedRequest);
+  assert.deepEqual(Array.from(typedLevel2), [], 'A hand-typed workspace path must expand Level 2, not fall back to the workspace list');
+  assert.equal(
+    registeredSource.header({ sessionId: 'session-curr' }, typedRequest),
+    undefined,
+    'A hand-typed workspace path leaves the plugin header untouched when the host flag is false'
+  );
+  assert.deepEqual(
+    Array.from(await nativeSource.candidates({ sessionId: 'session-curr' }, typedRequest)),
+    [],
+    'A hand-typed workspace path must suppress the native directory rows and drill header just like a real drill'
+  );
+
+  // 未点名任何名册工作区的普通查询：仍是二级之外的普通引用，宿主文件候选照常流出
+  const filterRequest = { query: 'ses', drilled: false };
+  const filterLevel1 = await registeredSource.candidates({ sessionId: 'session-curr' }, filterRequest);
+  assert.deepEqual(
+    Array.from(filterLevel1, (item) => item.label),
+    ['dsh-call-session'],
+    'A plain query that names no workspace keeps the workspace list'
+  );
+  assert.deepEqual(
+    Array.from(await nativeSource.candidates({ sessionId: 'session-curr' }, filterRequest), (item) => item.name),
+    ['进入目录'],
+    'A plain query that names no workspace keeps the host file candidates'
+  );
+});
