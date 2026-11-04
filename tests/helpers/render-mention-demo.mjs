@@ -5,8 +5,15 @@
  * - assets/mention-demo.png (English)
  * - assets/mention-demo-zh.png (Chinese)
  *
- * The figure walks one gesture end to end: pick a workspace, pick a session,
- * and watch the title appear inside the composer as a reference chip.
+ * The figure walks one gesture end to end: pick a workspace at Level 1, pick a
+ * session at Level 2, and watch the title appear inside the composer as a
+ * reference chip.
+ *
+ * Both menus draw what the picker actually renders (ADR-0034): Level 1 is a
+ * 工作区 section of workspace rows only, Level 2 is a 对话 section of session
+ * rows only. Level 2 carries no drill header, no 进入目录 affordance and no
+ * directory rows, because the drilled state hands the host reference source an
+ * empty array.
  *
  * Layout is authored at a 960-wide base and scaled by ZOOM, so the text stays
  * legible when a README renders the figure at roughly 800px.
@@ -24,9 +31,12 @@ const rootDir = path.resolve(__dirname, '..', '..');
 // README renders the figure at roughly 800px.
 export const VIEWPORT = { ...FIGURE_SIZE, zoom: 1.5 };
 
+// Level 1 rows come from the workspace roster: the current workspace pinned
+// first, the rest in roster order (ADR-0034 §4.1).
 const WORKSPACES = [
   { name: 'dsh-call-session', current: true },
-  { name: 'dsh-agent-cluster', current: false }
+  { name: 'dsh-agent-cluster', current: false },
+  { name: 'dsh-registry', current: false }
 ];
 
 // The picked candidate is the first row. Its title is the single source for the
@@ -39,33 +49,35 @@ const STATUS_LABELS = {
 };
 
 // Identity and state are locale-independent; only the titles differ, so the two
-// locales cannot drift on short id or tone.
+// locales cannot drift on short id or tone. Level 2 membership is the drilled
+// workspace's sessionIds intersected with the sidebar's visibility rule: no
+// subagent rows, no blank rows, no archived rows.
 const CANDIDATES = [
-  { shortId: '#a3f9c2e1', tone: 'running', zh: '架构评审智能体', en: 'Architecture Review Agent' },
-  { shortId: '#7b21d0f4', tone: 'idle', zh: '契约校验智能体', en: 'Contract Checking Agent' },
-  { shortId: '#c48e15ba', tone: 'idle', zh: '发布核对智能体', en: 'Release Audit Agent' },
-  { shortId: '#2d70aa93', tone: 'error', zh: '依赖整理智能体', en: 'Dependency Agent' },
-  { shortId: '#58b6ee07', tone: 'idle', zh: '回归巡查智能体', en: 'Regression Patrol Agent' }
+  { shortId: '#a3f9c2e1', tone: 'running', zh: '契约改写与回归核验', en: 'Contract Rewrite and Regression Check' },
+  { shortId: '#7b21d0f4', tone: 'idle', zh: '两处待办梳理', en: 'Open Items Sweep' },
+  { shortId: '#c48e15ba', tone: 'idle', zh: '发布清单核对', en: 'Release Checklist Audit' },
+  { shortId: '#2d70aa93', tone: 'error', zh: '依赖图重建失败排查', en: 'Dependency Graph Rebuild Failure' },
+  { shortId: '#58b6ee07', tone: 'idle', zh: '文档与规格对齐', en: 'Docs and Spec Alignment' }
 ];
 
-// The plugin-owned level-1 section word (ADR-0034): copy shared by every
-// figure so the rendered menus cannot drift from the shipped dictionary.
+// Section words owned by the shipped picker: 工作区 is the plugin's Level 1
+// section (ADR-0034) and 对话 is the host reference source's session section.
+// Both figures share this copy, so neither can drift from the dictionaries.
 const SECTION_WORKSPACES = { zh: '工作区', en: 'Workspaces' };
+const SECTION_SESSIONS = { zh: '对话', en: 'Sessions' };
 
 const COPY = {
   zh: {
     sectionWorkspaces: SECTION_WORKSPACES.zh,
+    sectionSessions: SECTION_SESSIONS.zh,
     current: '当前',
-    pathRoot: '工作区根目录',
-    workspaceLabel: 'dsh-call-session',
     composerLead: '把改后的契约交给',
     composerTail: '再核一遍。'
   },
   en: {
     sectionWorkspaces: SECTION_WORKSPACES.en,
+    sectionSessions: SECTION_SESSIONS.en,
     current: 'Current',
-    pathRoot: 'Workspace Root',
-    workspaceLabel: 'dsh-call-session',
     composerLead: 'Hand the revised contract to',
     composerTail: 'for another pass.'
   }
@@ -75,6 +87,9 @@ const FOLDER_ACTIVE = '<svg viewBox="0 0 16 16" width="16" height="16" fill="non
 const FOLDER_MUTED = '<svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="#64748b" stroke-width="1.4"><path d="M1.5 4.2c0-.6.5-1.1 1.1-1.1h3l1.3 1.5h5.6c.6 0 1.1.5 1.1 1.1v6.1c0 .6-.5 1.1-1.1 1.1H2.6c-.6 0-1.1-.5-1.1-1.1z"/></svg>';
 const CHAT_ICON = '<svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="#475569" stroke-width="1.4"><path d="M2 4.3c0-.7.6-1.3 1.3-1.3h9.4c.7 0 1.3.6 1.3 1.3v5.4c0 .7-.6 1.3-1.3 1.3H6.6L3.5 13.2V11h-.2c-.7 0-1.3-.6-1.3-1.3z"/></svg>';
 const SEND_ICON = '<svg viewBox="0 0 16 16" width="18" height="18" fill="none" stroke="#ffffff" stroke-width="1.5"><path d="M2.4 8h11.2M9 3.4L13.6 8 9 12.6"/></svg>';
+// The drill chevron every Level 1 row carries; it is the row affordance the
+// host draws beside a foldable entry, and the figure draws no header trail.
+const DRILL_CHEVRON = '<svg class="drill-chevron" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="#94a3b8" stroke-width="1.6"><path d="M6 3.5L10.5 8 6 12.5"/></svg>';
 const ARROW = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#cbd5e1" stroke-width="1.6"><path d="M4 12h15M14 7l5 5-5 5"/></svg>';
 
 /**
@@ -95,7 +110,8 @@ function sessionRows(locale, candidates = CANDIDATES, pickedIndex = PICKED_INDEX
 /**
  * The figure as data. Tests read this instead of the markup, so a style change
  * does not look like a content regression and a content change cannot hide
- * behind a class name.
+ * behind a class name. `level` names each menu for what it is, so an assertion
+ * about the two-level structure reads the model rather than the pixels.
  */
 export function figureModel(locale) {
   const copy = COPY[locale];
@@ -103,10 +119,14 @@ export function figureModel(locale) {
   const picked = sessions.find((session) => session.picked);
 
   return {
+    level1: { section: copy.sectionWorkspaces, workspaces: WORKSPACES.map((ws) => ({ name: ws.name, current: ws.current })) },
+    level2: { section: copy.sectionSessions, sessions },
+    // Kept for the callers that only care about the rows at each level.
+    sectionWorkspaces: copy.sectionWorkspaces,
+    sectionSessions: copy.sectionSessions,
     workspaces: WORKSPACES.map((ws) => ({ name: ws.name, current: ws.current })),
     sessions,
     pickedTitle: picked.title,
-    pathRoot: copy.pathRoot,
     composerLead: copy.composerLead,
     composerTail: copy.composerTail
   };
@@ -120,22 +140,25 @@ function esc(value) {
     .replace(/"/g, '&quot;');
 }
 
+/** Level 1: a 工作区 section holding workspace rows only, the current one marked. */
 function workspaceColumn(copy, workspaces) {
   const rows = workspaces.map((ws) => {
     const sub = ws.current
       ? '<span class="row-sub">' + esc(copy.current) + '</span>'
       : '<span class="row-sub row-sub-empty">&nbsp;</span>';
-    return '<div class="menu-row">' +
+    return '<div class="menu-row workspace-row">' +
       '<span class="row-icon">' + (ws.current ? FOLDER_ACTIVE : FOLDER_MUTED) + '</span>' +
       '<span class="row-main"><span class="row-title">' + esc(ws.name) + '</span>' + sub + '</span>' +
+      '<span class="row-trail">' + DRILL_CHEVRON + '</span>' +
       '</div>';
   }).join('');
   return '<section class="panel panel-menu">' +
-    '<header class="panel-head">' + esc(copy.sectionWorkspaces) + '</header>' +
+    '<header class="panel-head level-head">' + esc(copy.sectionWorkspaces) + '</header>' +
     '<div class="menu-body">' + rows + '</div>' +
     '</section>';
 }
 
+/** Level 2: a 对话 section holding session rows only, with status and short ID. */
 function sessionColumn(copy, rows) {
   const cells = rows.map((session) => {
     const picked = session.picked ? ' is-picked' : '';
@@ -149,11 +172,7 @@ function sessionColumn(copy, rows) {
       '</div>';
   }).join('');
   return '<section class="panel panel-menu panel-menu-wide">' +
-    '<header class="panel-head path-header">' +
-      '<span class="path-root">' + esc(copy.pathRoot) + '</span>' +
-      '<span class="path-sep">/</span>' +
-      '<span class="path-current">' + esc(copy.workspaceLabel) + '</span>' +
-    '</header>' +
+    '<header class="panel-head level-head">' + esc(copy.sectionSessions) + '</header>' +
     '<div class="menu-body">' + cells + '</div>' +
     '</section>';
 }
@@ -192,11 +211,9 @@ function figureCss(config) {
 '.panel-composer { width: 356px; padding: 16px 16px 14px; }\n' +
 '.panel-head { height: 34px; display: flex; align-items: center; padding: 0 12px; border-bottom: 1px solid #eef2f7;' +
 ' font-size: 10px; font-weight: 500; letter-spacing: .05em; text-transform: uppercase; color: #526074; }\n' +
-'.path-header { text-transform: none; letter-spacing: 0; font-size: 10.5px; gap: 5px; }\n' +
-'.path-root { color: #526074; }\n.path-sep { color: #526074; }\n' +
-'.path-current { color: #334155; font-weight: 500; }\n' +
 '.menu-body { padding: 5px; }\n' +
 '.menu-row { display: flex; align-items: center; gap: 8px; padding: 8px 8px; border-radius: 7px; }\n' +
+'.workspace-row + .workspace-row { border-top: 1px solid #f1f5f9; border-radius: 0; }\n' +
 '.session-row + .session-row { border-top: 1px solid #f1f5f9; border-radius: 0; }\n' +
 '.session-row.is-picked { background: #eff6ff; box-shadow: inset 0 0 0 1px #bfdbfe; border-radius: 7px; border-top-color: transparent; }\n' +
 '.row-icon { display: flex; align-items: center; justify-content: center; width: 16px; flex: none; }\n' +
@@ -204,6 +221,7 @@ function figureCss(config) {
 '.row-title { font-size: 11.5px; color: #1e293b; line-height: 1.35; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }\n' +
 '.row-sub { display: flex; align-items: center; gap: 4px; font-size: 10px; color: #526074; line-height: 1.2; }\n' +
 '.row-sub-empty { visibility: hidden; }\n' +
+'.row-trail { display: flex; align-items: center; justify-content: center; flex: none; }\n' +
 '.dot { width: 5px; height: 5px; border-radius: 50%; flex: none; display: inline-block; }\n' +
 '.dot-running { background: #10b981; }\n.dot-idle { background: #64748b; }\n.dot-error { background: #ef4444; }\n' +
 '.row-badge { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 9.5px; color: #526074;' +
@@ -222,7 +240,7 @@ function figureCss(config) {
 '.composer-send { width: 26px; height: 26px; border-radius: 7px; background: #2563eb; display: flex; align-items: center;' +
 ' justify-content: center; }\n' +
 '.composer-send svg { width: 14px; height: 14px; }\n' +
-'.row-icon svg { width: 14px; height: 14px; }\n'
+'.row-icon svg { width: 14px; height: 14px; }\n';
 }
 
 export function buildHtml(locale, viewport) {
@@ -263,13 +281,13 @@ if (process.argv[1] && process.argv[1].endsWith('render-mention-demo.mjs')) {
 }
 
 /**
- * Archived-filter evidence figure backing the ADR-0034 contract. Same three-panel
+ * Archived-filter evidence figure backing the ADR-0034 contract. Same panel
  * cadence as the gesture demo, but the menu shows the post-013 state: the
- * section carries the plugin-owned plain word, rostered archived
- * sessions and the dead workspace appear in the model yet never in the
- * markup, so tests can assert the exclusion against the scenario data.
- * Copy and live rows derive from the shared gesture constants, so the two
- * figures cannot drift on locale strings or row identity.
+ * section carries the plugin-owned plain word, rostered archived sessions and
+ * the dead workspace appear in the model yet never in the markup, so tests can
+ * assert the exclusion against the scenario data. Copy and live rows derive
+ * from the shared gesture constants, so the two figures cannot drift on locale
+ * strings or row identity.
  */
 
 // Workspaces the menu keeps: the current one and one live peer. The dead
@@ -304,13 +322,13 @@ export function archivedFigureModel(locale) {
   }));
   return {
     sectionWorkspaces: copy.sectionWorkspaces,
+    sectionSessions: copy.sectionSessions,
     workspaces: ARCHIVED_WORKSPACES.map((ws) => ({ name: ws.name, current: ws.current })),
     deadWorkspaces: DEAD_WORKSPACES.map((ws) => ({ name: ws.name })),
     roster: ARCHIVED_ROSTER.slice(),
     sessions,
     archivedSessions: archived,
-    pickedTitle: sessions[0].title,
-    pathRoot: copy.pathRoot
+    pickedTitle: sessions[0].title
   };
 }
 
