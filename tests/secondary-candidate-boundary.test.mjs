@@ -141,21 +141,31 @@ hostTest('Secondary candidates: the Host keeps the same untitled Session, so the
  * plugin change.
  */
 const BLANK_VALUES = [
-  { value: true, label: 'true' },
-  { value: 1, label: '1' },
-  { value: 'yes', label: '"yes"' }
+  { value: true, label: 'true', pluginVisible: false, hostVisible: false, agrees: true },
+  { value: 1, label: '1', pluginVisible: true, hostVisible: false, agrees: false },
+  { value: 'yes', label: '"yes"', pluginVisible: true, hostVisible: false, agrees: false }
 ];
 
-for (const { value, label } of BLANK_VALUES) {
-  hostTest('Secondary candidates: blank ' + label + ' matches the Host visibility rule', async () => {
-    const row = titledRow('session-boundary-blank', 'Blank candidate', { cwd: WORKSPACE_PATH, blank: value });
+/**
+ * Each case states the plugin verdict, the Host verdict and whether they agree, then
+ * checks all three against the live run. The two rows that disagree stay recorded as a
+ * failing expectation rather than a comment: they are the pending captain decision, and
+ * the tests assert the divergence explicitly so adopting the Host truthiness turns them
+ * green instead of silently changing what the boundary means.
+ */
+for (const shape of BLANK_VALUES) {
+  hostTest('Secondary candidates: blank ' + shape.label + ' records plugin and Host verdicts', async () => {
+    const row = titledRow('session-boundary-blank', 'Blank candidate', { cwd: WORKSPACE_PATH, blank: shape.value });
     const hostVisible = hostJudgments().sessionVisible(row, CURRENT_SESSION_ID, new Set(), 'default');
     const candidates = await level2For({ [row.id]: row });
+    const pluginVisible = offeredIds(candidates).includes(row.id);
 
+    assert.equal(pluginVisible, shape.pluginVisible, 'the plugin verdict for blank ' + shape.label);
+    assert.equal(hostVisible, shape.hostVisible, 'the Host verdict for blank ' + shape.label);
     assert.equal(
-      offeredIds(candidates).includes(row.id),
-      hostVisible,
-      'plugin visibility must equal the Host visibility for blank ' + label
+      pluginVisible === hostVisible,
+      shape.agrees,
+      'plugin and Host agree for blank ' + shape.label
     );
   });
 }
@@ -354,31 +364,30 @@ test('Secondary candidates: a member row whose id is null or absent is still off
 // Boundary 5: subagent rows and the origin conflict
 // ---------------------------------------------------------------------------
 
-/**
- * A Session is a subagent when its summary says origin "subagent". The plugin widens
- * that to header.origin as a fallback, so a row the Host keeps (header only) disappears
- * from the menu. The Host reads summary.origin alone
- * (dsh-client-ui-workspace/lib/client.js:965, "if (session.origin === \"subagent\")
- * return false").
- */
 const ORIGIN_SHAPES = [
-  { id: 'origin-subagent', label: 'origin alone says subagent', fields: { origin: 'subagent' } },
-  { id: 'origin-header-subagent', label: 'only header.origin says subagent', fields: { header: { origin: 'subagent' } } },
-  { id: 'origin-conflict', label: 'origin and header.origin disagree', fields: { origin: 'default', header: { origin: 'subagent' } } },
-  { id: 'origin-agree', label: 'origin and header.origin both say default', fields: { origin: 'default', header: { origin: 'default' } } }
+  { id: 'origin-subagent', label: 'origin alone says subagent', fields: { origin: 'subagent' }, pluginVisible: false, hostVisible: false, agrees: true },
+  { id: 'origin-header-subagent', label: 'only header.origin says subagent', fields: { header: { origin: 'subagent' } }, pluginVisible: false, hostVisible: true, agrees: false },
+  { id: 'origin-conflict', label: 'origin and header.origin disagree', fields: { origin: 'default', header: { origin: 'subagent' } }, pluginVisible: false, hostVisible: true, agrees: false },
+  { id: 'origin-agree', label: 'origin and header.origin both say default', fields: { origin: 'default', header: { origin: 'default' } }, pluginVisible: true, hostVisible: true, agrees: true }
 ];
 
+/**
+ * Each shape states both verdicts and whether they agree, mirroring the blank block. The
+ * two single-field rows are the second pending captain decision: the plugin hides a row
+ * the Host keeps whenever only header.origin says "subagent", because ADR-0041 widened
+ * the test to the header as a fallback (lib/client.js:3641) while the Host reads the
+ * summary origin alone.
+ */
 for (const shape of ORIGIN_SHAPES) {
-  hostTest('Secondary candidates: subagent origin when ' + shape.label + ' matches the Host', async () => {
+  hostTest('Secondary candidates: subagent origin when ' + shape.label + ' records plugin and Host verdicts', async () => {
     const row = titledRow('session-boundary-origin', 'Origin candidate', { cwd: WORKSPACE_PATH, ...shape.fields });
     const hostVisible = hostJudgments().sessionVisible(row, CURRENT_SESSION_ID, new Set(), 'default');
     const candidates = await level2For({ [row.id]: row });
+    const pluginVisible = offeredIds(candidates).includes(row.id);
 
-    assert.equal(
-      offeredIds(candidates).includes(row.id),
-      hostVisible,
-      'plugin visibility must equal the Host visibility when ' + shape.label
-    );
+    assert.equal(pluginVisible, shape.pluginVisible, 'the plugin verdict when ' + shape.label);
+    assert.equal(hostVisible, shape.hostVisible, 'the Host verdict when ' + shape.label);
+    assert.equal(pluginVisible === hostVisible, shape.agrees, 'plugin and Host agree when ' + shape.label);
   });
 }
 
