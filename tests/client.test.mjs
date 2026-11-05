@@ -8,7 +8,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, '..');
 
 import { loadClientBundle, loadClientInSandbox, readClientSource, findVNodes, findNodeById, createCanvasRuntime, createStatelessMockReact, standardCanvasTelemetry, wideCanvasTelemetry } from './helpers/canvas-harness.mjs';
-import { CALL_TYPE_INTENTS } from '../lib/native-message-transport.mjs';
+import { CALL_TYPES } from '../lib/native-message-transport.mjs';
 import { CALL_TYPE_I18N_KEYS, CALL_TYPE_UNKNOWN_KEY } from '../lib/locales/table.mjs';
 
 test('Client Package Configuration: package.json exports and dsh.client specification', () => {
@@ -3674,7 +3674,7 @@ test('11. Canvas labels never leak a raw call type enum to the user', () => {
   const plugin = loadClientBundle();
   for (const locale of ['zh', 'en']) {
     const t = (key) => plugin[locale][key];
-    for (const type of Object.keys(CALL_TYPE_INTENTS)) {
+    for (const type of CALL_TYPES) {
       const label = plugin.callTypeLabel(type, t);
       assert.notEqual(label, type, `${locale}: ${type} must not render as its raw enum`);
     }
@@ -3755,7 +3755,7 @@ test('12. A mixed fixture keeps unsettled obligations flowing and decays settled
 
 test('13. Every backend call type has a localised label in both client dictionaries', () => {
   // 词条键有唯一来源：枚举新增一种类别时，只要它没进共享表，这条断言先红。
-  const backendTypes = Object.keys(CALL_TYPE_INTENTS);
+  const backendTypes = CALL_TYPES;
   assert.deepEqual(
     Object.keys(CALL_TYPE_I18N_KEYS).sort(),
     [...backendTypes].sort(),

@@ -2,8 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   executeSessionCall,
-  dispatchNativeMessage,
-  CALL_TYPE_INTENTS
+  dispatchNativeMessage
 } from '../lib/session-call.mjs';
 import {
   executeSessionQuery

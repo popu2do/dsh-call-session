@@ -10,7 +10,7 @@ The type on the wire does not match the type the caller passed, and the plugin s
 
 ## Required behaviour
 
-1. `CALL_TYPE_INTENTS` in `lib/native-message-transport.mjs` is the only enumeration: `notice | task_soft | task_hard | task_report`.
+1. `lib/native-message-transport.mjs` holds a single enumeration of `notice | task_soft | task_hard | task_report`. What leaves the module is the array `CALL_TYPES`; the intent-marker map that feeds the header stays private, so nothing outside can mistake it for an array.
 2. `buildTransportPayload` never substitutes a different type on the wire. An unknown `callType` throws `[InvalidParameter]` rather than degrading to `task_soft`; an omitted one falls back to `DEFAULT_CALL_TYPE` (`task_soft`), the single default that `session_call` and `session_create` share.
 3. The `session_create` bootstrap branch passes the caller's type through; it must not hard-code `task_soft`.
 4. The native message summary intent marker derives from the enumeration only; no `String(callType).toUpperCase()` fallback that can mint a literal like `TASK_DISPATCH`.

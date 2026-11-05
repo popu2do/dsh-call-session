@@ -12,8 +12,7 @@ export interface CallTypeIntents {
 
 export type CallTypeName = keyof CallTypeIntents;
 
-export declare const CALL_TYPE_INTENTS: Readonly<CallTypeIntents>;
-/** 现役呼叫类型清单，与 CALL_TYPE_INTENTS 同源 */
+/** 现役呼叫类型清单；报头意图标记映射是模块内部实现，不对外导出 */
 export declare const CALL_TYPES: readonly CallTypeName[];
 /** 缺省呼叫类型：所有入口（含 session_create）缺省时都用它 */
 export declare const DEFAULT_CALL_TYPE: CallTypeName;

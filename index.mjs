@@ -40,7 +40,6 @@ import {
 } from './lib/session-call.mjs';
 import {
   dispatchNativeMessage,
-  CALL_TYPE_INTENTS,
   CALL_TYPES,
   DEFAULT_CALL_TYPE,
   buildNativeUserMessage,
@@ -223,7 +222,7 @@ export {
   executeSessionQuery,
   executeSessionCall,
   dispatchNativeMessage,
-  CALL_TYPE_INTENTS,
+  CALL_TYPES,
   DEFAULT_CALL_TYPE,
   buildTransportPayload,
   PeerSessionFactory,
