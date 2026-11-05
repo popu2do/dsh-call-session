@@ -127,16 +127,11 @@ function mountHostWrapper(options = {}) {
 
   let mountedSync = true;
   let mountFailure = null;
-  let unmount = null;
   try {
     plugin.apply({
-      effect: (fn) => {
-        // Keep every disposer so a test can tear the plugin's @ source down the
-        // way the host does on unload; apply() is the only place they are handed out.
-        const dispose = fn();
-        if (typeof dispose === 'function') unmount = dispose;
-        return dispose;
-      },
+      // Run every effect and return its disposer unchanged: the tests fetch through
+      // the sources the host holds, they do not tear the plugin down mid-case.
+      effect: (fn) => fn(),
       locale: { register: () => {}, bind: () => (key) => plugin.zh[key] || key },
       slots: { inject: () => {}, register: () => {} },
       get: services
@@ -155,7 +150,6 @@ function mountHostWrapper(options = {}) {
     liveEntry: liveSources.includes(hostSource) ? hostSource : liveSources[liveSources.length - 1],
     // The plugin's own @ source, reachable through the host's live list.
     pluginSource: () => (inputTriggers.live && inputTriggers.live.sources || []).find((item) => item && item.name === 'peer-session') || null,
-    unmount,
     mountedSync: () => mountedSync,
     mountFailure: () => mountFailure,
     inputTriggers,
