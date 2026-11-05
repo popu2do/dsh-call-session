@@ -7,10 +7,10 @@
  * hold. Nothing here records an expectation: every case states its own Host verdict and
  * the tests compare the two sides.
  */
-import { CURRENT_SESSION_ID, REFERENCE_NOW, corpusPath, sessionRow } from './boundary-corpus.mjs';
+import { CORPUS, CURRENT_SESSION_ID, REFERENCE_NOW, buildCaseSnapshot, corpusPath, sessionRow } from './boundary-corpus.mjs';
 import { HostUnavailableError, loadHostJudgments, resolveHostClientPath } from './host-probe.mjs';
 
-export { CURRENT_SESSION_ID, REFERENCE_NOW, corpusPath, sessionRow, HostUnavailableError };
+export { CORPUS, CURRENT_SESSION_ID, REFERENCE_NOW, buildCaseSnapshot, corpusPath, sessionRow, HostUnavailableError };
 
 /** True when this process can reach a Host install; a pinned run fails instead of skipping. */
 export const HOST_AVAILABLE = resolveHostClientPath() !== null;

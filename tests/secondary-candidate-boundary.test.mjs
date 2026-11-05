@@ -20,7 +20,9 @@ import { loadClientInSandbox } from './helpers/canvas-harness.mjs';
 import { sessionsSnapshot, workspaceItem, workspacesSnapshot } from './helpers/mock-host.mjs';
 import {
   CURRENT_SESSION_ID,
+  CORPUS,
   REFERENCE_NOW,
+  buildCaseSnapshot,
   coldUntitledRow,
   corpusPath,
   hostJudgments,
@@ -675,7 +677,60 @@ test('Secondary candidates: an untitled blank Session without a blank flag carri
 });
 
 // ---------------------------------------------------------------------------
+// Corpus: the documented corpus categories, one row per case
+// ---------------------------------------------------------------------------
+
+/**
+ * The corpus in tests/helpers/boundary-corpus.mjs already enumerates the malformed shapes
+ * this ticket lists, so the menu is replayed over it case by case rather than only through
+ * the hand-written fixtures above. Each snapshot goes in whole — sessions, roster entry,
+ * archive list — and the case is resolved against the Host through the same messages the
+ * menu has to produce: a computed list, or nothing at all when the Host itself refuses.
+ */
+const CORPUS_CATEGORIES = [
+  { id: 'blank', label: 'blank truthiness' },
+  { id: 'origin', label: 'origin conflict' },
+  { id: 'updatedAt', label: 'recency ordering' },
+  { id: 'title', label: 'title shapes' },
+  { id: 'sessionIds', label: 'malformed sessionIds' },
+  { id: 'collection', label: 'malformed collection' },
+  { id: 'path', label: 'workspace path' },
+  { id: 'cwd', label: 'session cwd' }
+];
+
+for (const category of CORPUS_CATEGORIES) {
+  hostTest('Secondary candidates: every corpus case in ' + category.label + ' replays without throwing', async () => {
+    const cases = CORPUS.categories.find((entry) => entry.id === category.id).cases;
+    assert.ok(cases.length > 0, 'the corpus still carries the ' + category.label + ' cases');
+
+    for (const corpusCase of cases) {
+      const snapshot = buildCaseSnapshot(category.id, corpusCase.id);
+      const byId = { ...snapshot.sessions.byId };
+      if (snapshot.row !== undefined) byId[snapshot.row.id] = snapshot.row;
+      // A null snapshot is the collection category's own case: no roster to read at all.
+      const workspace = snapshot.rosterEntry
+        ?? snapshot.workspaces?.items?.[0]
+        ?? { sessionIds: Object.keys(byId) };
+      const sessionIds = workspace.sessionIds;
+
+      // The Host iterates sessionIds without a guard, so a non-iterable roster is where it
+      // refuses outright; the menu has to survive the call in every case.
+      const candidates = await mountLevel2Raw(byId, {
+        sessionIds,
+        archivedSessionIds: snapshot.archivedSessionIds
+      });
+
+      assert.equal(Array.isArray(candidates), true, 'the move computes for ' + category.id + '/' + corpusCase.id);
+      for (const item of candidates) {
+        assert.equal(typeof JSON.parse(item.value).sessionId, 'string', 'offered rows carry a string session id');
+      }
+    }
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Live store: the reported Session inside the real Workspace roster
+
 // ---------------------------------------------------------------------------
 
 /**
