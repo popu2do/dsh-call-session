@@ -13,13 +13,14 @@ export const silentLogger = Object.freeze({
 });
 
 /**
- * Asserts the payload handed to a native dispatch method is a DSH UserMessage.
+ * Reproduces the host's acceptance rule for anything handed to `steer` / `followup`.
  *
- * The real host splices whatever it receives into the inbox and only later resolves
- * `message.kind`; a bare string or a hand-rolled object therefore survives the mock
- * and crashes the live turn with `Cannot read properties of undefined (reading
- * 'kind')` (docs/agents/evidence/0020-turn-stopping.md). Returning the payload keeps
- * `steer` usable as an identity function for assertions.
+ * The live host splices the payload into the inbox and only later reads
+ * `message.kind`; a bare string or a hand-rolled object therefore survives a
+ * permissive mock and crashes the turn with `Cannot read properties of undefined
+ * (reading 'kind')` (docs/agents/evidence/0020-turn-stopping.md). The real
+ * observable outcome is "the turn keeps going", so this stands in for that
+ * outcome: if it throws, the live turn would have died.
  *
  * @param {unknown} message
  * @returns {unknown}

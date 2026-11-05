@@ -10,8 +10,17 @@ export interface CallTypeIntents {
   readonly task_report: string;
 }
 
+export type CallTypeName = keyof CallTypeIntents;
+
 export declare const CALL_TYPE_INTENTS: Readonly<CallTypeIntents>;
+/** 现役呼叫类型清单，与 CALL_TYPE_INTENTS 同源 */
+export declare const CALL_TYPES: readonly CallTypeName[];
+/** 缺省呼叫类型：所有入口（含 session_create）缺省时都用它 */
+export declare const DEFAULT_CALL_TYPE: CallTypeName;
 export declare const DEFAULT_BOOTSTRAP_CALLER_ID: string;
+
+/** 校验呼叫类型；枚举外取值抛 [InvalidParameter]，缺省由调用方补齐 */
+export declare function resolveCallType(callType?: string, context?: string): CallTypeName;
 
 export declare function generateMessageId(): string;
 

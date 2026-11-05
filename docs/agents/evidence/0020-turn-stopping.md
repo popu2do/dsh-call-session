@@ -1,24 +1,24 @@
 # Issue #20 · turn-stopping 实机取证
 
 本文件记录 `agent/turn-stopping` 在真实宿主进程里的行为，供守卫实现与测试引用。
-取证方式：独立 headless profile（`~/.dsh/profiles/probe20`）+ 探针插件（`scripts/probe/*.mjs`），
-不触碰正在使用的 Web GUI。
+取证方式：独立 headless profile（`~/.dsh/profiles/probe20`），不触碰正在使用的 Web GUI。
+探针脚本是一次性的临时文件，取证结束即删，仓库里不留；下面的日志片段与复现工序才是可复核的部分，
+按「复现命令」一节重跑即可得到同类事件流。
 
 ## 复现命令
 
+profile 由 `~/.dsh/profiles/probe20/cordis.patch.yml` 直接装配，其 `dsh-call-session`
+依赖以 `link:` 指向本 worktree，因此无需临时 overlay 文件。取证时只跑 headless，且用独立 profile，避免污染正在使用的 Web GUI：
+
 ```bash
-cd .worktrees/20-report-obligation
-rm -f /tmp/tsp.ndjson
-DSH_TURN_STOPPING_PROBE_LOG=/tmp/tsp.ndjson \
 WORKBUDDY_API_KEY="$(grep -oP 'WORKBUDDY_API_KEY:\s*\K\S+' ~/.dsh/.credentials.yaml)" \
-node dsh --profile probe20 --patch "$PWD/.probe-profile.yml" headless "<任务文本>"
-cat /tmp/tsp.ndjson
+node ~/.local/bin/dsh --profile probe20 headless "<任务文本>"
 ```
 
-`--patch` 必须写在 profile 之后、app 名之前；overlay 文件是 top-level YAML 数组，形如
-`- insert: [{ id: ts-probe, name: <绝对路径> }]`。
+会话日志（宿主事件流）落在 `~/.dsh/sessions/<workspace>/session-*/session.v4.jsonl.zstd`，
+用 `zlib.zstdDecompressSync` 解压后逐行 `JSON.parse` 即可复盘 seq 时间线。
 
-## 三条实测路径
+## 四条实测路径
 
 ### 一、纯文本收尾
 
@@ -74,7 +74,8 @@ headless 最终输出 `OK`。**同一 `turn=1` 内钩子被调用第二次，模
 2. 守卫必须在钩子内 `await agent.steer(...)` 才能真正保活；`followup` 不在该语义内。
 3. 预算按 `session + turn` 计数：宿主在回合未结束时会重复调用钩子，必须逐回合重置，否则跨回合永久耗尽。
 4. 消息必须用宿主认可的 `UserMessage`（`buildNativeUserMessage`）；裸对象 `{ id, role, content }`
-   会让宿主抛 `Cannot read properties of undefined (reading 'kind')` 并退出。
+   会让宿主抛 `Cannot read properties of undefined (reading 'kind')` 并退出。裸字符串同样不行——
+   它会在回合末被宿主拼进 inbox 后崩溃，见下节实机捕获。
 
 ## 附注
 
@@ -115,7 +116,27 @@ headless 最终输出 `OK`。**同一 `turn=1` 内钩子被调用第二次，模
 
 续命后模型停在文本输出，本 profile 的模型在该场景下未继续调用工具。验收结论以宿主侧事件（`step/start`、`user/message`、无错误 `turn/end`）为准，不以对端是否真的汇报为准。同一子会话在后续回合仍正常投递并以 `reason={"kind":"completed"}` 结束，说明修复前是硬错误、修复后会话保持健康。
 
+## 实机捕获：账本记在哪一侧决定谁会收到催办
+
+复现：调用方会话用 `session_create` 建对等会话，随即投递一条 `task_hard`，然后按指令结束本轮。对等会话侧能正常自回 `task_report`（投递链路通），但两边的会话事件流里都找不到任何 `[Task Hard Obligation]` 注入。
+
+根因在账本方向：`lib/call-telemetry.mjs` 的 `_pendingTasks` 只按收件方 `targetSessionId` 登记，结项分支却拿 `callerSessionId` 与 `targetSessionId` 交叉匹配。发起方会话身上因此没有记录，守卫查不到任何未结义务，自然不会催办；收件方那边因为自己已回执，也查不到。义务在语义上属于收件方，但发起方同样是当事人，查询必须双向可见。
+
+修复后 `getPendingTasksForSession` 同时匹配 `targetSessionId` 与 `callerSessionId`，1:1 结项按作用域匹配且 `task_hard` 优先落定。用例 9 覆盖了这条：外部会话反向给调用方压一条 `task_hard`，守卫必须对调用方催办，调用方回执后该记录转 `settled`。
+
 ## 测试替身的教训
 
 `tests/helpers/mock-agent.mjs` 的 `steer`/`followup` 原先接受任意值，"守卫调用了 steer"这条断言在纯字符串载荷下依然通过，而真实宿主直接崩。现改为 `assertNativeUserMessage`：非对象、缺 `id`、`role` 非 `user`、`content` 为空或非 text 分片一律抛 `TypeError`。
 
+## T-C 验收：红绿对照
+
+逐条把守卫的一项约束改回缺陷版本，跑 `node --test tests/report-obligation.test.mjs`，确认对应用例转红，再恢复源码确认全绿。
+
+| 约束 | 缺陷注入 | 转红的用例 |
+| --- | --- | --- |
+| 中止回合必须放行 | 删掉 `if (payload?.signal?.aborted) return;` | 7 |
+| 每回合 3 次催办预算 | 把 `if (sent >= MAX_REPORT_REMINDERS)` 改成恒假 | 8 |
+| 只催 `task_hard` | 把过滤条件放宽成 `callType !== 'task_report'` | 5、6 |
+| 必须以 UserMessage 投递 | `agent.steer(reminder)` 传裸字符串 | 5、6、7、8、9、11 |
+
+四项注入全部转红，恢复源码后 11/11 通过。第 5、6 项（会话解析、可单独驱动）由 5、6 号用例覆盖：它们用真实载荷形状 `{ turn, signal, agent }` 调用处理器并断言 steer 被调用。

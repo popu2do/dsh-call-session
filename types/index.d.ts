@@ -52,6 +52,8 @@ import {
   type TransportPayloadOptions
 } from './session-call.js';
 
+import type { CallTypeName } from '../lib/native-message-transport.js';
+
 import {
   getArchivedSessionIds,
   resolveSessionCwd,
@@ -118,6 +120,12 @@ export declare const inject: readonly ['agents', 'tools', 'systemPrompt'];
 /** 声明式提供服务清单 */
 export declare const provide: readonly ['callTelemetry', 'boardStore'];
 
+/** 现役呼叫类型清单，与 CALL_TYPE_INTENTS 同源 */
+export declare const CALL_TYPES: readonly CallTypeName[];
+
+/** 缺省呼叫类型，所有入口缺省时使用 */
+export declare const DEFAULT_CALL_TYPE: CallTypeName;
+
 /** 跨会话调度相关常量集合 */
 export declare const DISPATCHER_CONSTANTS: Readonly<{
   TARGET_WILDCARDS: ReadonlySet<string>;
@@ -170,6 +178,31 @@ export declare function usageSectionText(ctx?: any, config?: any): string;
  * @param config 插件配置项
  */
 export declare function apply(ctx: Context, config?: CallSessionConfig): void;
+
+/**
+ * 重启自检快照：当前进程真正加载的类型枚举与守卫注册状态
+ */
+export interface RuntimeSelfCheckSnapshot {
+  callTypes: readonly string[];
+  defaultCallType: string;
+  guard: {
+    registered: boolean;
+    listening: boolean | null;
+    maxRemindersPerTurn: number | null;
+  };
+  ledger: { attached: boolean };
+}
+
+/** 在同一宿主进程内查询插件真实加载状态 */
+export declare function runtimeSelfCheck(ctx: any, callTelemetry: any, guard: any): RuntimeSelfCheckSnapshot;
+
+/** 把守卫催办文案构造成原生 UserMessage */
+export declare function buildTurnReminderMessage(
+  rawMessage: string,
+  agent?: Record<string, unknown>,
+  ctx?: any,
+  pendingTasks?: Array<{ callerSessionId?: string; callerTitle?: string }>
+): NativeUserMessage;
 
 declare const _default: {
   name: typeof name;

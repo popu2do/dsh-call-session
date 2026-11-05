@@ -27,7 +27,7 @@ _Avoid_: 任务催办总线, 强制同步调用, 挂起等待
 _Avoid_: 全局任务表, 任务数据库, 持久化任务队列
 
 **停机拦截守卫 / Turn-Stopping Guard**:
-监听 agent/turn-stopping 事件的防护机制，载荷为 turn、signal 与 agent。当会话仍背负未结 task_hard 时拦截轮次结束，并通过 agent.steer 催促其提交 task_report 汇报；催办预算逐轮次计数并在新轮次重置以防死循环，signal 已中止时直接放行。
+监听 agent/turn-stopping 事件的防护机制，载荷为 turn、signal 与 agent。当会话仍背负未结 task_hard 时，在轮次即将结束之际通过 agent.steer 投递一条原生 UserMessage 催办消息，把回合顶回去要求提交 task_report；催办预算按会话逐轮次计数并在新轮次重置以防死循环，signal 已中止时直接放行。
 _Avoid_: 停机钩子, 进程死锁器, 无限重试循环
 
 **传输层报头 / Transport Semantic Header**:

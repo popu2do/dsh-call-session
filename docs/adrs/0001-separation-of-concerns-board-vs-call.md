@@ -123,6 +123,8 @@ This architectural coupling produced severe operational failures in production:
 - `board_list({ id?: string, topic?: string, topic_prefix?: string, tag?: string, active_only?: boolean, cross_workspace?: boolean, titles_only?: boolean, limit?: number }) => { success: boolean, count: number, scope: string, titlesOnly: boolean, posts: object[] }`
 - `board_clear({ id?: string, topic?: string, mode?: "dismiss" | "purge" }) => { success: boolean, clearedCount: number, action: string, message: string }`
 
+> **Amend**：`task_dispatch` 已废弃，现役取值为 `notice | task_soft | task_hard | task_report`，见 ADR-0042；本段保留为历史记录。
+
 #### Call Domain Tool (`index.mjs` & `lib/session-call.mjs`)
 - `session_call({ target_session_id: string, message: string, call_type?: "task_dispatch" | "task_report" | "notice", context_post_ids?: string[] }) => { success: boolean, targetSessionId: string, targetTitle: string, targetStatus: string, deliveryMode: string, callType: string, callerSessionId: string, contextPostIds?: string[], message: string, error?: string }`
 
