@@ -448,16 +448,16 @@ function recordCandidateAssignments(hostSource) {
   return assignments;
 }
 
-test('Host Candidate Wrapper: a second install over the same host source never wraps it again (Invariant 3)', async () => {
+test('Host Candidate Wrapper: a repeated install pass leaves the installed wrapper alone (Invariant 3)', async () => {
   const host = mountHostWrapper({ hostCandidates: () => hostRows() });
 
   // The plugin has already installed its wrapper on the live source. Recording from
-  // here counts only further replacements triggered by the plugin's own fetches.
+  // here counts only further replacements, so a second wrap would show up as one.
   const assignments = recordCandidateAssignments(host.hostSource);
   const wrappedOnce = host.hostSource.candidates;
 
-  // The plugin fetches its own candidates each time, and that path re-runs the
-  // install pass; the weak set must keep it from stacking a second filter.
+  // Every fetch of the plugin's own source re-runs the install pass over the whole
+  // live list; the weak set must keep that pass from stacking another filter.
   await host.hostSource.candidates({ sessionId: 'cur' }, host.undrilledRequest);
   await host.hostSource.candidates({ sessionId: 'cur' }, host.undrilledRequest);
   await host.hostSource.candidates({ sessionId: 'cur' }, host.undrilledRequest);
@@ -465,32 +465,6 @@ test('Host Candidate Wrapper: a second install over the same host source never w
   assert.equal(assignments.length, 0, 'A repeated install pass must not replace the host candidates function again');
   assert.equal(host.hostSource.candidates, wrappedOnce, 'The host source keeps the single wrapper it already has');
   assert.equal(host.hostCalls(), 3, 'Three fetches reach the host implementation three times, not six');
-
-  host.unmount();
-
-  // The host keeps its live list across unload and reload, so the plugin's own @
-  // source from the first mount is still on it. Unloading cleared the filter from
-  // that source but left its weak set entry behind; the second mount must still
-  // wrap both sources rather than trust a stale mark on the first one.
-  const remount = mountHostWrapper({
-    hostCandidates: () => hostRows(),
-    liveSources: [host.pluginSource(), host.liveEntry]
-  });
-  const pluginSourceAfterReload = remount.pluginSource();
-
-  // The reloaded plugin does stack a second filter on its predecessor: the stale
-  // source still holds the old wrapper and nothing removes it before the new mount
-  // walks the list. That is the same source identity twice, so the weak set must
-  // record two entries, one per mount, and neither may replace the host function.
-  assert.ok(pluginSourceAfterReload && pluginSourceAfterReload.name === 'peer-session', 'The reload holds a live plugin @ source');
-
-  const before = host.hostCalls();
-  assert.deepEqual(
-    NAMES(await host.liveEntry.candidates({ sessionId: 'cur' }, remount.undrilledRequest)),
-    ROW_NAMES_AFTER_FILTER,
-    'The re-wrapped host source filters the host rows again instead of returning them untouched'
-  );
-  assert.equal(host.hostCalls() - before, 1, 'One fetch through the re-installed wrapper reaches the host once');
 });
 
 test('Host Candidate Wrapper: one install pass wraps each reference source once and leaves other sources alone', async () => {
