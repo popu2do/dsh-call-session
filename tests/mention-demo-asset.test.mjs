@@ -80,11 +80,11 @@ test('mention figures: both are registered in the screenshot manifest', () => {
 
 });
 
-test('mention figure content: two workspaces, five candidates with short IDs and statuses, one picked', () => {
+test('mention figure content: three workspaces, five candidates with short IDs and statuses, one picked', () => {
   for (const figure of FIGURES) {
     const model = figureModel(figure.locale);
 
-    assert.equal(model.workspaces.length, 2, figure.locale + ' figure must show exactly two workspaces (contract: figure content)');
+    assert.equal(model.workspaces.length, 3, figure.locale + ' figure must show exactly three workspaces (contract: figure content)');
     assert.equal(
       model.workspaces.filter((w) => w.current).length,
       1,
@@ -117,8 +117,6 @@ test('mention figure markup: the picked title appears in the composer as well as
     const html = buildHtml(figure.locale, VIEWPORT);
     const model = figureModel(figure.locale);
 
-    assert.ok(html.includes(model.pathRoot), figure.locale + ' figure must name the workspace path root (contract: figure content)');
-
     for (const workspace of model.workspaces) {
       assert.ok(html.includes(workspace.name), figure.locale + ' figure must name workspace ' + workspace.name + ' (contract: figure content)');
     }
@@ -139,6 +137,79 @@ test('mention figure markup: the picked title appears in the composer as well as
 
     assert.ok(html.includes(model.composerLead), figure.locale + ' figure composer must carry its lead-in text (contract: figure content)');
     assert.ok(html.includes(model.composerTail), figure.locale + ' figure composer must carry its trailing text (contract: figure content)');
+  }
+});
+
+test('mention figure structure: Level 1 is a workspace section and Level 2 is a session section, nothing else', () => {
+  for (const figure of FIGURES) {
+    const html = buildHtml(figure.locale, VIEWPORT);
+    const model = figureModel(figure.locale);
+
+    // 一级：section 名为 工作区 / Workspaces，只装工作区条目，每条带 drill 箭头。
+    // 两个菜单在同一个文档里，行数按各自的 section 块切分来数。
+    // 两个菜单在同一个文档里，行数按各自的 section 块切分来数。
+    const level1Html = html.split('level-head">')[1] || '';
+    const level2Html = html.split('level-head">')[2] || '';
+
+    assert.equal(
+      model.level1.section,
+      figure.locale === 'zh' ? '工作区' : 'Workspaces',
+      figure.locale + ' figure Level 1 must use the plugin-owned workspace section word (contract: level-1 section)'
+    );
+    assert.ok(
+      html.includes('level-head">' + model.level1.section + '</header>'),
+      figure.locale + ' figure must render the Level 1 section heading (contract: level-1 section)'
+    );
+    assert.equal(
+      countOf(level1Html, 'class="menu-row workspace-row"'),
+      model.workspaces.length,
+      figure.locale + ' figure Level 1 must carry exactly one row per workspace (contract: level-1 rows)'
+    );
+    assert.equal(
+      countOf(level1Html, 'class="drill-chevron"'),
+      model.workspaces.length,
+      figure.locale + ' figure must draw one drill affordance per workspace row (contract: level-1 drill)'
+    );
+    assert.equal(
+      countOf(level1Html, 'class="menu-row session-row'),
+      0,
+      figure.locale + ' figure Level 1 must never carry a session row (contract: level-1 rows)'
+    );
+
+    // 二级：section 名为「对话」时的面板标题，只装会话条目
+    assert.equal(
+      model.level2.section,
+      figure.locale === 'zh' ? '对话' : 'Sessions',
+      figure.locale + ' figure Level 2 must use the shipped session section word (contract: level-2 section)'
+    );
+    assert.ok(
+      html.includes('level-head">' + model.level2.section + '</header>'),
+      figure.locale + ' figure must render the Level 2 section heading (contract: level-2 section)'
+    );
+    assert.equal(
+      countOf(level2Html, 'class="menu-row session-row'),
+      model.sessions.length,
+      figure.locale + ' figure Level 2 must carry exactly one row per session (contract: level-2 rows)'
+    );
+    assert.equal(
+      countOf(level2Html, 'class="menu-row workspace-row"'),
+      0,
+      figure.locale + ' figure Level 2 must never carry a workspace or directory row (contract: level-2 rows)'
+    );
+  }
+});
+
+test('mention figure structure: the drilled menu carries no drill header, no 进入目录 and no directory rows', () => {
+  for (const figure of FIGURES) {
+    const html = buildHtml(figure.locale, VIEWPORT);
+
+    // 下钻后宿主的原生 reference 候选整体置空，图上不得再出现参考导航与文件浏览入口
+    for (const banned of ['工作区根目录', 'Workspace Root', '进入目录', 'Browse folder', 'Files & folders', '文件与文件夹']) {
+      assert.ok(
+        !html.includes(banned),
+        figure.locale + ' figure must not render "' + banned + '" inside the drill-down (contract: no file chrome)'
+      );
+    }
   }
 });
 
