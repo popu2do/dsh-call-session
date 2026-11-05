@@ -81,7 +81,7 @@ ADR Writing Guidelines (writing-for-agents):
 
 结合原生宿主机制构建双重推进防护：
 1. **执行前上下文注入**：注册 `systemPrompt.context` 提供者 `task:remind`。当会话存在未结任务时，在每步执行前动态注入待履约任务清单与发件人指示；若无待办则返回空串，不消耗上下文。
-2. **轮次停机拦截守卫**：监听宿主 `agent/turn-stopping` 事件。当会话仍有未结 `task_hard` 且未达到防死锁预算上限（默认 3 次）时，取消停机动作并通过 `agent.steer` 注入催办指令，强行拉起新步进要求智能体履约；预算耗尽时放行停机并记录告警。
+2. **轮次停机拦截守卫**：监听宿主 `agent/turn-stopping` 事件，载荷为 `{ turn, signal, agent }`，会话标识只能从 `agent.session.id` 解析。当会话仍有未结 `task_hard` 且本轮催办次数未达防死锁预算（默认 3 次）时，通过 `agent.steer` 注入催办指令，把回合顶回去要求智能体履约；本轮预算耗尽后放行停机并记录一次告警，下一轮次重新获得完整预算。若载荷 signal 已 abort，守卫直接放行——中止的回合不得被拽回。
 
 ### 动效
 

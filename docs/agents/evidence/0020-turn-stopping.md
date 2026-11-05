@@ -1,0 +1,121 @@
+# Issue #20 · turn-stopping 实机取证
+
+本文件记录 `agent/turn-stopping` 在真实宿主进程里的行为，供守卫实现与测试引用。
+取证方式：独立 headless profile（`~/.dsh/profiles/probe20`）+ 探针插件（`scripts/probe/*.mjs`），
+不触碰正在使用的 Web GUI。
+
+## 复现命令
+
+```bash
+cd .worktrees/20-report-obligation
+rm -f /tmp/tsp.ndjson
+DSH_TURN_STOPPING_PROBE_LOG=/tmp/tsp.ndjson \
+WORKBUDDY_API_KEY="$(grep -oP 'WORKBUDDY_API_KEY:\s*\K\S+' ~/.dsh/.credentials.yaml)" \
+node dsh --profile probe20 --patch "$PWD/.probe-profile.yml" headless "<任务文本>"
+cat /tmp/tsp.ndjson
+```
+
+`--patch` 必须写在 profile 之后、app 名之前；overlay 文件是 top-level YAML 数组，形如
+`- insert: [{ id: ts-probe, name: <绝对路径> }]`。
+
+## 三条实测路径
+
+### 一、纯文本收尾
+
+任务："只回复两个字：收到。"
+
+```json
+{"event":"probe/mounted","pid":47637}
+{"event":"agent/status","agentId":"session-5e9ad7df-…","status":"running"}
+{"event":"agent/turn-stopping","turn":1,"payloadKeys":["turn","signal","agent"],
+ "agentId":"session-5e9ad7df-…","agentSessionId":"session-5e9ad7df-…",
+ "agentStatus":"running","signalAborted":false,"steeringQueue":0}
+{"event":"agent/status","agentId":"session-5e9ad7df-…","status":"idle"}
+```
+
+**钩子触发一次，载荷键为 `turn` / `signal` / `agent`，`signal.aborted === false`。**
+
+### 二、工具调用收尾
+
+任务："用 bash 执行 echo hi，然后原样回复 hi。"
+
+与路径一相同：hooks 触发一次，`turn=1`，键集合一致，`signalAborted=false`。
+说明以工具调用收尾的步骤同样会走到回合收尾钩子。
+
+### 三、守卫 steer 之后能否保活
+
+在钩子里对 `payload.agent` 调 `steer(buildNativeUserMessage(...))`（`callType: 'task_hard'`）：
+
+```json
+{"event":"hook","n":1,"turn":1,"aborted":false}
+{"event":"steered","msg":"[Cross-Session TASK_HARD] from Probe: PROBE: 请再回复一次 OK。"}
+{"event":"hook","n":2,"turn":1,"aborted":false}
+```
+
+headless 最终输出 `OK`。**同一 `turn=1` 内钩子被调用第二次，模型继续生成——steer 确实把回合顶回去了。**
+
+### 四、用户中止
+
+以 `agent.cancel({ kind: 'user' })` 模拟用户停止：
+
+```json
+{"event":"mounted"}
+{"event":"status","status":"running"}
+{"event":"cancel-issued"}
+{"event":"status","status":"idle"}
+```
+
+**钩子一次都没触发**：中止路径直接让 agent 转 idle，走不到 turn-stopping。
+守卫里对 `signal.aborted` 的短路因此是防御性约束（宿主升级后行为可能改变），而不是补偿一个已观测缺陷。
+
+## 对实现的约束
+
+1. 会话 id 只能从 `payload.agent` 解析（`agent.session.id`）；载荷里没有独立 session 字段。
+2. 守卫必须在钩子内 `await agent.steer(...)` 才能真正保活；`followup` 不在该语义内。
+3. 预算按 `session + turn` 计数：宿主在回合未结束时会重复调用钩子，必须逐回合重置，否则跨回合永久耗尽。
+4. 消息必须用宿主认可的 `UserMessage`（`buildNativeUserMessage`）；裸对象 `{ id, role, content }`
+   会让宿主抛 `Cannot read properties of undefined (reading 'kind')` 并退出。
+
+## 附注
+
+取证期间生成的 `[From: … | CallType: task_dispatch]` 现象源自内存中的旧模块（Web profile 的
+`node_modules/dsh-call-session` 软链到主仓库），与 worktree 源码无关；用 worktree 源码构造的
+`task_hard` 消息摘要为 `[Cross-Session TASK_HARD] from …`。
+
+## 实机捕获：催办消息的形状决定宿主能否接收
+
+复现：worktree 源码经 probe20 profile 的 `dsh-call-session` 软链进真实 dsh 宿主，调用方会话建对等会话后投递 `task_hard`，对等会话被要求拒绝汇报。
+
+### 字符串载荷（修复前）
+
+```
+25 assistant/message turn 2 step 1  TEXT: 拒绝汇报
+26 step/end
+27 agent/inbox/spliced target=next-step inserted=["[Task Hard Obligation] You have pending hard collaboration tasks from Defy20 …"]
+28 agent/inbox/spliced target=next-step removedCount=1 inserted=[]
+29 turn/end reason={"kind":"error","error":{"message":"Cannot read properties of undefined (reading 'kind')","code":"UNKNOWN"}}
+```
+
+`agent.steer(string)` 的字符串被原样拼进 inbox（`inserted` 是裸字符串，不是消息对象），宿主渲染阶段取 `message.kind` 时崩溃，整个回合以 UNKNOWN 结束，该会话此后不再响应任何入站消息。
+
+### 原生 UserMessage 载荷（修复后）
+
+```
+25 assistant/message turn 2 step 1  TEXT: 拒绝汇报
+26 step/end
+27 agent/inbox/spliced target=next-step inserted=[{"id":"4238cb45-…","role":"user","content":[{"type":"text","text":"[From: session-dc326b8d… (Chase20) | CallType: notice]\n\n[Task Hard Obligation] …"}]}]
+28 agent/inbox/spliced target=next-step removedCount=1 inserted=[]
+29 step/start turn 2 step 2
+30 user/message id=4238cb45-…
+```
+
+`inserted` 里是带 `id/role/content` 的完整消息对象，`step/start` 出现在 splice 之后，回合被真正续命且没有错误 `turn/end`。`28 removedCount:1` 两版都有，是宿主把 next-step 暂存项并入队列的正常动作，不是撤回。
+
+### 遗留观察
+
+续命后模型停在文本输出，本 profile 的模型在该场景下未继续调用工具。验收结论以宿主侧事件（`step/start`、`user/message`、无错误 `turn/end`）为准，不以对端是否真的汇报为准。同一子会话在后续回合仍正常投递并以 `reason={"kind":"completed"}` 结束，说明修复前是硬错误、修复后会话保持健康。
+
+## 测试替身的教训
+
+`tests/helpers/mock-agent.mjs` 的 `steer`/`followup` 原先接受任意值，"守卫调用了 steer"这条断言在纯字符串载荷下依然通过，而真实宿主直接崩。现改为 `assertNativeUserMessage`：非对象、缺 `id`、`role` 非 `user`、`content` 为空或非 text 分片一律抛 `TypeError`。
+

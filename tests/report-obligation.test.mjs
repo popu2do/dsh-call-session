@@ -1,14 +1,18 @@
+/**
+ * Turn-stopping payload shapes used here come from live host captures recorded in
+ * docs/agents/evidence/0020-turn-stopping.md.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   CallTelemetryRingBuffer,
   formatPendingTaskReminderText
 } from '../lib/call-telemetry.mjs';
-import { CALL_TYPE_INTENTS, buildTransportPayload } from '../lib/native-message-transport.mjs';
+import { CALL_TYPE_INTENTS, buildNativeUserMessage, buildTransportPayload } from '../lib/native-message-transport.mjs';
 import { executeSessionCall } from '../lib/session-call.mjs';
 import { buildToolDefinitions } from '../lib/tools-registry.mjs';
 import { apply } from '../index.mjs';
-import { createMockAgent } from './helpers/mock-agent.mjs';
+import { assertNativeUserMessage, createMockAgent } from './helpers/mock-agent.mjs';
 
 function createMockContext() {
   const contexts = new Map();
@@ -224,7 +228,8 @@ test('5. Hard task interception: agent/turn-stopping triggers steer on pending t
 
   let steeredMessage = null;
   const callee = createMockAgent('agent-worker', {
-    steerFn: async (msg) => { steeredMessage = msg; }
+    // A bare string here would pass the mock and crash the live turn.
+    steerFn: async (msg) => { steeredMessage = assertNativeUserMessage(msg); }
   });
   ctx.addAgent(callee);
 
@@ -256,8 +261,8 @@ test('5. Hard task interception: agent/turn-stopping triggers steer on pending t
     await h({ agent: callee, turn: 2 });
   }
   assert.ok(steeredMessage, 'task_hard must trigger steer');
-  assert.match(steeredMessage, /Master/);
-  assert.match(steeredMessage, /task_report/);
+  assert.match(steeredMessage.content[0].text, /Master/);
+  assert.match(steeredMessage.content[0].text, /task_report/);
 
   // Report 1: FIFO settles task_soft, task_hard remains pending and still steers
   ctx.callTelemetry.record({
@@ -285,3 +290,192 @@ test('5. Hard task interception: agent/turn-stopping triggers steer on pending t
   }
   assert.equal(steeredMessage, null, 'settled task_hard must not steer on turn-stopping');
 });
+
+/**
+ * The payload shape below mirrors real host output recorded in
+ * docs/agents/evidence/0020-turn-stopping.md: `{ turn, signal, agent }`, where `agent`
+ * is the live agent instance and `signal` is the turn's AbortSignal.
+ */
+function hostTurnPayload(agent, turn, { aborted = false, reason = undefined } = {}) {
+  const controller = new AbortController();
+  if (aborted) controller.abort(reason);
+  return { turn, signal: controller.signal, agent };
+}
+
+test('6. Guard resolves the session from the real payload shape { turn, signal, agent }', async () => {
+  const ctx = createMockContext();
+  apply(ctx, { locale: 'zh' });
+
+  let steeredMessage = null;
+  const callee = createMockAgent('agent-worker', {
+    // A bare string here would pass the mock and crash the live turn.
+    steerFn: async (msg) => { steeredMessage = assertNativeUserMessage(msg); }
+  });
+  ctx.addAgent(callee);
+
+  // A soft task alone must never chase the turn closed.
+  ctx.callTelemetry.record({
+    callerSessionId: 'agent-master',
+    callerTitle: 'Master',
+    targetSessionId: 'agent-worker',
+    callType: 'task_soft'
+  });
+  for (const handler of ctx.getEventHandlers('agent/turn-stopping')) {
+    await handler(hostTurnPayload(callee, 1));
+  }
+  assert.equal(steeredMessage, null, 'task_soft must not chase');
+
+  ctx.callTelemetry.record({
+    callerSessionId: 'agent-master',
+    callerTitle: 'Master',
+    targetSessionId: 'agent-worker',
+    callType: 'task_hard'
+  });
+  for (const handler of ctx.getEventHandlers('agent/turn-stopping')) {
+    await handler(hostTurnPayload(callee, 1));
+  }
+  assert.ok(steeredMessage, 'task_hard must chase via steer');
+  assert.match(steeredMessage.content[0].text, /Master/);
+  assert.match(steeredMessage.content[0].text, /task_report/);
+});
+
+test('7. Guard never steers once the host turn signal is aborted', async () => {
+  const ctx = createMockContext();
+  apply(ctx, { locale: 'zh' });
+
+  const steered = [];
+  const callee = createMockAgent('agent-worker', {
+    steerFn: async (msg) => { steered.push(assertNativeUserMessage(msg)); }
+  });
+  ctx.addAgent(callee);
+
+  ctx.callTelemetry.record({
+    callerSessionId: 'agent-master',
+    callerTitle: 'Master',
+    targetSessionId: 'agent-worker',
+    callType: 'task_hard'
+  });
+
+  for (const handler of ctx.getEventHandlers('agent/turn-stopping')) {
+    await handler(hostTurnPayload(callee, 1, { aborted: true, reason: 'user stop' }));
+  }
+  assert.deepEqual(steered, [], 'an aborted turn must not be resurrected');
+});
+
+test('8. Guard budget is per turn: 3 chases, then a warning, and a new turn starts fresh', async () => {
+  const ctx = createMockContext();
+  apply(ctx, { locale: 'zh' });
+
+  const steered = [];
+  const callee = createMockAgent('agent-worker', {
+    steerFn: async (msg) => { steered.push(assertNativeUserMessage(msg)); }
+  });
+  ctx.addAgent(callee);
+
+  ctx.callTelemetry.record({
+    callerSessionId: 'agent-master',
+    callerTitle: 'Master',
+    targetSessionId: 'agent-worker',
+    callType: 'task_hard'
+  });
+
+  // Exhaust turn 1: three chases, then silence while the task stays pending.
+  for (let i = 0; i < 6; i += 1) {
+    for (const handler of ctx.getEventHandlers('agent/turn-stopping')) {
+      await handler(hostTurnPayload(callee, 1));
+    }
+  }
+  assert.equal(steered.length, 3, 'at most 3 chases within one host turn');
+
+  // Turn 2 is a fresh budget, not a continuation of the exhausted one.
+  for (const handler of ctx.getEventHandlers('agent/turn-stopping')) {
+    await handler(hostTurnPayload(callee, 2));
+  }
+  assert.equal(steered.length, 4, 'a new turn must regain its own chase budget');
+});
+
+test('9. Guard stops chasing the moment the hard task is settled', async () => {
+  const ctx = createMockContext();
+  apply(ctx, { locale: 'zh' });
+
+  const steered = [];
+  const callee = createMockAgent('agent-worker', {
+    steerFn: async (msg) => { steered.push(assertNativeUserMessage(msg)); }
+  });
+  ctx.addAgent(callee);
+
+  ctx.callTelemetry.record({
+    callerSessionId: 'agent-master',
+    callerTitle: 'Master',
+    targetSessionId: 'agent-worker',
+    callType: 'task_hard'
+  });
+  for (const handler of ctx.getEventHandlers('agent/turn-stopping')) {
+    await handler(hostTurnPayload(callee, 1));
+  }
+  assert.equal(steered.length, 1);
+
+  ctx.callTelemetry.record({
+    callerSessionId: 'agent-worker',
+    targetSessionId: 'agent-master',
+    callType: 'task_report',
+    messagePayload: 'done'
+  });
+  for (const handler of ctx.getEventHandlers('agent/turn-stopping')) {
+    await handler(hostTurnPayload(callee, 1));
+  }
+  assert.equal(steered.length, 1, 'a settled task must not be chased again');
+});
+
+
+test('11. Guard steers a native UserMessage, never a bare string', async () => {
+  // Live capture: a string reached agent.steer, the host spliced it into the inbox
+  // and then failed the turn with "Cannot read properties of undefined (reading 'kind')".
+  const ctx = createMockContext();
+  apply(ctx, { locale: 'zh' });
+
+  const steered = [];
+  const callee = createMockAgent('agent-worker', { title: 'Worker W' });
+  ctx.addAgent(callee);
+
+  ctx.callTelemetry.record({
+    callerSessionId: 'agent-master',
+    callerTitle: 'Master',
+    targetSessionId: 'agent-worker',
+    callType: 'task_hard'
+  });
+
+  for (const handler of ctx.getEventHandlers('agent/turn-stopping')) {
+    await handler(hostTurnPayload(callee, 1));
+  }
+
+  assert.equal(steered.length, 0, 'the default mock collects instead of failing');
+  const delivered = callee.received.filter((entry) => entry.method === 'steer');
+  assert.equal(delivered.length, 1, 'exactly one reminder per stopped turn');
+  const message = delivered[0].msg;
+
+  assert.doesNotThrow(() => assertNativeUserMessage(message), 'the host only accepts a UserMessage');
+  assert.equal(message.role, 'user');
+  assert.equal(message.source.kind, 'plugin:dsh-call-session', 'the reminder is attributed to this plugin');
+  assert.match(message.content[0].text, /CallType: notice\]/, 'the reminder is an advisory notice, not a second hard task');
+  assert.match(message.content[0].text, /task_report/, 'the reminder still names the reporting call');
+  assert.match(message.content[0].text, /Master/, 'the reminder still names the caller');
+});
+
+test('10. Transport never fabricates a call type: unknown types degrade, and bootstrap keeps the real one', () => {
+  // An unknown type must never be echoed into the header or summarised as if real.
+  const unknownHeader = buildTransportPayload('x', { callerSessionId: 's1', callType: 'task_dispatch' });
+  assert.match(unknownHeader, /\| CallType: task_soft\]/, 'unknown types degrade to the least intrusive type');
+  assert.doesNotMatch(unknownHeader, /task_dispatch/);
+
+  // A real type survives the bootstrap form instead of being pinned to task_soft.
+  const bootstrap = buildNativeUserMessage({
+    rawMessage: 'boot',
+    form: 'session_create',
+    callerSessionId: 'parent',
+    callerTitle: 'Parent',
+    callType: 'task_hard'
+  });
+  assert.match(bootstrap.content[0].text, /\| CallType: task_hard\]/);
+});
+

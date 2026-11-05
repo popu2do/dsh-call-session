@@ -7,7 +7,12 @@ import {
   buildTransportPayload,
   sanitizePostIds
 } from '../lib/session-call.mjs';
-import { createMockAgent, silentLogger } from './helpers/mock-agent.mjs';
+import { assertNativeUserMessage, createMockAgent, silentLogger } from './helpers/mock-agent.mjs';
+
+/** A minimal but well-formed UserMessage: the host rejects anything else on steer/followup. */
+function nativeProbeMessage(id) {
+  return { id, role: 'user', content: [{ type: 'text', text: 'probe' }] };
+}
 
 const HEADER_REGEX = /^\[From: .+? \(.+?\) \| CallType: (notice|task_soft|task_hard|task_report)\](\n> Context Ref: .+?)?\n\n/;
 
@@ -52,13 +57,14 @@ test('单播调用类型意图枚举与协议映射契约 (ADR-0006)', () => {
 test('单播原生通信分发：按目标会话运行状态自适应选择 steer 或 followup 通道', () => {
   // 1. target 为 running 态且具有 steer 方法 -> steer
   const runningAgent = createMockAgent('agent-running', { status: 'running' });
-  const mode1 = dispatchNativeMessage(runningAgent, { role: 'user', content: [] });
+  const mode1 = dispatchNativeMessage(runningAgent, nativeProbeMessage('probe-running'));
   assert.equal(mode1, 'steer');
   assert.equal(runningAgent.received[0].type, 'steer');
 
   // 2. target 为 idle 态且具有 followup 方法 -> followup
   const idleAgent = createMockAgent('agent-idle', { status: 'idle' });
-  const mode2 = dispatchNativeMessage(idleAgent, { role: 'user', content: [] });
+  const mode2 = dispatchNativeMessage(idleAgent, nativeProbeMessage('probe-idle'));
+  assert.doesNotThrow(() => assertNativeUserMessage(idleAgent.received[0].msg), 'followup also carries a UserMessage');
   assert.equal(mode2, 'followup');
   assert.equal(idleAgent.received[0].type, 'followup');
 

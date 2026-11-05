@@ -20,6 +20,10 @@ import {
 } from './lib/board-store.mjs';
 import { BoardToolsAdapter } from './lib/board-tools-adapter.mjs';
 import {
+  createTurnStoppingGuard,
+  resolveAgentSessionId
+} from './lib/turn-stopping-guard.mjs';
+import {
   normalizeWorkspace
 } from './lib/workspace.mjs';
 import {
@@ -36,6 +40,7 @@ import {
 import {
   dispatchNativeMessage,
   CALL_TYPE_INTENTS,
+  buildNativeUserMessage,
   buildTransportPayload
 } from './lib/native-message-transport.mjs';
 import {
@@ -100,12 +105,7 @@ export const Config = zInstance ? zInstance.object({
   locale: 'auto'
 });
 
-const MAX_REPORT_REMINDERS = 3;
 const DEFAULT_TASK_REMIND_CONTEXT_ORDER = 131;
-
-function resolveAgentSessionId(agent) {
-  return agent?.session?.id ?? agent?.sessionId ?? agent?.id ?? null;
-}
 
 /**
  * Returns model-facing cross-session collaboration instructions for System Prompt.
@@ -266,46 +266,26 @@ export function apply(ctx, config = {}) {
   }
 
   if (typeof ctx.on === 'function') {
-    const turnReminderCounts = new Map();
-    function cleanupSessionReminders(sid) {
-      if (!sid) return;
-      for (const key of turnReminderCounts.keys()) {
-        if (key.startsWith(sid + ':') || key === sid) {
-          turnReminderCounts.delete(key);
-        }
-      }
-    }
-
-    ctx.on('agent/turn-stopping', async ({ agent }) => {
-      const sessionId = resolveAgentSessionId(agent);
-      if (!sessionId) return;
-      const pendingHardTasks = callTelemetry.getPendingTasksForSession(sessionId).filter(t => t.callType === 'task_hard');
-      if (pendingHardTasks.length === 0) {
-        cleanupSessionReminders(sessionId);
-        return;
-      }
-
-      // Track reminders by session + oldest pending task identifier to isolate retry budgets
-      const oldestTask = pendingHardTasks[0];
-      const taskKey = `${sessionId}:${oldestTask.timestamp || oldestTask.callId || ''}`;
-      const currentCount = turnReminderCounts.get(taskKey) || 0;
-      if (currentCount >= MAX_REPORT_REMINDERS) {
-        logger.warn?.(`[dsh-call-session] Session ${sessionId} exceeded maximum turn stopping reminders (${MAX_REPORT_REMINDERS}) for pending hard task, allowing turn to close.`);
-        return;
-      }
-      turnReminderCounts.set(taskKey, currentCount + 1);
-
-      const currentLocale = resolveLocale(ctx, config);
-      const catalog = getCatalog(currentLocale);
-      const reminder = catalog.prompts.taskHardTurnReminder(pendingHardTasks);
-      if (typeof agent.steer === 'function' && reminder) {
-        await agent.steer(reminder);
-      }
+    const guard = createTurnStoppingGuard({
+      getPendingTasksForSession: (sessionId) => callTelemetry.getPendingTasksForSession(sessionId),
+      buildReminder: (pendingTasks) => getCatalog(resolveLocale(ctx, config)).prompts.taskHardTurnReminder(pendingTasks),
+      // The reminder travels as a native UserMessage from this very session, so it
+      // renders like any other cross-session notice instead of crashing the turn.
+      buildUserMessage: (rawMessage, agent) => buildNativeUserMessage({
+        rawMessage,
+        form: 'notice',
+        callerSessionId: resolveAgentSessionId(agent),
+        callerTitle: resolveSessionTitle(ctx, agent),
+        callType: 'notice'
+      }),
+      resolveSessionId: resolveAgentSessionId,
+      logger
     });
 
-    ctx.on('session/dispose', ({ session }) => cleanupSessionReminders(session?.id));
-    ctx.on('session/archive', (sessionId) => cleanupSessionReminders(sessionId));
-    ctx.on('session/remove', (sessionId) => cleanupSessionReminders(sessionId));
+    ctx.on('agent/turn-stopping', guard.handleTurnStopping);
+    ctx.on('session/dispose', ({ session }) => guard.forgetSession(session?.id));
+    ctx.on('session/archive', (sessionId) => guard.forgetSession(sessionId));
+    ctx.on('session/remove', (sessionId) => guard.forgetSession(sessionId));
   }
 
   registerNativeTools(ctx, { boardStore, boardToolsAdapter, config, logger });
