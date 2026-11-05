@@ -14,7 +14,7 @@ T-B decides **where** the guard attaches. If the probe shows `agent/turn-stoppin
 1. The session is resolved from the real payload shape proven by T-B. No reliance on a field the host does not send.
 2. If `signal.aborted` is true the guard returns immediately and steers nothing.
 3. Only sessions with a pending `task_hard` are chased; `task_soft` and `notice` never are.
-4. The chase is a `steer` of a localised model-facing message that names the caller(s) and asks for `session_call(call_type='task_report')`.
+4. The chase is a `steer` of a localised model-facing message that names the caller(s) and asks for `session_call(call_type='task_report')`. It travels as a native `UserMessage` — the host crashes on any other payload — and carries `CallType: notice`, so the guard never creates a second obligation for itself.
 5. Budget: at most 3 chases per turn, reset when the turn changes. On exhaustion the guard logs a warning containing the session id and the pending count, and lets the turn close.
 6. When the pending `task_hard` is settled, no further chase happens.
 7. The guard is drivable in isolation: a test can invoke it with a payload of the real shape and observe the steer.

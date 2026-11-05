@@ -10,7 +10,7 @@ The obligation chain has to be observable by the model itself. Today the ledger 
 ## Required behaviour
 
 1. Enqueue happens **after** dispatch succeeds, never when the message object is constructed.
-2. A `task_report` settles exactly one entry: the oldest entry with the same caller↔target pair. It also flips the matching call record to `settled`.
+2. A `task_report` settles exactly one entry: first scope the ledger to the entries whose caller is the reporter's target (a report only settles the debt it receives), then take the oldest entry in that scope. It also flips the matching call record to `settled`.
 3. A `task_report` with no matching entry is a no-op: no throw, no ledger damage.
 4. `notice` never enqueues. `task_soft` and `task_hard` both enqueue and record their type.
 5. Session archive / remove / dispose cascades cleanup for both sides of the pair.
@@ -20,6 +20,7 @@ The obligation chain has to be observable by the model itself. Today the ledger 
 ## Seams
 
 - `tests/report-obligation.test.mjs` — ledger behaviour through the public telemetry API and the registered context provider; assert the model-facing string, not private arrays.
+- `tests/boundary-exploration.test.mjs` — the edges a unit-level fixture hides: enqueue only after a successful dispatch, settlement scoped to one receiver, an aborted turn costing no budget.
 - `tests/call-connection.test.mjs` — settled status visible in the canvas snapshot.
 
 ## Definition of done

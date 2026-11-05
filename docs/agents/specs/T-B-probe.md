@@ -17,7 +17,7 @@ The previous implementation shipped a guard that never fired, and its tests only
 
 ## Seams
 
-The probe itself is not a unit test. It is a temporary instrumentation commit that must be reverted once the evidence file exists.
+The probe itself is not a unit test. It runs from a throwaway profile (`~/.dsh/profiles/probe20`, linked at this worktree), never from a committed script: `.githooks/pre-commit` rejects new files under `scripts/`, and the open command that drives it is recorded in the evidence file so the next run does not have to reinvent it.
 
 ## Definition of done
 

@@ -11,7 +11,7 @@ The type on the wire does not match the type the caller passed, and the plugin s
 ## Required behaviour
 
 1. `CALL_TYPE_INTENTS` in `lib/native-message-transport.mjs` is the only enumeration: `notice | task_soft | task_hard | task_report`.
-2. `buildTransportPayload` never substitutes a different type. An unknown or missing `callType` must throw `[InvalidParameter]` rather than degrade to `task_soft`.
+2. `buildTransportPayload` never substitutes a different type on the wire. An unknown `callType` throws `[InvalidParameter]` rather than degrading to `task_soft`; an omitted one falls back to `DEFAULT_CALL_TYPE` (`task_soft`), the single default that `session_call` and `session_create` share.
 3. The `session_create` bootstrap branch passes the caller's type through; it must not hard-code `task_soft`.
 4. The native message summary intent marker derives from the enumeration only; no `String(callType).toUpperCase()` fallback that can mint a literal like `TASK_DISPATCH`.
 5. `executeSessionCall` still rejects unknown types with `[InvalidParameter]`; `task_dispatch` is rejected, not aliased.
@@ -26,5 +26,5 @@ The type on the wire does not match the type the caller passed, and the plugin s
 ## Definition of done
 
 - New tests fail before the change and pass after (show both runs).
-- `grep -rn "TASK_DISPATCH\|task_dispatch" lib/ index.mjs types/ tests/` returns only the negative assertions in `tests/report-obligation.test.mjs`.
+- `grep -rn "TASK_DISPATCH\|task_dispatch" lib/ index.mjs types/ tests/` returns only negative assertions: the rejection cases in `tests/report-obligation.test.mjs`, `tests/native-message-transport.test.mjs` and `tests/boundary-exploration.test.mjs`, plus the no-raw-enum guard in `tests/client.test.mjs`.
 - `npm run verify` green.

@@ -1,7 +1,7 @@
 # Tickets: #20 Call Type Refactoring & Report Obligation (rewrite)
 
-Baseline: `main @ 6a156a0`. All tickets land on `feat/20-report-obligation`.
-Spec: issue #20 的正文（ADR-0042 记录被采纳的决策）。
+Baseline: `main @ 6a156a0`. All tickets landed on `feat/20-report-obligation`, since squashed into `main`.
+Spec: issue #20 的正文（ADR-0042 记录被采纳的决策），实机取证见 `docs/agents/evidence/0020-turn-stopping.md`。
 
 Order: **A, D, F** (parallel) → **B** (probe) → **C** (depends on B's finding) → **G**.
 Do not start C before B's runtime evidence is recorded in `docs/agents/evidence/`.
