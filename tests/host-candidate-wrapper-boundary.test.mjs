@@ -61,6 +61,9 @@ function recordingConsole() {
 
 const NAMES = (rows) => Array.from(rows, (item) => item.name);
 
+/** Queries that carry no workspace path once trimmed, whatever the trigger left behind. */
+const BLANK_QUERIES = ['', ' ', '   ', '\t', '\n', '@', '@ ', ' @'];
+
 const ROW_NAMES_AFTER_FILTER = ['peer session', 'enter-directory'];
 
 /**
@@ -346,7 +349,7 @@ test('Host Candidate Wrapper: a string "true" drilled flag is not a drill (stric
 test('Host Candidate Wrapper: a whitespace, bare @ or "@ " query is not mistaken for a drill', async () => {
   const host = mountHostWrapper({ hostCandidates: () => hostRows() });
 
-  for (const query of ['', ' ', '   ', '\t', '\n', '@', '@ ', ' @']) {
+  for (const query of BLANK_QUERIES) {
     const result = await host.hostSource.candidates({ sessionId: 'cur' }, { query, drilled: false });
     assert.deepEqual(
       NAMES(result),
@@ -354,9 +357,11 @@ test('Host Candidate Wrapper: a whitespace, bare @ or "@ " query is not mistaken
       'Query ' + JSON.stringify(query) + ' names no workspace path, so host rows must survive the level check'
     );
   }
-  assert.equal(host.hostCalls(), 8, 'Each blank query reaches the host implementation exactly once');
+  assert.equal(host.hostCalls(), BLANK_QUERIES.length, 'Each blank query reaches the host implementation exactly once');
   assert.equal(host.warnings.length, 0, 'A blank query is an ordinary top-level fetch, never a degradation');
 });
+
+
 
 test('Host Candidate Wrapper: a hand-typed workspace path drills even when the host flag is false', async () => {
   const host = mountHostWrapper({ hostCandidates: () => hostRows() });
