@@ -857,7 +857,9 @@ function liveRosterRows() {
 }
 
 for (const shape of [
-  { label: 'a string', value: 'session-81fbb668-c69c-410a-a194-e22510bd3c6c' },
+  // A string archive list is the shape that still answers indexOf: an id inside it is
+  // found by substring, so the degeneration has to be judged by what it does not hide.
+  { label: 'a string', value: 'session-live-000' },
   { label: 'null', value: null },
   { label: 'a number', value: LIVE_ARCHIVED_SIZE }
 ]) {
