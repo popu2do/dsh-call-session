@@ -65,7 +65,7 @@ cbcd1fb test(peer-session): judge a string archive list by what it hides
 
 `null` / 缺失 / 非数字字符串都不抛：`null` 与缺失经 `|| 0` 落到 0 被排到后面，非数字字符串让比较得 `NaN`，`sort` 视作保持原序（名册序）。同为 `REFERENCE_NOW` 的两条成员按名册序出、重复运行顺序一致；宿主侧用例确认它按同样的名册序排序。
 
-## blank 判据：与宿主同构，无分歧
+## 判据核验
 
 本轮最初把插件的 `session.blank === true`（`lib/client.js:3733`）与宿主 `dsh-client-ui-workspace/lib/client.js:966` 的 `if (session.blank && ...)` 判为真值分歧，并据此写出 `blank 1`、`blank "yes"` 两条"插件显示、宿主隐藏"的记录态用例。**这个结论站不住**，理由两条。
 
@@ -81,7 +81,7 @@ cbcd1fb test(peer-session): judge a string archive list by what it hides
 
 与插件 `session.blank === true && session.id !== currentSessionId` 逐格一致。判据**不需要改**，`=== true` 保留。
 
-## 真实缺陷 `session-6b440cb0` 的成因
+## 缺陷成因
 
 会话本身是真的：`~/.dsh/sessions/--home-dev-code-TSPR-dsh-call-session--/session-6b440cb0-.../session.v4.jsonl.zstd` 解码后只有 session / permission / sandbox / approval 四行，没有 message、没有 title，是建立后未使用的空会话；它在工作区 `sessionIds` 里，不在归档名单。
 
@@ -114,7 +114,7 @@ captain 独立复跑：`blank === true` → 真值判断时 `tests 664 / pass 66
 1. **origin**：插件 `isSubagentOrigin`（`lib/client.js:3641`）认 `header.origin === 'subagent'`，宿主只认 `session.origin`。只有 `header.origin` 说是子代理、以及两者冲突两种情形，插件隐藏而宿主显示。是否保留这一兜底。
 2. **真实缺陷**：`session-6b440cb0` 在插件快照上的 `blank` 实际取值待实测；定位后再决定改 `isSidebarVisibleSession` 还是改快照读取口径。
 
-## 归档筛选与其余边界
+## 归档边界
 
 - `archivedSessionIds` 为 `null` / 字符串 / 数字时插件退化为空名单、照常出候选（宿主 `new Set(值)` 无守卫）。
 - 实尺退化：182 成员 / 618 归档，畸形名单时仍是 50 条上限、`session-live-000` 居首。

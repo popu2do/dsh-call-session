@@ -126,7 +126,7 @@ Required fixture cases:
 - Level 1 section is `工作区` and every entry carries `drill: true`.
 - The current workspace sorts first.
 - Level 2 membership equals `sessionIds` intersect `byId` intersect sidebar visibility.
-- Every Level 2 candidate has `section === undefined` and no `drill`.
+- Every Level 2 candidate carries `section: t('section.sessions')` and no `drill` field.
 - Level 2 never contains a subagent, an archived session, a non-current blank session, the current session itself, or a non-member.
 - A hand-typed workspace path enters Level 2, producing no `工作区` heading and no `进入目录` affordance.
 - `header` returns `undefined` at Level 1, at Level 2, and for a hand-typed path, and the headerless hook reads no workspace snapshot.
