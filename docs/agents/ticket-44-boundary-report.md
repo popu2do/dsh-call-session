@@ -65,53 +65,60 @@ cbcd1fb test(peer-session): judge a string archive list by what it hides
 
 `null` / 缺失 / 非数字字符串都不抛：`null` 与缺失经 `|| 0` 落到 0 被排到后面，非数字字符串让比较得 `NaN`，`sort` 视作保持原序（名册序）。同为 `REFERENCE_NOW` 的两条成员按名册序出、重复运行顺序一致；宿主侧用例确认它按同样的名册序排序。
 
-## 真实缺陷 `session-6b440cb0`
+## blank 判据：与宿主同构，无分歧
 
-### 1. 真实摘要形状复现
+本轮最初把插件的 `session.blank === true`（`lib/client.js:3733`）与宿主 `dsh-client-ui-workspace/lib/client.js:966` 的 `if (session.blank && ...)` 判为真值分歧，并据此写出 `blank 1`、`blank "yes"` 两条"插件显示、宿主隐藏"的记录态用例。**这个结论站不住**，理由两条。
 
-用真实 UUID 形状 id 与 `coldUntitledRow()`（无 title、无 message）构造 byId 行，`isSidebarVisibleSession` **会漏它**——但漏的原因不是 `blank === true`，而是**这一行根本没有 `blank` 字段**。`undefined === true` 为假，判据放行。用例 `the reported Session is hidden by the summary and offered by the client row` 同时断言：`'blank' in storeRow === false`、插件放行、标签是 `Agent #6b440cb0`（即报告里看到的"裸 id"）、并且因为 `seq === 0`、`updatedAt` 最大而落在最前。
+第一，客户端行上的 `blank` 是派生值，恒为布尔。`dsh-api-session-controller/lib/client.js:4158` 写 `blank: entry.blank`，`entry.blank` 来自 `:3593` 的 `this.effectiveBlank(summary) && metadata?.blank !== false`；`effectiveBlank`（`lib/types/client/sessions/manager.js:219-221`）定义为 `summary.blank && !this.engagedSessions.has(sessionId)`。三者串起来，插件读到的 byId 行上 `blank` 只可能是 `true` 或 `false`，不会是 `1` 或 `"yes"`。那两条用例喂的形状在真实快照里不存在。
 
-### 2. blank 缺失时放行、宿主不放行？
+第二，"宿主 `sessionVisible` 会放行缺 `blank` 的行"这个结论来自只传两个参数的探针。宿主签名是 `sessionVisible(session, current, archived, archivedFilter)`，`archivedFilter` 未定义时走 `switch` 的 `default` 分支直接 `assertNever$1` 抛出 `unreachable variant: undefined`。带全四个参数（`new Set()` 与 `'default'`）重测，得到：
 
-**分两种形态，结论不同，必须分开看：**
+| `blank` | 非当前会话 | 当前会话 |
+| --- | --- | --- |
+| `true` | 隐藏 | 显示 |
+| `false` | 显示 | 显示 |
+| 缺失 | 显示 | 显示 |
 
-- 若宿主给的是**摘要行**（`summaryFor` / `summarizeCold`），`blank` 恒为布尔，报告那条会话的冷投影 `blank: true`（`~/.dsh/storages/session_projcache/sessions/session-6b440cb0-....json` 的 `sessionListMetadata.val = {"blank":true,"lastPromptAt":null}`），宿主的 `sessionVisible` 也会隐藏它——**此时没有分歧**，插件漏掉它是因为它读到的行没有该字段。
-- 若宿主给的是**没有 blank 字段的行**，宿主的 `sessionVisible` 同样放行（用例 `the Host keeps the same untitled Session, so the row alone explains nothing` 钉死：`visible === true`）。所以单凭"blank 缺失"复现不出"宿主隐藏而插件显示"。
+与插件 `session.blank === true && session.id !== currentSessionId` 逐格一致。判据**不需要改**，`=== true` 保留。
 
-也就是说，blank 缺失这条边界**不是**一条现存的可观测分歧，用例把它固定在"两侧都放行"这一事实上，防止将来有人误以为改 `=== true` 就能修掉这条真实缺陷。
+## 真实缺陷 `session-6b440cb0` 的成因
 
-### 3. 是否需要改实现
+会话本身是真的：`~/.dsh/sessions/--home-dev-code-TSPR-dsh-call-session--/session-6b440cb0-.../session.v4.jsonl.zstd` 解码后只有 session / permission / sandbox / approval 四行，没有 message、没有 title，是建立后未使用的空会话；它在工作区 `sessionIds` 里，不在归档名单。
 
-**需要，但不该改 `blank === true`。** 证据链：
+宿主会隐藏它：冷投影 `~/.dsh/storages/session_projcache/sessions/session-6b440cb0-....json` 的 `sessionListMetadata.val` 是 `{"blank":true,"lastPromptAt":null}`，经 `effectiveBlank` 得 `blank === true`，`sessionVisible` 在非当前时返回 false。
 
-- `dsh-api-session-controller/lib/index.js:1949` `summaryFor` → `blank: metadata?.blank ?? session.seq === 0`；`:1999` `summarizeCold` → `blank: metadata?.blank ?? false`。两者都产出布尔。
-- `dsh-api-session-controller/lib/client.js:4149-4215` 的 `projectList` 只在 manager 条目存在时写 `blank: entry.blank`；对**从未被打开过**的成员，条目没有 `blank` 字段，插件读到的 byId 行就缺这个字段。
-- `manager.js:697-710` 的 `buildListSnapshot` 才重新派生：`blank: this.effectiveBlank(summary) && metadata?.blank !== false`，`effectiveBlank = summary.blank && !engagedSessions.has(id)`。
+插件却把它列进二级菜单，且显示 `Agent #6b440cb0` 这种裸短 id 回落。差别不在 `blank` 判据，而在**两边读的不是同一份快照**：宿主侧栏走 `groupByWorkspace(list, ...)`，`list` 是 `projectList()` 投影出来的 `{ids, byId}`；插件二级走 `workspace.sessionIds` 再查 `sessions.list.getSnapshot().byId`。若这条会话在插件读到的快照里 `blank` 不是 `true`（例如行来自另一条派生路径），判据就放行它。
 
-所以真正缺的是"客户端行上的 blank 派生"。若要修，改点在 `lib/client.js:3729` 的 `isSidebarVisibleSession`（二级候选与 `alignNativeCandidatesWithSidebar` 共用），可考虑对"无 title 且无 `blank` 字段"另设兜底，或改读 manager 派生的行。**影响面**：二级候选菜单、原生包装层的对齐，以及所有依赖该判据的可见性结论；且与"照抄宿主真值"的裁决耦合，属于口径变更，本轮按票面要求只记录不动手。
-
-另一个需要更正的事实：报告说"显示裸 id 所以 blank 为假"，这个推断不成立。宿主 `sessionTitle`（`dsh-client-ui-workspace/lib/client.js:998`）对 blank 行返回空串占位，只有非 blank 行才显示 title；而插件的 `Agent #6b440cb0` 正是 `formatCandidateShortId` 对无 title 行的回落。两者并存不矛盾。
+这条**不是** `blank` 缺失导致的，必须原地更正：仓库里曾有"缺 `blank` 字段所以放行"的推断，与上表第三行矛盾——缺字段时宿主也放行，两侧一致，复现不出截图里的差异。
 
 ## 变异法
-
-每次改坏 `lib/client.js` 后跑单文件，`git checkout -- lib/client.js` 恢复：
 
 | 改坏点 | 变红用例 |
 | --- | --- |
 | `blank === true` → 真值判断 | 4 条（blank 1 / "yes" 记录项 + 真实空会话 blank 1 / "yes"） |
-| `isSubagentOrigin` 的 `header.origin` 兜底 `return false` | 2 条 |
-| 上限 `> 50` → `> 60` | 2 条（截断位置、只统计存活行） |
-| `sessionsById[sKey]` 改成一解析不到就抛 | 2 条（byId miss、畸形 sessionIds 语料重放） |
-| `sessionRecency` 去掉 `|| 0` | 1 条（updatedAt 缺失保持名册序） |
+| `isSubagentOrigin` 的 `header.origin` 兜底 `return false` | 3 条 |
+| 上限 `> 50` → `> 60` | 2 条 |
+| `sessionsById[sKey]` 改成一解析不到就抛 | 2 条 |
+| `sessionRecency` 去掉 `|| 0` | 1 条 |
+
+captain 独立复跑：`blank === true` → 真值判断时 `tests 664 / pass 660 / fail 4`；`header.origin` 兜底移除时 `661 / 3 fail`；两次均 `git checkout -- lib/client.js` 复原。改坏点删除后全仓 664 / 0。
 
 **如实交代三处改坏后仍全绿（弱覆盖）**：
 
-1. `resolveArchivedSessionIds`（`lib/client.js:3722-3723`）去掉 `Array.isArray` 守卫——因为 `isSidebarVisibleSession`（`:3734`）自己还有一层 `Array.isArray` 兜底，双重守卫删一处不改变行为。
-2. 二级候选的 `memberIds` 守卫改成 `|| []`——`null`/`undefined` 两条分支结果等价。
-3. 归档名单为字符串时，守卫删与不删都全放行：`:3734` 的 `Array.isArray` 先拦掉字符串，`indexOf` 永不执行。相应的字符串用例钉的是"不漏放可见成员"的现实行为，不是守卫本身。
+1. `resolveArchivedSessionIds`（`lib/client.js:3722-3723`）去掉 `Array.isArray` 守卫——`isSidebarVisibleSession`（`:3734`）自带同名守卫，双重兜底。
+2. 二级 `memberIds` 守卫改成 `|| []`——`null`/undefined 两分支等价。
+3. 归档名单为字符串时，`:3734` 先拦掉字符串，`indexOf` 永不执行。
 
 ## 待裁决
 
-1. **blank**：插件严格布尔 vs 宿主真值判断，是否照抄宿主。
-2. **origin**：插件 `header.origin` 兜底是否保留（当前与宿主不一致的两条）。
-3. **真实缺陷**：是否改 `isSidebarVisibleSession` 为"无 title 且缺 blank 字段"兜底隐藏，以及是否改为读取 manager 派生行——影响二级候选与原生包装层两处。
+1. **origin**：插件 `isSubagentOrigin`（`lib/client.js:3641`）认 `header.origin === 'subagent'`，宿主只认 `session.origin`。只有 `header.origin` 说是子代理、以及两者冲突两种情形，插件隐藏而宿主显示。是否保留这一兜底。
+2. **真实缺陷**：`session-6b440cb0` 在插件快照上的 `blank` 实际取值待实测；定位后再决定改 `isSidebarVisibleSession` 还是改快照读取口径。
+
+## 归档筛选与其余边界
+
+- `archivedSessionIds` 为 `null` / 字符串 / 数字时插件退化为空名单、照常出候选（宿主 `new Set(值)` 无守卫）。
+- 实尺退化：182 成员 / 618 归档，畸形名单时仍是 50 条上限、`session-live-000` 居首。
+- 宿主 `archivedFilter === "only"` 且组内无成员时整组跳过（`:1040`），插件二级无该分支。
+- `sessionIds` 为 `null` 或缺失：插件出空表不抛，宿主抛 `TypeError`。
+- 成员 id 在 byId 中缺失：跳过不抛，宿主同样跳过。重复 id 两侧都不去重。
+- 50 条上限在可见性过滤之后截断；`updatedAt` 为 `null`/缺失经 `|| 0` 排后，非数字字符串得 `NaN` 保持名册序。
