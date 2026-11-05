@@ -29,7 +29,11 @@ const rootDir = path.resolve(__dirname, '..', '..');
 
 // Authored at a 960-wide base and scaled up, so text stays legible when the
 // README renders the figure at roughly 800px.
-export const VIEWPORT = { ...FIGURE_SIZE, zoom: 1.5 };
+// Canvas stays at the figure size shared with the canvas demo; the zoom is what
+// fills it. At 1.5 the stage measured roughly 1000x300 of a 1440x840 frame and
+// the README showed mostly background, so the content is scaled up to sit inside
+// a narrow vertical band around the centre.
+export const VIEWPORT = { ...FIGURE_SIZE, zoom: 1.72 };
 
 // Level 1 rows come from the workspace roster: the current workspace pinned
 // first, the rest in roster order (ADR-0034 §4.1).
@@ -206,9 +210,9 @@ function figureCss(config) {
 ' display: flex; align-items: center; justify-content: center; gap: 14px; padding: 0 24px; }\n' +
 '.panel { background: #ffffff; border: 1px solid #e2e8f0; border-radius: 10px;' +
 ' box-shadow: 0 1px 2px rgba(15,23,42,.04), 0 8px 24px rgba(15,23,42,.05); }\n' +
-'.panel-menu { width: 218px; overflow: hidden; }\n' +
-'.panel-menu-wide { width: 314px; }\n' +
-'.panel-composer { width: 356px; padding: 16px 16px 14px; }\n' +
+'.panel-menu { width: 262px; overflow: hidden; }\n' +
+'.panel-menu-wide { width: 392px; }\n' +
+'.panel-composer { width: 400px; padding: 16px 16px 14px; }\n' +
 '.panel-head { height: 34px; display: flex; align-items: center; padding: 0 12px; border-bottom: 1px solid #eef2f7;' +
 ' font-size: 10px; font-weight: 500; letter-spacing: .05em; text-transform: uppercase; color: #526074; }\n' +
 '.menu-body { padding: 5px; }\n' +
