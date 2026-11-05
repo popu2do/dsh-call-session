@@ -122,7 +122,7 @@ headless 最终输出 `OK`。**同一 `turn=1` 内钩子被调用第二次，模
 
 根因在账本方向：`lib/call-telemetry.mjs` 的 `_pendingTasks` 只按收件方 `targetSessionId` 登记，结项分支却拿 `callerSessionId` 与 `targetSessionId` 交叉匹配。发起方会话身上因此没有记录，守卫查不到任何未结义务，自然不会催办；收件方那边因为自己已回执，也查不到。义务在语义上属于收件方，但发起方同样是当事人，查询必须双向可见。
 
-修复后 `getPendingTasksForSession` 同时匹配 `targetSessionId` 与 `callerSessionId`，1:1 结项按作用域匹配且 `task_hard` 优先落定。用例 9 覆盖了这条：外部会话反向给调用方压一条 `task_hard`，守卫必须对调用方催办，调用方回执后该记录转 `settled`。
+修复后 `getPendingTasksForSession` 同时匹配 `targetSessionId` 与 `callerSessionId`，1:1 结项先按「发件方 = 回执接收方」配对，再在配对范围内严格先进先出，硬任务既不会被后来的软任务越过，也不会被别人的回执抵消。用例 9 覆盖了这条：外部会话反向给调用方压一条 `task_hard`，守卫必须对调用方催办，调用方回执后该记录转 `settled`。
 
 ## 测试替身的教训
 

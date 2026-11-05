@@ -75,8 +75,8 @@ ADR Writing Guidelines (writing-for-agents):
 ### 账本
 
 调用内存环形缓冲区（CallTelemetryRingBuffer）维护会话维度的内存未结任务账本 `_pendingTasks`：
-1. **入队记录**：当单播调用类型为 `task_soft` 或 `task_hard` 且投递成功时（`session_create` 携带初始消息并成功投递也按同一规则入队，两种入口共用一本账），记录包含 `taskId`、`callerSessionId`、`targetSessionId`、`callType`、`contentSnippet`、`timestamp` 与 `isHard` 的任务项。
-2. **先进先出结算**：当接收方调用 `session_call` 且类型为 `task_report` 时，从该会话作为目标的所有未结任务中查找最先派发的一项（严格全局 FIFO，不按发件人分桶，早到的软任务不会被后来的硬任务插队饿死），将其标记为 `settled` 并记入结算时间与汇报编号；找不到匹配项时不报错，只在账本上留下一条未匹配记录。
+1. **入队记录**：当单播调用类型为 `task_soft` 或 `task_hard` 且投递成功时（`session_create` 携带初始消息并成功投递也按同一规则入队，两种入口共用一本账），任务项只记录定位与判别所需的最小字段：呼叫编号 `callId`、发件方 `callerSessionId` 与其显示标题 `callerTitle`、接收方 `targetSessionId`、`callType` 与入队时刻 `timestamp`。是否硬任务由 `callType` 判定，正文留在环形缓冲区的原始呼叫记录里，不复制进账本。
+2. **先进先出结算**：当接收方调用 `session_call` 且类型为 `task_report` 时，先按「发件方 = 本次回执的接收方」筛出该回执有权结清的未结任务，再从这批里取最先派发的一项，并把环形缓冲区里对应呼叫的状态标记为 `settled`（结算时间与汇报编号不单独落盘，回执本身就是那条呼叫记录）。结项在同一发件方范围内严格先进先出，早到的软任务不会被后来的硬任务插队饿死；跨发件方互不抵消，向 A 回执不结 B 的账。找不到匹配项时不报错，只在账本上留下一条未匹配记录。
 3. **义务归属**：义务只落在接收方身上，只有接收方会被要求回执；发件方只是在等结果，不会因为没有收到回执而被拦下。
 4. **会话级联清理**：当会话归档或销毁时，自动从账本中移除以该会话为发件人或接收人的未结项，杜绝内存泄漏。
 
