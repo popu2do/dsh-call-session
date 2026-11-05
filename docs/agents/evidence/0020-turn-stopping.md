@@ -120,9 +120,9 @@ headless 最终输出 `OK`。**同一 `turn=1` 内钩子被调用第二次，模
 
 复现：调用方会话用 `session_create` 建对等会话，随即投递一条 `task_hard`，然后按指令结束本轮。对等会话侧能正常自回 `task_report`（投递链路通），但两边的会话事件流里都找不到任何 `[Task Hard Obligation]` 注入。
 
-根因在账本方向：`lib/call-telemetry.mjs` 的 `_pendingTasks` 只按收件方 `targetSessionId` 登记，结项分支却拿 `callerSessionId` 与 `targetSessionId` 交叉匹配。发起方会话身上因此没有记录，守卫查不到任何未结义务，自然不会催办；收件方那边因为自己已回执，也查不到。义务在语义上属于收件方，但发起方同样是当事人，查询必须双向可见。
+当时以为根因在账本方向，于是试过让 `getPendingTasksForSession` 同时匹配 `targetSessionId` 与 `callerSessionId`（"发起方也是当事人"）。这条改动后来被推翻：义务只落在收件方身上，发起方只是在等结果，把它也拉进账本会让守卫追着发起方要它汇报自己正在等的事。
 
-修复后 `getPendingTasksForSession` 同时匹配 `targetSessionId` 与 `callerSessionId`，1:1 结项先按「发件方 = 回执接收方」配对，再在配对范围内严格先进先出，硬任务既不会被后来的软任务越过，也不会被别人的回执抵消。用例 9 覆盖了这条：外部会话反向给调用方压一条 `task_hard`，守卫必须对调用方催办，调用方回执后该记录转 `settled`。
+现在 `lib/call-telemetry.mjs:246` 的 `getPendingTasksForSession` 只按 `targetSessionId` 过滤，1:1 结项先按「发件方 = 回执接收方」配对，再在配对范围内严格先进先出。所以本条实机现象的诚实结论是：账本方向没有缺陷，守卫当时不催办是因为该场景里的发起方并没有欠账；守卫到底会不会在真机上催办，仍只认宿主事件。
 
 ## 测试替身的教训
 
