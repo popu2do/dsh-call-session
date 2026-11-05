@@ -15,11 +15,11 @@ _Avoid_: 全局事件总线, 广播信道, 消息队列
 _Avoid_: 广播消息, 事件通知
 
 **单播调用 / Unicast Call**:
-严格 1 对 1 推送给单一目标会话的调度通知，用于驱动协同推进。呼叫类型包括 notice（单向通报）、task_soft（弹性任务）、task_hard（强制任务）与 task_report（成果汇报）。
-_Avoid_: 群发, 广播调用, 多播
+严格 1 对 1 推送给单一目标会话的调度通知，用于驱动协同推进。呼叫类型包括 notice（单向通报）、task_soft（通知任务）、task_hard（履约任务）与 task_report（成果汇报）。
+_Avoid_: 群发, 广播调用, 多播, 弹性任务, 强制任务
 
 **汇报义务 / Report Obligation**:
-单播任务派发（task_soft / task_hard）向目标会话施加的履约责任。接收方必须通过单次 task_report 回传成果以达成任务闭环。task_hard 具备硬性履约约束，未履约前将被停机守卫拦截。
+单播任务派发向目标会话施加的履约责任。task_hard 是履约任务，接收方必须通过单次 task_report 回传成果以达成任务闭环，未履约前将被停机守卫拦截；task_soft 是通知任务，义务靠上下文提示宣达，不拦截轮次结束。
 _Avoid_: 任务催办总线, 强制同步调用, 挂起等待
 
 **未结任务账本 / Pending Task Ledger**:

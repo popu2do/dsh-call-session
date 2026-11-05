@@ -322,7 +322,7 @@ test('Boundary Exploration: 6. Turn-stopping guard budget, turn reset & abort si
   }
 
   // 载荷必须与宿主接收的形状一致：原生 UserMessage，报头标 notice 而不是任务类型，
-  // 否则守卫会给自己造出新的强制待办（自激循环）
+  // 否则守卫会给自己造出新的履约任务（自激循环）
   const samplePayload = steered()[0].msg;
   assert.equal(samplePayload.role, 'user');
   assert.equal(samplePayload.source.kind, 'plugin:dsh-call-session');

@@ -33,7 +33,7 @@ ADR Writing Guidelines (writing-for-agents):
 
 ## 驱动
 
-- **类型语义正交**：彻底分离单向知悉、弹性任务、强制任务与结果闭环，杜绝歧义。
+- **类型语义正交**：彻底分离单向知悉、通知任务、履约任务与结果闭环，杜绝歧义。
 - **确定性闭环契约**：单任务单汇报（1:1 FIFO），以最小心智负担保障职责清晰与账本自愈。
 - **零侵入上下文提醒**：复用原生 `systemPrompt.context`（如 `task:remind`），在每步推理前让智能体保持义务上下文，杜绝提示词硬编码。
 - **强屏障防丢单**：对 `task_hard` 施加轮次停机拦截，未履约前强制追问，并在预算耗尽后优雅兜底。
@@ -64,8 +64,8 @@ ADR Writing Guidelines (writing-for-agents):
 
 `session_call` 入参 `call_type` 严格限定为四态：
 - `notice`：单向状态通报，纯通知属性，无汇报义务，接收方无需回复。
-- `task_soft`：弹性任务。派发建议、前置准备或轻量任务，接收方通过单次 `task_report` 结算；每步前获得上下文提示，但不强制拦截停机。
-- `task_hard`：强制任务。派发具有明确汇报义务的硬性任务，接收方若在未交付 `task_report` 的情况下尝试结束轮次，将被停机守卫拦截。
+- `task_soft`：通知任务。派发建议、前置准备或轻量任务，接收方应通过单次 `task_report` 结算；每步前获得上下文提示，但轮次结束不被拦截。
+- `task_hard`：履约任务。派发必须回执的任务，接收方若在未交付 `task_report` 的情况下尝试结束轮次，将被停机守卫拦截。
 - `task_report`：任务成果汇报。严格按 FIFO 闭环未结任务队列中的首个匹配项，接收方归档，无需回复。
 
 任何传入 `task_dispatch` 的调用均被参数校验拦截，抛出 `[InvalidParameter] session_call: task_dispatch is deprecated. Use notice, task_soft, task_hard, or task_report.`

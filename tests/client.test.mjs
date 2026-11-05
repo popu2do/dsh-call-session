@@ -3721,7 +3721,7 @@ test('12. A mixed fixture keeps unsettled obligations flowing and decays settled
     return group.children.filter(Boolean).find((n) => n && n.props && n.props.markerEnd);
   };
 
-  // 1. 未结的强制任务：满不透明、流动虚线、琥珀色箭头
+  // 1. 未结的履约任务：满不透明、流动虚线、琥珀色箭头
   const hardOpen = edgeOf('call-hard-open').props;
   assert.equal(hardOpen.opacity, 1.0, 'an unsettled hard task keeps full opacity');
   assert.equal(hardOpen.strokeDasharray, '6 4', 'an unsettled obligation keeps the flowing dash');
