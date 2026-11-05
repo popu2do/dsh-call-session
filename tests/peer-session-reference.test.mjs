@@ -438,11 +438,6 @@ test('Peer Session Reference: Dictionary entries in zh and en are symmetrical an
   assert.equal(plugin.zh['section.workspaces'], '工作区');
   assert.equal(plugin.en['section.workspaces'], 'Workspaces');
 
-  assert.ok(plugin.zh['header.root'], 'zh dictionary must contain header.root');
-  assert.ok(plugin.en['header.root'], 'en dictionary must contain header.root');
-  assert.equal(plugin.zh['header.root'], '工作区根目录');
-  assert.equal(plugin.en['header.root'], 'Workspace Root');
-
   assert.equal(plugin.zh['workspace.current'], '当前');
   assert.equal(plugin.en['workspace.current'], 'Current');
   assert.equal(plugin.zh['session.running'], '运行中');
@@ -807,7 +802,7 @@ test('Peer Session Reference: Canonical 8-character short ID badge and title dis
   assert.ok(list[3].description.startsWith('会话已离线 · '), 'Offline session must display offline status prefix with relative time');
 });
 
-test('Peer Session Reference: Drill header, root switching, and workspace header', () => {
+test('Peer Session Reference: the session drill-down carries no level heading and no way back', () => {
   const { plugin } = loadClientInSandbox();
   // 下钻标题的目标工作区从名册解析，因此这条用例必须给出与二级成员一致的名册
   const { getRegisteredSource } = setupMockContext(plugin, {
@@ -821,47 +816,34 @@ test('Peer Session Reference: Drill header, root switching, and workspace header
   });
   const src = getRegisteredSource();
 
-  // 未下钻时返回 undefined
+  // 一级与二级都不出下钻标题：工作区那一层只在候选行里出现，菜单不复述层级
   assert.equal(src.header({ sessionId: 'session-curr' }, { query: '', drilled: false }), undefined);
   assert.equal(src.header({ sessionId: 'session-curr' }, null), undefined);
+  assert.equal(
+    src.header({ sessionId: 'session-curr' }, { query: CURRENT_WS, drilled: true }),
+    undefined,
+    'The drilled menu must not render a drill header above the session rows'
+  );
+  assert.equal(
+    src.header({ sessionId: 'session-curr' }, { query: CURRENT_WS + ' 过滤关键词', drilled: true }),
+    undefined,
+    'Typing a filter after the workspace path must keep the menu free of a drill header'
+  );
 
-  // 已下钻时返回二级下钻标题
-  const header = src.header({ sessionId: 'session-curr' }, { query: CURRENT_WS, drilled: true });
-  assert.ok(Array.isArray(header));
-  assert.equal(header.length, 2);
-
-  // 根条目
-  assert.equal(header[0].label, '工作区根目录');
-  const rootVal = JSON.parse(header[0].value);
-  assert.equal(rootVal.kind, 'workspace-root');
-
-  // 当前工作区条目
-  assert.equal(header[1].label, 'dsh-call-session');
-  assert.equal(header[1].current, true);
-  const wsVal = JSON.parse(header[1].value);
-  assert.equal(wsVal.kind, 'workspace');
-  assert.equal(wsVal.path, CURRENT_WS);
-
-  // 验证搜索词输入时下钻标题名称不被过滤词污染
-  const headerWithQuery = src.header({ sessionId: 'session-curr' }, { query: CURRENT_WS + ' 过滤关键词', drilled: true });
-  assert.ok(Array.isArray(headerWithQuery));
-  assert.equal(headerWithQuery[1].label, 'dsh-call-session', 'Drill header must remain the workspace name without query filter text');
-
-  // 点击或回车选定工作区：无论 action 为 pick 还是 drill 均触发下钻
+  // 工作区行仍可下钻：选中回填带引号的路径并继续停在同一层
   const clickPick = src.onPick({
-    action: 'pick',
-    candidate: header[1]
+    action: 'drill',
+    candidate: { value: JSON.stringify({ kind: 'workspace', path: CURRENT_WS }) }
   });
   assert.equal(clickPick.text, '@' + CURRENT_WS);
   assert.equal(clickPick.continue, true);
 
-  // 点击下钻标题根条目：返回 @ 且 continue: true 切回一级工作区列表
-  const rootPick = src.onPick({
-    action: 'drill',
-    candidate: header[0]
-  });
-  assert.equal(rootPick.text, '@');
-  assert.equal(rootPick.continue, true);
+  // 取消返回一级的入口后，workspace-root 不再是可识别的候选种类
+  assert.equal(
+    src.onPick({ action: 'drill', candidate: { value: JSON.stringify({ kind: 'workspace-root', path: '' }) } }),
+    undefined,
+    'The retired workspace-root kind must not resolve to an action'
+  );
 });
 
 test('Peer Session Reference: Session selection, pure slice reference URI, and codec contract', async () => {
@@ -927,9 +909,8 @@ test('Peer Session Reference: Zero cross-boundary and zero board orchestration i
   const drillPick = src.onPick({ action: 'drill', candidate: l1[0] });
   assert.ok(drillPick.continue);
 
-  // 3. 读取下钻标题
-  const header = src.header({ sessionId: 'session-curr' }, { query: CURRENT_WS, drilled: true });
-  assert.equal(header.length, 2);
+  // 3. 二级不出下钻标题
+  assert.equal(src.header({ sessionId: 'session-curr' }, { query: CURRENT_WS, drilled: true }), undefined);
 
   // 4. 二级会话展开
   const l2 = await src.candidates({ sessionId: 'session-curr' }, { query: CURRENT_WS, drilled: true });
@@ -943,11 +924,7 @@ test('Peer Session Reference: Zero cross-boundary and zero board orchestration i
   const sessionPick = src.onPick({ action: 'pick', candidate: l2Filtered[0] });
   assert.ok(sessionPick.insert);
 
-  // 7. 点击下钻标题切回根目录
-  const backPick = src.onPick({ action: 'drill', candidate: header[0] });
-  assert.equal(backPick.text, '@');
-
-  // 8. 编解码执行
+  // 7. 编解码执行
   const ref = sessionPick.insert.ref;
   src.codec.clipboardText(ref);
   await src.codec.serialize(ref);
@@ -985,9 +962,14 @@ test('Peer Session Reference: English locale end-to-end symmetry across discover
   assert.equal(l1[0].section, 'Workspaces', 'Level 1 section must be Workspaces in English');
   assert.equal(l1[0].description, 'Current', 'Current workspace description must be Current in English');
 
-  // 下钻标题英文词条断言
-  const header = src.header({ sessionId: 'session-curr' }, { query: CURRENT_WS, drilled: true });
-  assert.equal(header[0].label, 'Workspace Root', 'Root entry must be Workspace Root in English');
+  // 二级不出下钻标题，英文词条里也不再保留根目录那一项
+  assert.equal(
+    src.header({ sessionId: 'session-curr' }, { query: CURRENT_WS, drilled: true }),
+    undefined,
+    'The drilled menu stays headerless in English too'
+  );
+  assert.equal(plugin.en['header.root'], undefined, 'The retired root heading must not linger in the English dictionary');
+  assert.equal(plugin.zh['header.root'], undefined, 'The retired root heading must not linger in the Chinese dictionary');
 
   // 二级会话列表英文三态描述断言
   const l2 = await src.candidates({ sessionId: 'session-curr' }, { query: CURRENT_WS, drilled: true });
@@ -1910,13 +1892,11 @@ test('Peer Session Reference: one level predicate decides both the plugin menu a
   const typedRequest = { query: CLUSTER_WS, drilled: false };
   const typedLevel2 = await registeredSource.candidates({ sessionId: 'session-curr' }, typedRequest);
   assert.deepEqual(Array.from(typedLevel2), [], 'A hand-typed workspace path must expand Level 2, not fall back to the workspace list');
-  const typedHeader = registeredSource.header({ sessionId: 'session-curr' }, typedRequest);
   assert.equal(
-    typedHeader[1].label,
-    'dsh-agent-cluster',
-    'A hand-typed workspace path must name the drilled workspace in the plugin header'
+    registeredSource.header({ sessionId: 'session-curr' }, typedRequest),
+    undefined,
+    'A hand-typed workspace path enters Level 2 without a drill header'
   );
-  assert.equal(JSON.parse(typedHeader[1].value).path, CLUSTER_WS);
   assert.deepEqual(
     Array.from(await nativeSource.candidates({ sessionId: 'session-curr' }, typedRequest)),
     [],
@@ -1950,24 +1930,19 @@ test('Peer Session Reference: the drill header follows the same level predicate 
   });
   const src = getRegisteredSource();
 
-  // 手敲名册路径：宿主 drilled 为假，查询串点名了名册工作区，头部必须给出两条下钻标题
-  const typedHeader = src.header({ sessionId: 'session-curr' }, { query: CLUSTER_WS, drilled: false });
-  assert.ok(Array.isArray(typedHeader), 'A hand-typed workspace path must expose both drill header entries');
-  assert.equal(typedHeader.length, 2, 'The drill header keeps exactly the root entry and the target workspace entry');
-  assert.equal(typedHeader[0].label, '工作区根目录');
-  assert.equal(JSON.parse(typedHeader[0].value).kind, 'workspace-root');
-  assert.equal(typedHeader[1].label, 'dsh-agent-cluster', 'The drill header names the hand-typed workspace, not the current cwd');
-  assert.equal(typedHeader[1].current, true);
+  // 手敲名册路径：宿主 drilled 为假，查询串点名了名册工作区，菜单仍按二级展开且不出下钻标题
   assert.equal(
-    JSON.parse(typedHeader[1].value).path,
-    CLUSTER_WS,
-    'The drill header points at the hand-typed workspace root so the level can be changed'
+    src.header({ sessionId: 'session-curr' }, { query: CLUSTER_WS, drilled: false }),
+    undefined,
+    'A hand-typed workspace path enters Level 2 without a drill header'
   );
 
-  // 老路径：drilled 为真且查询串点名了名册工作区，头部仍指向点名的那一个
-  const drilledHeader = src.header({ sessionId: 'session-curr' }, { query: CURRENT_WS, drilled: true });
-  assert.equal(drilledHeader[1].label, 'dsh-call-session', 'A drilled request keeps naming the drilled workspace');
-  assert.equal(JSON.parse(drilledHeader[1].value).path, CURRENT_WS);
+  // 老路径：drilled 为真且查询串点名了名册工作区，头部同样不出标题
+  assert.equal(
+    src.header({ sessionId: 'session-curr' }, { query: CURRENT_WS, drilled: true }),
+    undefined,
+    'A drilled request keeps the menu headerless'
+  );
 
   // 一级与无法解析的目标：保持不出标题，不编造工作区
   assert.equal(
@@ -1979,7 +1954,7 @@ test('Peer Session Reference: the drill header follows the same level predicate 
   assert.equal(src.header({ sessionId: 'session-curr' }, null), undefined);
 });
 
-test('Peer Session Reference: the drill header reads the workspace roster snapshot once per request', () => {
+test('Peer Session Reference: a headerless menu never reads the workspace roster', () => {
   const { plugin } = loadClientInSandbox();
 
   let reads = 0;
@@ -2021,8 +1996,9 @@ test('Peer Session Reference: the drill header reads the workspace roster snapsh
     }
   });
 
+  // 头部不再承担层级展示，也就不该为它多读一次名册快照
   const typedRequest = { query: CLUSTER_WS, drilled: false };
-  registeredSource.header({ sessionId: 'session-curr' }, typedRequest);
-  assert.equal(reads, 1, 'One drill header computation must read the workspace roster snapshot exactly once');
+  assert.equal(registeredSource.header({ sessionId: 'session-curr' }, typedRequest), undefined);
+  assert.equal(reads, 0, 'A headerless menu must not read the workspace roster snapshot at all');
 });
 
