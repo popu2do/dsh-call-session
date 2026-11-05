@@ -763,7 +763,7 @@ test('executeSessionCall 出参元信息: 三种呼叫类别均携带客观收�
     options: { config: { locale: 'zh' } }
   });
   assert.equal(resReportZh.success, true);
-  assert.ok(resReportZh.message.includes('已完成收口汇报，无需回复'));
+  assert.ok(resReportZh.message.includes('已完成任务汇报，无需回复'));
 
   const resReportEn = await executeSessionCall({
     ctx,

@@ -59,7 +59,7 @@
 ### 4.2 出参规约
 在 `lib/locales/zh.mjs` 与 `lib/locales/en.mjs` 的 `sessionCallSuccess` 与 `sessionCreateSuccess` 中追加客观收敛说明：
 - `session_call(task_dispatch)`: 追加已派发任务等待目标回传，无需重复轮询。
-- `session_call(task_report)`: 追加已完成收口汇报，无需回复。
+- `session_call(task_report)`: 追加已完成任务汇报，无需回复。
 - `session_call(notice)`: 追加单向通报阅后即止，无需回复。
 - `session_create`: 若包含初始任务则追加初始任务已派发等待目标回传，未包含则提示就绪待命。
 
