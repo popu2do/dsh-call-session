@@ -584,3 +584,83 @@ hostTest('Secondary candidates: the archived "only" filter empties the Host grou
   );
 });
 
+
+// ---------------------------------------------------------------------------
+// The Session reported from the live environment
+// ---------------------------------------------------------------------------
+
+/**
+ * The live Session the ticket reports: session-6b440cb0-c9d7-4c50-8861-433f325aafc1 was
+ * built and never used, so its log holds four metadata frames and no message and no
+ * title. It belongs to this Workspace's sessionIds, it is not archived, and it showed up
+ * third in the level-2 menu rendered as a bare id.
+ *
+ * The plugin hides a row only when blank is the strict boolean true
+ * (lib/client.js:3733). The Host bundle's blank producer always writes a boolean
+ * (dsh-api-session-controller/lib/types/list.js: summaryFor uses
+ * "blank: metadata?.blank ?? session.seq === 0" and summarizeCold uses
+ * "blank: metadata?.blank ?? false"), so the live environment can hand the plugin a
+ * blank-bearing row only in one of four shapes. Each shape is replayed below with a real
+ * UUID-shaped id, and the two verdicts are compared.
+ */
+const UUID_SHAPED_ID = 'session-6b440cb0-c9d7-4c50-8861-433f325aafc1';
+
+const LIVE_SUMMARY_SHAPES = [
+  {
+    label: 'blank true, the shape the Host writes for an unused Session',
+    fields: { blank: true },
+    pluginOffers: false,
+    hostVisible: false
+  },
+  {
+    label: 'blank absent, the shape a summary projection drops the field into',
+    fields: {},
+    pluginOffers: true,
+    hostVisible: true
+  },
+  {
+    label: 'blank 1, a non-boolean truthy flag',
+    fields: { blank: 1 },
+    pluginOffers: true,
+    hostVisible: false
+  },
+  {
+    label: 'blank "yes", a truthy string flag',
+    fields: { blank: 'yes' },
+    pluginOffers: true,
+    hostVisible: false
+  }
+];
+
+for (const shape of LIVE_SUMMARY_SHAPES) {
+  hostTest('Secondary candidates: the reported unused Session when ' + shape.label, async () => {
+    const row = coldUntitledRow(UUID_SHAPED_ID, WORKSPACE_PATH, { updatedAt: REFERENCE_NOW });
+    Object.assign(row, shape.fields);
+    const hostVisible = hostJudgments().sessionVisible(row, CURRENT_SESSION_ID, new Set(), 'default');
+    const candidates = await level2For({ [row.id]: row, 'session-boundary-live': titledRow('session-boundary-live', 'Live session', { cwd: WORKSPACE_PATH, updatedAt: REFERENCE_NOW - 60 }) });
+    const offered = offeredIds(candidates);
+
+    assert.equal(hostVisible, shape.hostVisible, 'the Host verdict for this summary shape');
+    assert.equal(offered.includes(UUID_SHAPED_ID), shape.pluginOffers, 'the plugin verdict for this summary shape');
+    if (shape.pluginOffers) {
+      const untitled = candidates.find((item) => JSON.parse(item.value).sessionId === UUID_SHAPED_ID);
+      assert.equal(untitled.label, 'Agent #6b440cb0', 'an untitled row falls back to its short id label');
+    }
+  });
+}
+
+/**
+ * The defect report says the row rendered as a bare id, not as "Agent 6b440cb0: ...".
+ * That wording matters: only a row whose title is missing or is not a string falls back,
+ * so the live summary had no usable title. A titled blank Session of the same shape stays
+ * hidden, which is why the menu label is itself evidence about the summary.
+ */
+test('Secondary candidates: an untitled blank Session without a blank flag carries the bare-id fallback', async () => {
+  const row = coldUntitledRow(UUID_SHAPED_ID, WORKSPACE_PATH, { updatedAt: REFERENCE_NOW });
+  const candidates = await level2For({ [row.id]: row });
+  const item = candidates.find((candidate) => JSON.parse(candidate.value).sessionId === UUID_SHAPED_ID);
+
+  assert.ok(item, 'an untitled row with no blank flag reaches the menu');
+  assert.equal(item.label, 'Agent #6b440cb0', 'the label is the short id badge, which is what the report saw as a bare id');
+  assert.equal(item.description, 'time.months', 'only the recency line describes the row, since it never had a title');
+});
