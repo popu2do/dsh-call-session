@@ -662,8 +662,8 @@ test('Peer Session Reference: Tab drill-down and Level 2 flat session expansion 
   assert.ok(!level2Local.some(item => item.label.includes('临时子代理任务')), 'Subagents must be strictly excluded from Level 2 (ADR-0010, ADR-0024)');
   assert.ok(!level2Local.some(item => item.label.includes('历史已归档任务')), 'Archived sessions must be strictly excluded from Level 2 (ADR-0010, ADR-0024)');
 
-  // 扁平列表契约：绝无微分类
-  assert.ok(level2Local.every(item => item.section === undefined), 'Level 2 must be flat with section undefined');
+  // 扁平列表契约：一条会话一行，不按任何微分类拆分；面板标题统一取「对话」，与一级「工作区」对齐
+  assert.ok(level2Local.every(item => item.section === '对话'), 'Level 2 carries one 对话 section and no micro-sections');
   assert.ok(level2Local.every(item => item.icon === 'session'), 'Level 2 items must use session icon');
 
   // 下钻远端工作区
