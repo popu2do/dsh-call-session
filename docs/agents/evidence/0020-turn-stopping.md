@@ -2,8 +2,8 @@
 
 本文件记录 `agent/turn-stopping` 在真实宿主进程里的行为，供守卫实现与测试引用。
 取证方式：独立 headless profile（`~/.dsh/profiles/probe20`），不触碰正在使用的 Web GUI。
-探针脚本是一次性的临时文件，取证结束即删，仓库里不留；下面的日志片段与复现工序才是可复核的部分，
-按「复现命令」一节重跑即可得到同类事件流。
+探针是跑在独立 profile 里的一次性代码，取证结束即删，仓库里不留（`.githooks/pre-commit` 也拒绝新增 `scripts/` 文件）；
+下面的日志片段与复现工序才是可复核的部分，按「复现命令」一节重跑即可得到同类事件流。
 
 ## 复现命令
 
@@ -66,7 +66,8 @@ headless 最终输出 `OK`。**同一 `turn=1` 内钩子被调用第二次，模
 ```
 
 **钩子一次都没触发**：中止路径直接让 agent 转 idle，走不到 turn-stopping。
-守卫里对 `signal.aborted` 的短路因此是防御性约束（宿主升级后行为可能改变），而不是补偿一个已观测缺陷。
+守卫里对 `signal.aborted` 的短路因此是防御性约束（宿主升级后行为可能改变），而不是补偿一个已观测缺陷；
+它的值由 `tests/report-obligation.test.mjs` 用例 7 守住，不靠实机复现。
 
 ## 对实现的约束
 
@@ -126,7 +127,7 @@ headless 最终输出 `OK`。**同一 `turn=1` 内钩子被调用第二次，模
 
 ## 测试替身的教训
 
-`tests/helpers/mock-agent.mjs` 的 `steer`/`followup` 原先接受任意值，"守卫调用了 steer"这条断言在纯字符串载荷下依然通过，而真实宿主直接崩。现改为 `assertNativeUserMessage`：非对象、缺 `id`、`role` 非 `user`、`content` 为空或非 text 分片一律抛 `TypeError`。
+`tests/helpers/mock-agent.mjs` 的 `steer`/`followup` 原先接受任意值，「守卫调用了 steer」这条断言在纯字符串载荷下依然通过，而真实宿主直接崩。现改为 `assertNativeUserMessage`：非对象、缺 `id`、`role` 非 `user`、`content` 为空或非 text 分片一律抛 `TypeError`。替身由此复刻宿主的接收规则，「抛错」直接对应「实机会死」。
 
 ## T-C 验收：红绿对照
 
