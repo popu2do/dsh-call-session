@@ -147,9 +147,9 @@ test('mention figure structure: Level 1 is a workspace section and Level 2 is a 
 
     // 一级：section 名为 工作区 / Workspaces，只装工作区条目，每条带 drill 箭头。
     // 两个菜单在同一个文档里，行数按各自的 section 块切分来数。
-    // 一级是唯一带 section 标题的菜单，二级没有标题，块边界改由面板本身切分
-    const level1Html = html.split('level-head">')[1].split('class="panel panel-menu panel-menu-wide"')[0] || '';
-    const level2Html = html.split('class="panel panel-menu panel-menu-wide"')[1] || '';
+    // 两个菜单在同一个文档里，行数按各自的 section 块切分来数。
+    const level1Html = html.split('level-head">')[1] || '';
+    const level2Html = html.split('level-head">')[2] || '';
 
     assert.equal(
       model.level1.section,
@@ -176,24 +176,16 @@ test('mention figure structure: Level 1 is a workspace section and Level 2 is a 
       figure.locale + ' figure Level 1 must never carry a session row (contract: level-1 rows)'
     );
 
-    // 二级：只装会话条目，且不画任何 section 标题——工作区那一层只在一级命名一次，
-    // 在会话列表上方再复述一遍等于说工作区还是下钻里可以选的一类。
+    // 二级：section 名为「对话」时的面板标题，只装会话条目
     assert.equal(
       model.level2.section,
-      null,
-      figure.locale + ' figure Level 2 must carry no section title (contract: level-2 headless)'
+      figure.locale === 'zh' ? '对话' : 'Sessions',
+      figure.locale + ' figure Level 2 must use the shipped session section word (contract: level-2 section)'
     );
-    assert.equal(
-      countOf(level2Html, 'class="panel-head level-head"'),
-      0,
-      figure.locale + ' figure Level 2 must render no heading above the session rows (contract: level-2 headless)'
+    assert.ok(
+      html.includes('level-head">' + model.level2.section + '</header>'),
+      figure.locale + ' figure must render the Level 2 section heading (contract: level-2 section)'
     );
-    for (const retired of ['对话', 'Sessions']) {
-      assert.ok(
-        !html.includes('level-head">' + retired + '</header>'),
-        figure.locale + ' figure must not resurrect a "' + retired + '" heading the plugin never renders'
-      );
-    }
     assert.equal(
       countOf(level2Html, 'class="menu-row session-row'),
       model.sessions.length,

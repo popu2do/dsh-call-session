@@ -21,7 +21,7 @@ Bring every surface onto one membership rule and stop rendering file-browsing ch
 3. **Level 2 visibility mirrors the sidebar.** A member is listed when it resolves in `sessions.byId` and passes the sidebar's own three exclusions: `origin === "subagent"` is dropped, `blank` is dropped unless it is the current session, and `archivedSessionIds` membership is dropped under the default archive filter.
 4. **The session drill-down carries no file semantics and no level heading.** While drilled, the plugin's native reference wrapper returns an empty array, so the host contributes neither `对话` session rows, nor its `工作区` drill header, nor `进入目录` directory rows. The plugin's own `header` hook returns `undefined` at both levels, so Level 2 shows the session rows and nothing above them. The workspace tier is expressed by the workspace rows in Level 1 alone; restating it as a heading over the session rows makes the menu read as if a workspace were still a category inside the drill-down, and reachable `进入目录`-shaped rows are the misleading affordance that omission avoids. There is no "back to the workspaces" entry either: returning to Level 1 is deleting text from the composer, which is the interaction the composer already has.
 5. **Drill state follows the query, not only the host flag.** A query that resolves to a known workspace is treated as Level 2 whether it arrived from a drill action or from typing, so the level boundary never collapses.
-6. **The README asset is regenerated from the real structure.** The demo renders the real Level 1 (`工作区` section, workspace rows only) and the real Level 2 (session rows with status and short ID, no section title, no drill header, no directory rows), and the false recency claim is removed from both READMEs.
+6. **The README asset is regenerated from the real structure.** The demo renders the real Level 1 (`工作区` section, workspace rows only) and the real Level 2 (`对话` section, session rows with status and short ID, no drill header, no directory rows), and the false recency claim is removed from both READMEs.
 
 ## User Stories
 
@@ -47,7 +47,7 @@ Bring every surface onto one membership rule and stop rendering file-browsing ch
 
 The capability registers a client input trigger source named `peer-session` on the `@` character with `order: -10` and `showGroupTitle: false`. Level 1 supplies `section: t('section.workspaces')` on every workspace row, so `工作区` renders as a section title above the roster.
 
-Level 2 supplies `section: undefined` on every session row, and so does the host's `对话` row set, which the drill-down suppresses. The drilled menu therefore has no section title at all: the workspace tier is named once, in Level 1, and repeating it over a list of sessions would say the workspace is still a category to pick from when it has already been picked.
+Level 2 supplies `section: t('section.sessions')` on every session row, so `对话` renders as a section title over the members of the drilled workspace. Each level names its own tier once, and the section titles are what carry that naming; the host's own `对话` row set is suppressed and contributes no title of its own.
 
 ### Level 1: Roster As Truth
 
@@ -80,7 +80,7 @@ Ordering is a single tier by `updatedAt` descending with zero collaborator pinni
 
 Level 1 does not clamp. ADR-0034 Invariant 8 sizes the cap to keep the secondary list bounded on a keystroke path; the roster is small and fixed by what the user registered, and hiding workspace number 51 is not a latency problem but a missing workspace. The two levels are therefore deliberately asymmetric, and this asymmetry is the resolution of the conflict between Invariant 8 and "Level 1 candidate count equals `workspaces.items.length`": the count rule wins on Level 1, the clamp wins on Level 2.
 
-Every Level 2 candidate carries `section: undefined` and no `drill` field.
+Every Level 2 candidate carries `section: t('section.sessions')` and no `drill` field.
 
 ### Drill-Down Suppresses Native Reference Candidates
 
@@ -136,7 +136,7 @@ Required fixture cases:
 
 ### Asset Assertions
 
-`tests/mention-demo-asset.test.mjs` keeps pinning the demo geometry, the manifest pairing, the README bindings, and the short-ID shape. It gains assertions that the rendered demo contains the Level 1 `工作区` heading with workspace rows only, that the Level 2 panel carries session rows only and **no section heading**, and that no drill header, `进入目录` label, or directory row appears anywhere. The absence assertion on the Level 2 heading is the one that keeps the figure honest: an earlier revision drew a `对话` title that the plugin never renders, which is exactly the kind of screenshot the reader cannot reconcile with the app.
+`tests/mention-demo-asset.test.mjs` keeps pinning the demo geometry, the manifest pairing, the README bindings, and the short-ID shape. It gains assertions that the rendered demo contains the Level 1 `工作区` heading with workspace rows only, the Level 2 `对话` heading with session rows only, and no drill header, `进入目录` label, or directory row anywhere.
 
 ### Test Location
 
