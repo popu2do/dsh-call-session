@@ -159,3 +159,186 @@ for (const { value, label } of BLANK_VALUES) {
     );
   });
 }
+
+// ---------------------------------------------------------------------------
+// Boundary 3: malformed roster collections
+// ---------------------------------------------------------------------------
+
+/**
+ * archivedSessionIds is the sidebar's archive list. Its only reader in the plugin,
+ * resolveArchivedSessionIds, degrades a non-array value to an empty list, so a malformed
+ * roster costs the filter rather than the menu. The Host builds a Set from the same value
+ * without a guard, so a non-array is the plugin's own contract to keep.
+ */
+const ARCHIVED_ROSTER_SHAPES = [
+  { label: 'a string', value: 'session-boundary-archived' },
+  { label: 'null', value: null },
+  { label: 'a number', value: 7 }
+];
+
+for (const { label, value } of ARCHIVED_ROSTER_SHAPES) {
+  test('Secondary candidates: archivedSessionIds as ' + label + ' degrades to an empty archive list', async () => {
+    const archived = titledRow('session-boundary-archived', 'Archived session', {
+      cwd: WORKSPACE_PATH,
+      updatedAt: REFERENCE_NOW - 1000
+    });
+    const live = titledRow('session-boundary-live', 'Live session', { cwd: WORKSPACE_PATH });
+
+    // The snapshot hands the malformed value through unresolved: this is what the menu
+    // reader has to survive, not a sanitised copy.
+    const { plugin } = loadClientInSandbox();
+    let registeredSource = null;
+    const ctx = {
+      effect: (fn) => fn(),
+      locale: { register: () => {}, bind: () => (key) => key },
+      slots: { inject: () => {}, register: () => {} },
+      get: (name) => {
+        if (name === 'inputTriggers') {
+          return { registerSource: (source) => { registeredSource = source; return () => {}; } };
+        }
+        if (name === 'sessions') {
+          return { list: { getSnapshot: () => sessionsSnapshot({ [archived.id]: archived, [live.id]: live }) } };
+        }
+        if (name === 'workspaces') {
+          return {
+            list: {
+              getSnapshot: () => ({
+                items: [workspaceItem({
+                  workspaceId: 'ws-boundary-alpha',
+                  path: WORKSPACE_PATH,
+                  sessionIds: [archived.id, live.id]
+                })],
+                archivedSessionIds: value
+              })
+            }
+          };
+        }
+        return null;
+      }
+    };
+    plugin.apply(ctx);
+    const candidates = await registeredSource.candidates(
+      { sessionId: CURRENT_SESSION_ID },
+      { query: WORKSPACE_PATH, drilled: true }
+    );
+
+    assert.deepEqual(
+      offeredIds(candidates),
+      [live.id, archived.id],
+      'a malformed archive list empties the filter instead of throwing or hiding live rows'
+    );
+  });
+}
+
+test('Secondary candidates: a Workspace whose sessionIds is null or absent offers nothing and does not throw', async () => {
+  const live = titledRow('session-boundary-live', 'Live session', { cwd: WORKSPACE_PATH });
+  const { plugin } = loadClientInSandbox();
+
+  for (const sessionIds of [null, undefined]) {
+    let registeredSource = null;
+    const ctx = {
+      effect: (fn) => fn(),
+      locale: { register: () => {}, bind: () => (key) => key },
+      slots: { inject: () => {}, register: () => {} },
+      get: (name) => {
+        if (name === 'inputTriggers') {
+          return { registerSource: (source) => { registeredSource = source; return () => {}; } };
+        }
+        if (name === 'sessions') return { list: { getSnapshot: () => sessionsSnapshot({ [live.id]: live }) } };
+        if (name === 'workspaces') {
+          const entry = workspaceItem({ workspaceId: 'ws-boundary-alpha', path: WORKSPACE_PATH, sessionIds: [] });
+          if (sessionIds === null) entry.sessionIds = null;
+          else delete entry.sessionIds;
+          return { list: { getSnapshot: () => ({ items: [entry], archivedSessionIds: [] }) } };
+        }
+        return null;
+      }
+    };
+    plugin.apply(ctx);
+    const candidates = await registeredSource.candidates(
+      { sessionId: CURRENT_SESSION_ID },
+      { query: WORKSPACE_PATH, drilled: true }
+    );
+    assert.deepEqual(offeredIds(candidates), [], 'sessionIds ' + String(sessionIds) + ' keeps the Workspace reachable but empty');
+  }
+});
+
+hostTest('Secondary candidates: the Host throws where the plugin degrades, so the two disagree on the roster shape', () => {
+  const live = titledRow('session-boundary-live', 'Live session', { cwd: WORKSPACE_PATH });
+  const snapshot = { ids: [live.id], byId: { [live.id]: live } };
+  const workspace = { workspaceId: 'ws-boundary-alpha', path: WORKSPACE_PATH, title: 'Alpha', sessionIds: null };
+
+  assert.throws(
+    () => hostJudgments().groupByWorkspace(snapshot, [workspace], new Set(), 'default'),
+    /sessionIds is not iterable/u,
+    'the Host grouping loop dereferences sessionIds without a guard; the plugin deliberately absorbs it'
+  );
+});
+
+// ---------------------------------------------------------------------------
+// Boundary 4: member ids the snapshot cannot resolve
+// ---------------------------------------------------------------------------
+
+/**
+ * sessionIds may name an id the byId map does not carry, or repeat one. The Host skips
+ * the unknown id and never de-duplicates; the plugin skips unresolvable ids the same way,
+ * but it has no de-duplication either, so a repeated id is offered twice.
+ */
+test('Secondary candidates: a member id missing from byId is skipped without throwing', async () => {
+  const live = titledRow('session-boundary-live', 'Live session', { cwd: WORKSPACE_PATH });
+  const candidates = await level2For(
+    { [live.id]: live },
+    { sessionIds: [live.id, 'session-boundary-nowhere'] }
+  );
+
+  assert.deepEqual(offeredIds(candidates), [live.id], 'an id the snapshot cannot resolve never reaches the menu');
+});
+
+hostTest('Secondary candidates: a member id missing from byId stays skipped on the Host side too', () => {
+  const host = hostJudgments();
+  const live = titledRow('session-boundary-live', 'Live session', { cwd: WORKSPACE_PATH });
+  const snapshot = { ids: [live.id, 'session-boundary-nowhere'], byId: { [live.id]: live } };
+  const workspace = {
+    workspaceId: 'ws-boundary-alpha',
+    path: WORKSPACE_PATH,
+    title: 'Alpha',
+    sessionIds: [live.id, 'session-boundary-nowhere']
+  };
+  const groups = host.groupByWorkspace(snapshot, [workspace], new Set(), 'default');
+
+  assert.deepEqual(
+    groups[0].sessions.map((row) => row.id),
+    [live.id],
+    'the Host drops the unresolvable id and keeps the rest'
+  );
+});
+
+test('Secondary candidates: a repeated member id is offered twice, exactly as the Host groups it twice', async () => {
+  const live = titledRow('session-boundary-live', 'Live session', { cwd: WORKSPACE_PATH });
+  const candidates = await level2For({ [live.id]: live }, { sessionIds: [live.id, live.id] });
+
+  assert.deepEqual(
+    offeredIds(candidates),
+    [live.id, live.id],
+    'neither side de-duplicates a roster that repeats one id'
+  );
+});
+
+test('Secondary candidates: a member row whose id is null or absent is not offered under an empty id', async () => {
+  const live = titledRow('session-boundary-live', 'Live session', { cwd: WORKSPACE_PATH });
+  const nullId = { title: 'Null id row', cwd: WORKSPACE_PATH, updatedAt: REFERENCE_NOW };
+
+  // id null and id absent are the two shapes the corpus and the corpus tests distinguish;
+  // both leave the Host list without a key to address the row by.
+  for (const row of [{ ...nullId, id: null }, nullId]) {
+    const candidates = await level2For({ [live.id]: live, 'session-boundary-null-id': row }, {
+      sessionIds: [live.id, 'session-boundary-null-id']
+    });
+    assert.deepEqual(
+      offeredIds(candidates),
+      [live.id],
+      'a row without a usable id cannot be referenced, so the menu carries only the live row'
+    );
+  }
+});
+
