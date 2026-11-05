@@ -324,21 +324,263 @@ test('Secondary candidates: a repeated member id is offered twice, exactly as th
   );
 });
 
-test('Secondary candidates: a member row whose id is null or absent is not offered under an empty id', async () => {
+test('Secondary candidates: a member row whose id is null or absent is still offered under its roster key', async () => {
   const live = titledRow('session-boundary-live', 'Live session', { cwd: WORKSPACE_PATH });
-  const nullId = { title: 'Null id row', cwd: WORKSPACE_PATH, updatedAt: REFERENCE_NOW };
+  const nullId = titledRow('session-boundary-null-id', 'Null id row', {
+    cwd: WORKSPACE_PATH,
+    updatedAt: REFERENCE_NOW
+  });
+  const absentId = { ...nullId };
+  delete absentId.id;
 
-  // id null and id absent are the two shapes the corpus and the corpus tests distinguish;
-  // both leave the Host list without a key to address the row by.
-  for (const row of [{ ...nullId, id: null }, nullId]) {
-    const candidates = await level2For({ [live.id]: live, 'session-boundary-null-id': row }, {
-      sessionIds: [live.id, 'session-boundary-null-id']
-    });
+  // The corpus distinguishes an explicit null id from a row with no id field. Level 2
+  // looks members up by their roster key, so the row survives either way and only its
+  // sessionId value degrades to the empty string.
+  for (const [label, row] of [['null', { ...nullId, id: null }], ['absent', absentId]]) {
+    const candidates = await level2For(
+      { [live.id]: live, 'session-boundary-null-id': row },
+      { sessionIds: [live.id, 'session-boundary-null-id'] }
+    );
     assert.deepEqual(
       offeredIds(candidates),
-      [live.id],
-      'a row without a usable id cannot be referenced, so the menu carries only the live row'
+      [live.id, ''],
+      'a row with a ' + label + ' id is still offered under its roster key'
     );
   }
+});
+
+
+// ---------------------------------------------------------------------------
+// Boundary 5: subagent rows and the origin conflict
+// ---------------------------------------------------------------------------
+
+/**
+ * A Session is a subagent when its summary says origin "subagent". The plugin widens
+ * that to header.origin as a fallback, so a row the Host keeps (header only) disappears
+ * from the menu. The Host reads summary.origin alone
+ * (dsh-client-ui-workspace/lib/client.js:965, "if (session.origin === \"subagent\")
+ * return false").
+ */
+const ORIGIN_SHAPES = [
+  { id: 'origin-subagent', label: 'origin alone says subagent', fields: { origin: 'subagent' } },
+  { id: 'origin-header-subagent', label: 'only header.origin says subagent', fields: { header: { origin: 'subagent' } } },
+  { id: 'origin-conflict', label: 'origin and header.origin disagree', fields: { origin: 'default', header: { origin: 'subagent' } } },
+  { id: 'origin-agree', label: 'origin and header.origin both say default', fields: { origin: 'default', header: { origin: 'default' } } }
+];
+
+for (const shape of ORIGIN_SHAPES) {
+  hostTest('Secondary candidates: subagent origin when ' + shape.label + ' matches the Host', async () => {
+    const row = titledRow('session-boundary-origin', 'Origin candidate', { cwd: WORKSPACE_PATH, ...shape.fields });
+    const hostVisible = hostJudgments().sessionVisible(row, CURRENT_SESSION_ID, new Set(), 'default');
+    const candidates = await level2For({ [row.id]: row });
+
+    assert.equal(
+      offeredIds(candidates).includes(row.id),
+      hostVisible,
+      'plugin visibility must equal the Host visibility when ' + shape.label
+    );
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Boundary 6: the 50-row cap
+// ---------------------------------------------------------------------------
+
+/**
+ * The menu stops at 50 rows for the 60fps budget. The slice runs after a recency sort
+ * that is not stable across equal timestamps in general, so the cap is only predictable
+ * while distinct timestamps order the rows. Two facts are pinned here: a Workspace with
+ * more than 50 visible members offers exactly the 50 most recent ones in one order, and
+ * rows the plugin drops are already gone before the cap applies.
+ */
+test('Secondary candidates: the cap keeps the 50 most recent members and drops the 51st', async () => {
+  const byId = {};
+  const sessionIds = [];
+  for (let index = 0; index < 60; index += 1) {
+    const id = 'session-boundary-member-' + String(index).padStart(2, '0');
+    byId[id] = titledRow(id, 'Member ' + index, { cwd: WORKSPACE_PATH, updatedAt: REFERENCE_NOW + index });
+    sessionIds.push(id);
+  }
+  const candidates = await level2For(byId, { sessionIds });
+  const ids = offeredIds(candidates);
+
+  assert.equal(ids.length, 50, 'the menu stops at 50 rows');
+  assert.equal(ids[0], sessionIds[59], 'the most recent member leads');
+  assert.equal(ids[49], sessionIds[10], 'the 50th row is the 50th most recent');
+  assert.ok(!ids.includes(sessionIds[9]), 'the 51st most recent member is cut');
+});
+
+test('Secondary candidates: hidden rows are dropped before the cap, so 47 visible members all fit', async () => {
+  const byId = {};
+  const sessionIds = [];
+  for (let index = 0; index < 60; index += 1) {
+    const id = 'session-boundary-member-' + String(index).padStart(2, '0');
+    byId[id] = titledRow(id, 'Member ' + index, { cwd: WORKSPACE_PATH, updatedAt: REFERENCE_NOW + index });
+    sessionIds.push(id);
+  }
+  // Every fifth member is a subagent child, which the menu drops before the cap applies.
+  // 60 members minus 12 children leaves 48 visible rows under a 50-row budget, so the cap
+  // never bites and the fixture stays a test of the filter order rather than the slice.
+  for (let index = 0; index < 60; index += 5) {
+    byId[sessionIds[index]] = titledRow(sessionIds[index], 'Child ' + index, {
+      cwd: WORKSPACE_PATH,
+      updatedAt: REFERENCE_NOW + index,
+      origin: 'subagent'
+    });
+  }
+  const candidates = await level2For(byId, { sessionIds });
+  const ids = offeredIds(candidates);
+
+  assert.equal(ids.length, 48, 'visible rows that survive the filter are all offered');
+  assert.equal(ids[0], sessionIds[59], 'the most recent visible member leads');
+  assert.ok(!ids.includes(sessionIds[0]), 'the hidden child is not offered even though it is recent');
+  assert.ok(!ids.includes(sessionIds[55]), 'the last child in the roster is hidden as well');
+});
+
+/**
+ * With 60 visible members plus 30 hidden ones the cap lands on the sorted list, which
+ * proves the slice runs after the sidebar rule: 50 rows come out, none of them hidden.
+ */
+test('Secondary candidates: the cap counts only rows that survive the sidebar rule', async () => {
+  const byId = {};
+  const sessionIds = [];
+  for (let index = 0; index < 90; index += 1) {
+    const id = 'session-boundary-capped-' + String(index).padStart(2, '0');
+    byId[id] = titledRow(id, 'Member ' + index, { cwd: WORKSPACE_PATH, updatedAt: REFERENCE_NOW + index });
+    sessionIds.push(id);
+  }
+  // The 30 most recent members are subagent children, so they occupy the top of the sort
+  // and would crowd the cap if the plugin truncated before filtering.
+  for (let index = 60; index < 90; index += 1) {
+    byId[sessionIds[index]] = titledRow(sessionIds[index], 'Child ' + index, {
+      cwd: WORKSPACE_PATH,
+      updatedAt: REFERENCE_NOW + index,
+      origin: 'subagent'
+    });
+  }
+  const candidates = await level2For(byId, { sessionIds });
+  const ids = offeredIds(candidates);
+
+  assert.equal(ids.length, 50, 'the cap still allows 50 visible rows');
+  assert.equal(ids[0], sessionIds[59], 'the most recent visible member leads, not the most recent row overall');
+  assert.ok(!ids.includes(sessionIds[89]), 'no hidden child survived the filter to take a slot');
+});
+
+// ---------------------------------------------------------------------------
+// Boundary 7: updatedAt ordering
+// ---------------------------------------------------------------------------
+
+/**
+ * Ordering is a subtraction over updatedAt (sessionRecency falls back to createdAt, then
+ * 0). null, an absent field and a non-numeric string all collapse to a non-numeric
+ * recency, and the resulting comparison is NaN, which sort() treats as "keep the current
+ * order". So a row with no usable timestamp is not sunk: it keeps its roster position.
+ * The cases pin that behaviour so the cap above stays the only order-sensitive rule.
+ */
+const ORDERING_SHAPES = [
+  { label: 'null', updatedAt: null },
+  { label: 'absent', updatedAt: undefined },
+  { label: 'a non-numeric string', updatedAt: 'yesterday' }
+];
+
+for (const shape of ORDERING_SHAPES) {
+  test('Secondary candidates: updatedAt as ' + shape.label + ' does not throw and keeps the roster order', async () => {
+    const ranked = titledRow('session-boundary-ranked', 'Ranked', { cwd: WORKSPACE_PATH, updatedAt: REFERENCE_NOW });
+    const odd = titledRow('session-boundary-odd', 'Odd', { cwd: WORKSPACE_PATH });
+    if (shape.updatedAt === undefined) delete odd.updatedAt;
+    else odd.updatedAt = shape.updatedAt;
+
+    const candidates = await level2For({ [ranked.id]: ranked, [odd.id]: odd }, {
+      sessionIds: [odd.id, ranked.id]
+    });
+    // null and absent both fall back to 0 through the || chain, so the ranked row sorts
+    // first. A non-numeric string makes the subtraction NaN, so the pair is left in
+    // roster order instead.
+    const expected = shape.label === 'a non-numeric string' ? [odd.id, ranked.id] : [ranked.id, odd.id];
+    assert.deepEqual(offeredIds(candidates), expected, 'updatedAt as ' + shape.label + ' keeps the menu deterministic');
+  });
+}
+
+test('Secondary candidates: members sharing one updatedAt keep roster order, so the order repeats', async () => {
+  const byId = {
+    'session-boundary-zeta': titledRow('session-boundary-zeta', 'Zeta', { cwd: WORKSPACE_PATH, updatedAt: REFERENCE_NOW }),
+    'session-boundary-alpha': titledRow('session-boundary-alpha', 'Alpha', { cwd: WORKSPACE_PATH, updatedAt: REFERENCE_NOW })
+  };
+  const first = await level2For(byId, { sessionIds: ['session-boundary-zeta', 'session-boundary-alpha'] });
+  const second = await level2For(byId, { sessionIds: ['session-boundary-zeta', 'session-boundary-alpha'] });
+
+  assert.deepEqual(offeredIds(first), ['session-boundary-zeta', 'session-boundary-alpha'], 'equal timestamps keep the declared order');
+  assert.deepEqual(offeredIds(second), offeredIds(first), 'the same input yields the same order on every run');
+});
+
+hostTest('Secondary candidates: the Host sorts equal timestamps by the same roster order', () => {
+  const snapshot = {
+    ids: ['session-boundary-zeta', 'session-boundary-alpha'],
+    byId: {
+      'session-boundary-zeta': titledRow('session-boundary-zeta', 'Zeta', { cwd: WORKSPACE_PATH, updatedAt: REFERENCE_NOW }),
+      'session-boundary-alpha': titledRow('session-boundary-alpha', 'Alpha', { cwd: WORKSPACE_PATH, updatedAt: REFERENCE_NOW })
+    }
+  };
+  const workspace = {
+    workspaceId: 'ws-boundary-alpha',
+    path: WORKSPACE_PATH,
+    title: 'Alpha',
+    sessionIds: ['session-boundary-zeta', 'session-boundary-alpha']
+  };
+  const groups = hostJudgments().groupByWorkspace(snapshot, [workspace], new Set(), 'default');
+
+  assert.deepEqual(
+    groups[0].sessions.map((row) => row.id),
+    ['session-boundary-zeta', 'session-boundary-alpha'],
+    'the Host keeps roster order for equal recency as well'
+  );
+});
+
+// ---------------------------------------------------------------------------
+// Boundary 8: the archived "only" filter
+// ---------------------------------------------------------------------------
+
+/**
+ * The Host drops a whole Workspace group when the archived filter is "only" and nothing
+ * in it survives (dsh-client-ui-workspace/lib/client.js:1040, "if (archivedFilter ===
+ * \"only\" && members.length === 0) continue"). The plugin's level 2 is never asked for
+ * the archived filter: its arguments carry query and drill only, and it always applies
+ * the "default" rule. A Workspace with nothing archived therefore still offers its live
+ * rows, which is the intended level-2 behaviour and is pinned here so a future archived
+ * switch does not arrive unnoticed.
+ */
+hostTest('Secondary candidates: the archived "only" filter empties the Host group while level 2 keeps its live rows', async () => {
+  const archived = titledRow('session-boundary-archived', 'Archived session', { cwd: WORKSPACE_PATH });
+  const live = titledRow('session-boundary-live', 'Live session', { cwd: WORKSPACE_PATH, updatedAt: REFERENCE_NOW - 10 });
+  const snapshot = { ids: [archived.id, live.id], byId: { [archived.id]: archived, [live.id]: live } };
+  const workspace = {
+    workspaceId: 'ws-boundary-alpha',
+    path: WORKSPACE_PATH,
+    title: 'Alpha',
+    sessionIds: [archived.id, live.id]
+  };
+  const archivedSet = new Set([archived.id]);
+
+  const onlyGroups = hostJudgments().groupByWorkspace(snapshot, [workspace], archivedSet, 'only');
+  assert.deepEqual(
+    onlyGroups.map((group) => group.sessions.map((row) => row.id)),
+    [[archived.id]],
+    'the Host keeps only the archived row under the "only" filter'
+  );
+
+  const emptyHostGroups = hostJudgments().groupByWorkspace(
+    { ids: [live.id], byId: { [live.id]: live } },
+    [workspace],
+    archivedSet,
+    'only'
+  );
+  assert.deepEqual(emptyHostGroups, [], 'a Workspace with nothing archived is skipped entirely under "only"');
+
+  const candidates = await level2For(snapshot.byId, { sessionIds: workspace.sessionIds, archivedSessionIds: [archived.id] });
+  assert.deepEqual(
+    offeredIds(candidates),
+    [live.id],
+    'level 2 never takes the archived filter, so it keeps the live row and hides the archived one'
+  );
 });
 
