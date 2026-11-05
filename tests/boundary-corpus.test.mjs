@@ -30,7 +30,10 @@ import {
   canonicalSnapshot,
   canonicalWorkspacesSnapshot,
   corpusPath,
+  sessionRow,
   equalUpdatedAtPair,
+  HOST_GROUPING_BEHAVIOUR,
+  HOST_SESSION_IDS_NOT_ITERABLE,
   findCategory,
   flattenCases,
   projectStoredTable,
@@ -314,7 +317,10 @@ describe('Boundary Corpus: recorded verdicts match the lifted Host judgments', (
         // A recorded null means the Host cannot answer, so asking it must not answer either.
         const result = judge(entry.id);
         assert.equal(result.visible, null, key + ' records no Host verdict but the Host returned one');
-        if (category.id === 'sessionIds') assert.ok(result.thrown, key + ' records a Host throw, so the Host must throw');
+        if (entry.judgment.hostThrows) {
+          assert.ok(result.thrown, key + ' records a Host throw, so the Host must throw');
+          assert.equal(String(result.thrown), entry.judgment.hostThrows, key + ' records a different Host failure');
+        }
         continue;
       }
       assert.equal(judge(entry.id).visible, entry.judgment.visible, key + ' disagrees with the Host');
@@ -339,11 +345,57 @@ describe('Boundary Corpus: the unknown-id and duplicate-id cases keep every know
   }
 });
 
-describe('Boundary Corpus: a non-array sessionIds resolves to an empty group instead of throwing', () => {
-  const built = buildCaseSnapshot('sessionIds', 'sessionIds-not-array');
-  const groups = host.groupByWorkspace(built.sessions, built.workspaces.items, new Set(), 'default', undefined);
-  // A string iterates by character, none of which is a snapshot id.
-  assert.equal(groups[0].sessions.length, 0);
+/** Runs the lifted grouping over a hand-built roster; mainSessionId dereferences retainedBy. */
+function hostGroupsFor(roster, rows) {
+  const byId = {};
+  for (const row of rows) byId[row.id] = row;
+  const sessions = { ids: rows.map((row) => row.id), byId, correlationId: 'corr-boundary-grouping' };
+  return host.groupByWorkspace(sessions, roster, new Set(), 'default', undefined);
+}
+
+describe('Boundary Corpus: the three grouping behaviours a malformed roster produces', () => {
+  // Each tier is driven through the Host with its own roster, so a tier cannot borrow the
+  // answer of its neighbour: only the null/absent roster may throw, and it must.
+
+  test('Boundary Corpus: sessionIds that resolve to unknown ids still group normally', () => {
+    const built = buildCaseSnapshot('sessionIds', 'sessionIds-unknown-id');
+    const groups = hostGroupsFor(built.workspaces.items, [built.sessions.byId['session-boundary-ordinary']]);
+    assert.equal(groups[0].sessions.length, 1, HOST_GROUPING_BEHAVIOUR.grouped + ' must yield the member it resolved');
+  });
+
+  test('Boundary Corpus: a string sessionIds silently groups nothing and throws nothing', () => {
+    // A one-character roster entry iterates over that character; no snapshot id matches it.
+    const stringRoster = [{ workspaceId: 'ws-boundary-case', path: null, title: 'case', sessionIds: 'x' }];
+    const row = sessionRow('session-boundary-control', {});
+    const groups = hostGroupsFor(stringRoster, [row]);
+    assert.equal(groups.length, 2, 'the empty group plus the trailing Ungrouped bucket');
+    assert.equal(groups[0].sessions.length, 0, HOST_GROUPING_BEHAVIOUR.emptyGroup + ' must assemble an empty group');
+    assert.deepEqual(groups[1].sessions.map((entry) => entry.id), ['session-boundary-control']);
+  });
+
+  test('Boundary Corpus: the recorded string case reproduces the silent empty group over the corpus roster', () => {
+    const built = buildCaseSnapshot('sessionIds', 'sessionIds-not-array');
+    const groups = host.groupByWorkspace(built.sessions, built.workspaces.items, new Set(), 'default', undefined);
+    // A string iterates by character, none of which is a snapshot id.
+    assert.equal(groups[0].sessions.length, 0, 'the recorded case must not throw and must not group');
+    assert.equal(groups[0].key, 'ws-boundary-case');
+  });
+
+  for (const caseId of ['sessionIds-null', 'sessionIds-absent']) {
+    test('Boundary Corpus: ' + caseId + ' makes the Host throw on the unguarded sessionIds loop', () => {
+      const built = buildCaseSnapshot('sessionIds', caseId);
+      assert.throws(
+        () => hostGroupsFor(built.workspaces.items, [built.sessions.byId['session-boundary-ordinary']]),
+        { name: 'TypeError', message: /sessionIds is not iterable/u },
+        caseId + ' must reproduce ' + HOST_SESSION_IDS_NOT_ITERABLE
+      );
+      assert.equal(
+        built.rosterEntry.sessionIds,
+        caseId === 'sessionIds-null' ? null : undefined,
+        'the roster entry must carry the malformed value rather than an empty list'
+      );
+    });
+  }
 });
 
 // ---------------------------------------------------------------------------

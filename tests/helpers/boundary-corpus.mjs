@@ -69,8 +69,12 @@ export const EXPECTATION_MODE = Object.freeze({
 });
 
 /** The recorded verdict for one case, or for the whole category when a case omits one. */
-function judgment(visible, note) {
-  return { visible, note };
+function judgment(visible, note, hostThrows) {
+  const verdict = { visible, note };
+  // Present only on the shapes the Host cannot answer at all: asking it throws, so there
+  // is no verdict to record and the throw itself is the recorded behaviour.
+  if (hostThrows) verdict.hostThrows = hostThrows;
+  return verdict;
 }
 
 function caseOf(id, title, values, expectation) {
@@ -339,6 +343,21 @@ export const TITLE_CATEGORY = categoryOf(
 // Category: workspace sessionIds
 // ---------------------------------------------------------------------------
 
+/**
+ * What the Host throws on a Workspace whose sessionIds is null or absent. groupByWorkspace
+ * walks `for (const id of workspace.sessionIds)` with no guard, so one malformed roster
+ * entry ends the whole grouping rather than that one group. Recorded as text because the
+ * corpus carries no live error object; the self-check compares it against the real throw.
+ */
+export const HOST_SESSION_IDS_NOT_ITERABLE = 'TypeError: workspace.sessionIds is not iterable';
+
+/** The three ways groupByWorkspace answers a roster entry, quoted by the self-check. */
+export const HOST_GROUPING_BEHAVIOUR = Object.freeze({
+  grouped: 'grouped',
+  emptyGroup: 'empty-group',
+  throws: 'throws'
+});
+
 export const SESSION_IDS_CATEGORY = categoryOf(
   'sessionIds',
   'workspace sessionIds',
@@ -347,12 +366,15 @@ export const SESSION_IDS_CATEGORY = categoryOf(
   [
     caseOf('sessionIds-unknown-id', 'sessionIds names a session the snapshot does not carry', { sessionIds: [CANONICAL_SESSIONS.ordinary, 'session-boundary-missing'] }, judgment(true, 'the Host skips an unknown id and keeps the rows it found')),
     caseOf('sessionIds-duplicate-id', 'sessionIds repeats one id', { sessionIds: [CANONICAL_SESSIONS.ordinary, CANONICAL_SESSIONS.ordinary] }, judgment(true, 'the Host has no de-duplication, so the member appears twice')),
-    caseOf('sessionIds-not-array', 'sessionIds is a string', { sessionIds: CANONICAL_SESSIONS.ordinary }, judgment(true, 'a string iterates by character, the ids resolve to nothing, and the group ends up with no members')),
-    caseOf('sessionIds-empty', 'sessionIds is an empty array', { sessionIds: [] }, judgment(true, 'the Workspace owns nothing')),
-    caseOf('sessionIds-null', 'sessionIds is null', { sessionIds: null }, judgment(null, 'the Host loop throws on a null sessionIds; the plugin degrades to an empty roster')),
-    caseOf('sessionIds-absent', 'sessionIds is absent', { sessionIds: undefined }, judgment(null, 'the Host loop throws on an absent sessionIds; the plugin degrades to an empty roster'))
+    caseOf('sessionIds-not-array', 'sessionIds is a string', { sessionIds: CANONICAL_SESSIONS.ordinary }, judgment(true, 'a string iterates by character, none of which is a snapshot id, so the group silently ends up empty and every row falls into Ungrouped')),
+    caseOf('sessionIds-empty', 'sessionIds is an empty array', { sessionIds: [] }, judgment(true, 'the Workspace owns nothing, so the group is empty by demand rather than by accident')),
+    caseOf('sessionIds-null', 'sessionIds is null', { sessionIds: null }, judgment(null, 'the Host loop iterates sessionIds unguarded, so a null roster entry takes the whole sidebar grouping down; the plugin degrades to an empty roster instead', HOST_SESSION_IDS_NOT_ITERABLE)),
+    caseOf('sessionIds-absent', 'sessionIds is absent', { sessionIds: undefined }, judgment(null, 'an absent sessionIds dereferences to undefined at the same unguarded loop, so the Host fails exactly as it does for null', HOST_SESSION_IDS_NOT_ITERABLE))
   ],
-  ['The throwing shapes are pinned by evaluating the lifted groupByWorkspace source, so the record is Host behaviour rather than a guess.']
+  [
+    'The three unreadable shapes are recorded separately: okay cases group normally, a string silently groups nothing, and null or absent throws out of groupByWorkspace. A plugin that reads the roster without a guard crashes the sidebar on the last pair.',
+    'The throwing shapes are pinned by evaluating the lifted groupByWorkspace source, so the record is Host behaviour rather than a guess.'
+  ]
 );
 
 // ---------------------------------------------------------------------------
