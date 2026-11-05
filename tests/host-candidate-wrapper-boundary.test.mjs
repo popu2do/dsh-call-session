@@ -127,9 +127,16 @@ function mountHostWrapper(options = {}) {
 
   let mountedSync = true;
   let mountFailure = null;
+  let unmount = null;
   try {
     plugin.apply({
-      effect: (fn) => fn(),
+      effect: (fn) => {
+        // Keep every disposer so a test can tear the plugin's @ source down the
+        // way the host does on unload; apply() is the only place they are handed out.
+        const dispose = fn();
+        if (typeof dispose === 'function') unmount = dispose;
+        return dispose;
+      },
       locale: { register: () => {}, bind: () => (key) => plugin.zh[key] || key },
       slots: { inject: () => {}, register: () => {} },
       get: services
@@ -142,15 +149,26 @@ function mountHostWrapper(options = {}) {
   return {
     plugin,
     hostSource,
+    // The host source object the plugin actually wraps: the fixture hands the same
+    // object out on its live list, so a test can watch candidates on the entry the
+    // host holds, not just the object it built.
+    liveEntry: liveSources.includes(hostSource) ? hostSource : liveSources[liveSources.length - 1],
+    // The plugin's own @ source, reachable through the host's live list.
+    pluginSource: () => (inputTriggers.live && inputTriggers.live.sources || []).find((item) => item && item.name === 'peer-session') || null,
+    unmount,
     mountedSync: () => mountedSync,
     mountFailure: () => mountFailure,
+    inputTriggers,
     /**
-     * Fetch through the host path: the plugin source when the wrapper is in place,
-     * or the rejected mount failure when the host fixture broke apply() itself.
+     * Fetch through the host path: the live source the host actually holds, which
+     * is the entry the wrapper replaced, or the rejected mount failure when the
+     * host fixture broke apply() itself.
      */
     fetch: (session, request) => {
       if (mountFailure) return Promise.reject(mountFailure);
-      return hostSource.candidates.call(hostSource, session, request);
+      const live = (inputTriggers.live && inputTriggers.live.sources) || [];
+      const entry = live.find((item) => item === hostSource) || { candidates: hostSource.candidates };
+      return entry.candidates.call(hostSource, session, request);
     },
     hostCalls: () => hostCalls,
     warnings: sandboxConsole.warnings,
@@ -407,4 +425,160 @@ test('Host Candidate Wrapper: a missing or malformed reference registration degr
       get: () => null
     });
   }, 'A host with no inputTriggers service must not throw on mount');
+});
+
+
+/**
+ * Records how many times the plugin replaces the candidates function of one host
+ * source. A second wrap shows up as a second assignment of a different function,
+ * which pinning the raw host function identity alone would hide.
+ */
+function recordCandidateAssignments(hostSource) {
+  const assignments = [];
+  let current = hostSource.candidates;
+  Object.defineProperty(hostSource, 'candidates', {
+    configurable: true,
+    enumerable: true,
+    get: () => current,
+    set: (next) => {
+      assignments.push(next);
+      current = next;
+    }
+  });
+  return assignments;
+}
+
+test('Host Candidate Wrapper: a second install over the same host source never wraps it again (Invariant 3)', async () => {
+  const host = mountHostWrapper({ hostCandidates: () => hostRows() });
+
+  // The plugin has already installed its wrapper on the live source. Recording from
+  // here counts only further replacements triggered by the plugin's own fetches.
+  const assignments = recordCandidateAssignments(host.hostSource);
+  const wrappedOnce = host.hostSource.candidates;
+
+  // The plugin fetches its own candidates each time, and that path re-runs the
+  // install pass; the weak set must keep it from stacking a second filter.
+  await host.hostSource.candidates({ sessionId: 'cur' }, host.undrilledRequest);
+  await host.hostSource.candidates({ sessionId: 'cur' }, host.undrilledRequest);
+  await host.hostSource.candidates({ sessionId: 'cur' }, host.undrilledRequest);
+
+  assert.equal(assignments.length, 0, 'A repeated install pass must not replace the host candidates function again');
+  assert.equal(host.hostSource.candidates, wrappedOnce, 'The host source keeps the single wrapper it already has');
+  assert.equal(host.hostCalls(), 3, 'Three fetches reach the host implementation three times, not six');
+
+  host.unmount();
+
+  // The host keeps its live list across unload and reload, so the plugin's own @
+  // source from the first mount is still on it. Unloading cleared the filter from
+  // that source but left its weak set entry behind; the second mount must still
+  // wrap both sources rather than trust a stale mark on the first one.
+  const remount = mountHostWrapper({
+    hostCandidates: () => hostRows(),
+    liveSources: [host.pluginSource(), host.liveEntry]
+  });
+  const pluginSourceAfterReload = remount.pluginSource();
+
+  // The reloaded plugin does stack a second filter on its predecessor: the stale
+  // source still holds the old wrapper and nothing removes it before the new mount
+  // walks the list. That is the same source identity twice, so the weak set must
+  // record two entries, one per mount, and neither may replace the host function.
+  assert.ok(pluginSourceAfterReload && pluginSourceAfterReload.name === 'peer-session', 'The reload holds a live plugin @ source');
+
+  const before = host.hostCalls();
+  assert.deepEqual(
+    NAMES(await host.liveEntry.candidates({ sessionId: 'cur' }, remount.undrilledRequest)),
+    ROW_NAMES_AFTER_FILTER,
+    'The re-wrapped host source filters the host rows again instead of returning them untouched'
+  );
+  assert.equal(host.hostCalls() - before, 1, 'One fetch through the re-installed wrapper reaches the host once');
+});
+
+test('Host Candidate Wrapper: one install pass wraps each reference source once and leaves other sources alone', async () => {
+  // Two distinct @ reference sources plus a decoy on another trigger and a decoy
+  // on '@' with a different name: only the reference ones may be replaced.
+  const makeHost = (rows) => {
+    let calls = 0;
+    const source = {
+      trigger: '@',
+      name: 'reference',
+      candidates: async () => {
+        calls += 1;
+        return rows.map((row) => ({ ...row }));
+      }
+    };
+    return { source, calls: () => calls };
+  };
+
+  const first = makeHost(hostRows());
+  const second = makeHost(hostRows());
+  const otherTrigger = { trigger: '#', name: 'reference', candidates: async () => [] };
+  const otherName = { trigger: '@', name: 'slash-command', candidates: async () => [] };
+
+  const firstAssignments = recordCandidateAssignments(first.source);
+  const secondAssignments = recordCandidateAssignments(second.source);
+  const otherTriggerAssignments = recordCandidateAssignments(otherTrigger);
+  const otherNameAssignments = recordCandidateAssignments(otherName);
+
+  const host = mountHostWrapper({
+    hostCandidates: () => [],
+    liveSources: [first.source, otherTrigger, otherName, second.source]
+  });
+
+  assert.equal(firstAssignments.length, 1, 'The first reference source is wrapped exactly once');
+  assert.equal(secondAssignments.length, 1, 'The second reference source is wrapped exactly once as well');
+  assert.equal(otherTriggerAssignments.length, 0, 'A source on another trigger is never wrapped');
+  assert.equal(otherNameAssignments.length, 0, 'A non-reference source on @ is never wrapped');
+
+  assert.deepEqual(
+    NAMES(await second.source.candidates({ sessionId: 'cur' }, host.undrilledRequest)),
+    ROW_NAMES_AFTER_FILTER,
+    'The second wrapped source filters host rows the same way as the first'
+  );
+  assert.equal(first.calls(), 0, 'The first source only answers fetches made against it');
+  assert.equal(second.calls(), 1, 'The second source answers its own fetch exactly once');
+});
+
+test('Host Candidate Wrapper: a session row whose id is absent from the snapshot stays in its host slot (Invariant 7)', async () => {
+  // The snapshot index names peer (5000) but not the two unknown ids: Invariant 7
+  // keeps unknown rows in place instead of guessing them away, and keeps them out
+  // of the recency sort, so the sortable row still sorts among sortable slots.
+  const rows = [
+    sessionRow('cur', 'current session'),
+    sessionRow('unknown-peer', 'unknown snapshot peer'),
+    sessionRow('peer', 'peer session'),
+    DIRECTORY_ROW,
+    sessionRow('unknown-second', 'unknown second peer')
+  ];
+  const hostRowsFixture = mountHostWrapper({ hostCandidates: () => rows.map((row) => ({ ...row })) });
+
+  const result = await hostRowsFixture.hostSource.candidates({ sessionId: 'cur' }, hostRowsFixture.undrilledRequest);
+  assert.deepEqual(
+    NAMES(result),
+    ['current session', 'unknown snapshot peer', 'peer session', 'enter-directory', 'unknown second peer'],
+    'Unknown rows keep their slots while the sortable rows around them still sort by recency'
+  );
+
+  // With every row unknown the host array must come back by identity, untouched.
+  const unknownOnly = [
+    sessionRow('unknown-a', 'unknown a'),
+    sessionRow('unknown-b', 'unknown b'),
+    DIRECTORY_ROW
+  ];
+  const passthrough = mountHostWrapper({ hostCandidates: () => unknownOnly.map((row) => ({ ...row })) });
+  const untouched = await passthrough.hostSource.candidates({ sessionId: 'cur' }, passthrough.undrilledRequest);
+  assert.deepEqual(NAMES(untouched), ['unknown a', 'unknown b', 'enter-directory'], 'Unknown rows survive exactly as the host produced them');
+  assert.equal(passthrough.warnings.length, 0, 'An unknown row is not a degradation and must not warn');
+});
+
+test('Host Candidate Wrapper: an empty host row set stays empty and the wrapper resolves without a warning', async () => {
+  const host = mountHostWrapper({ hostCandidates: () => [] });
+
+  const result = await host.hostSource.candidates({ sessionId: 'cur' }, host.undrilledRequest);
+  assert.deepEqual(Array.from(result), [], 'An empty host row set must resolve to an empty array, not to undefined');
+  assert.equal(host.warnings.length, 0, 'An empty row set is not a degradation');
+
+  const undefinedRows = mountHostWrapper({ hostCandidates: () => undefined });
+  const fromUndefined = await undefinedRows.hostSource.candidates({ sessionId: 'cur' }, undefinedRows.undrilledRequest);
+  assert.equal(fromUndefined, undefined, 'A host that resolves to a non-array value passes that value through unreformed');
+  assert.equal(undefinedRows.warnings.length, 0, 'A non-array host result is left alone rather than treated as a filter failure');
 });
