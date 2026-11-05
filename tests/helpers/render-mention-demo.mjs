@@ -10,10 +10,11 @@
  * reference chip.
  *
  * Both menus draw what the picker actually renders (ADR-0034): Level 1 is a
- * 工作区 section of workspace rows only, Level 2 is a 对话 section of session
- * rows only. Level 2 carries no drill header, no 进入目录 affordance and no
- * directory rows, because the drilled state hands the host reference source an
- * empty array.
+ * 工作区 section of workspace rows only, Level 2 is a bare list of session rows
+ * with no section title of its own. Level 2 carries no drill header and no
+ * 进入目录 affordance, no directory rows and no 对话 title, because the drilled
+ * state hands the host reference source an empty array and the plugin's own
+ * rows carry section: undefined.
  *
  * Layout is authored at a 960-wide base and scaled by ZOOM, so the text stays
  * legible when a README renders the figure at roughly 800px.
@@ -120,7 +121,8 @@ export function figureModel(locale) {
 
   return {
     level1: { section: copy.sectionWorkspaces, workspaces: WORKSPACES.map((ws) => ({ name: ws.name, current: ws.current })) },
-    level2: { section: copy.sectionSessions, sessions },
+    // Level 2 renders no section title: the workspace tier is named once, in Level 1.
+    level2: { section: null, sessions },
     // Kept for the callers that only care about the rows at each level.
     sectionWorkspaces: copy.sectionWorkspaces,
     sectionSessions: copy.sectionSessions,
@@ -158,7 +160,7 @@ function workspaceColumn(copy, workspaces) {
     '</section>';
 }
 
-/** Level 2: a 对话 section holding session rows only, with status and short ID. */
+/** Level 2: session rows only, with status and short ID, and no section title above them. */
 function sessionColumn(copy, rows) {
   const cells = rows.map((session) => {
     const picked = session.picked ? ' is-picked' : '';
@@ -172,8 +174,7 @@ function sessionColumn(copy, rows) {
       '</div>';
   }).join('');
   return '<section class="panel panel-menu panel-menu-wide">' +
-    '<header class="panel-head level-head">' + esc(copy.sectionSessions) + '</header>' +
-    '<div class="menu-body">' + cells + '</div>' +
+    '<div class="menu-body menu-body-headless">' + cells + '</div>' +
     '</section>';
 }
 
@@ -212,6 +213,7 @@ function figureCss(config) {
 '.panel-head { height: 34px; display: flex; align-items: center; padding: 0 12px; border-bottom: 1px solid #eef2f7;' +
 ' font-size: 10px; font-weight: 500; letter-spacing: .05em; text-transform: uppercase; color: #526074; }\n' +
 '.menu-body { padding: 5px; }\n' +
+  '.menu-body-headless { padding: 8px 5px 5px; }\n' +
 '.menu-row { display: flex; align-items: center; gap: 8px; padding: 8px 8px; border-radius: 7px; }\n' +
 '.workspace-row + .workspace-row { border-top: 1px solid #f1f5f9; border-radius: 0; }\n' +
 '.session-row + .session-row { border-top: 1px solid #f1f5f9; border-radius: 0; }\n' +
