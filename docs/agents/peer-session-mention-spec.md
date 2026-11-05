@@ -21,7 +21,7 @@ Bring every surface onto one membership rule and stop rendering file-browsing ch
 3. **Level 2 visibility mirrors the sidebar.** A member is listed when it resolves in `sessions.byId` and passes the sidebar's own three exclusions: `origin === "subagent"` is dropped, `blank` is dropped unless it is the current session, and `archivedSessionIds` membership is dropped under the default archive filter.
 4. **The session drill-down carries no file semantics and no level heading.** While drilled, the plugin's native reference wrapper returns an empty array, so the host contributes neither `对话` session rows, nor its `工作区` drill header, nor `进入目录` directory rows. The plugin's own `header` hook returns `undefined` at both levels, so Level 2 shows the session rows and nothing above them. The workspace tier is expressed by the workspace rows in Level 1 alone; restating it as a heading over the session rows makes the menu read as if a workspace were still a category inside the drill-down, and reachable `进入目录`-shaped rows are the misleading affordance that omission avoids. There is no "back to the workspaces" entry either: returning to Level 1 is deleting text from the composer, which is the interaction the composer already has.
 5. **Drill state follows the query, not only the host flag.** A query that resolves to a known workspace is treated as Level 2 whether it arrived from a drill action or from typing, so the level boundary never collapses.
-6. **The README asset is regenerated from the real structure.** The demo renders the real Level 1 (`工作区` section, workspace rows only) and the real Level 2 (`对话` section as produced by the plugin, session rows with status and short ID, no drill header, no directory rows), and the false recency claim is removed from both READMEs.
+6. **The README asset is regenerated from the real structure.** The demo renders the real Level 1 (`工作区` section, workspace rows only) and the real Level 2 (session rows with status and short ID, no section title, no drill header, no directory rows), and the false recency claim is removed from both READMEs.
 
 ## User Stories
 
@@ -45,7 +45,9 @@ Bring every surface onto one membership rule and stop rendering file-browsing ch
 
 ### Source Contract
 
-The capability registers a client input trigger source named `peer-session` on the `@` character with `order: -10` and `showGroupTitle: false`. The group title stays suppressed because both levels supply their own section heading through item `section` fields; suppressing it is what lets `工作区` and `对话` appear as item sections rather than duplicating a group header.
+The capability registers a client input trigger source named `peer-session` on the `@` character with `order: -10` and `showGroupTitle: false`. Level 1 supplies `section: t('section.workspaces')` on every workspace row, so `工作区` renders as a section title above the roster.
+
+Level 2 supplies `section: undefined` on every session row, and so does the host's `对话` row set, which the drill-down suppresses. The drilled menu therefore has no section title at all: the workspace tier is named once, in Level 1, and repeating it over a list of sessions would say the workspace is still a category to pick from when it has already been picked.
 
 ### Level 1: Roster As Truth
 
@@ -76,11 +78,15 @@ The current session is excluded from its own Level 2 list.
 
 Ordering is a single tier by `updatedAt` descending with zero collaborator pinning and no cross-tier promotion. Arrival order breaks ties. The list clamps at 50 entries.
 
+Level 1 does not clamp. ADR-0034 Invariant 8 sizes the cap to keep the secondary list bounded on a keystroke path; the roster is small and fixed by what the user registered, and hiding workspace number 51 is not a latency problem but a missing workspace. The two levels are therefore deliberately asymmetric, and this asymmetry is the resolution of the conflict between Invariant 8 and "Level 1 candidate count equals `workspaces.items.length`": the count rule wins on Level 1, the clamp wins on Level 2.
+
 Every Level 2 candidate carries `section: undefined` and no `drill` field.
 
 ### Drill-Down Suppresses Native Reference Candidates
 
-`wrapNativeCandidateSource` currently forwards every request to the host implementation and post-processes the result for sidebar parity. It gains an early return: when `request.drilled === true`, it resolves to an empty array without calling the host implementation.
+`wrapNativeCandidateSource` currently forwards every request to the host implementation and post-processes the result for sidebar parity. It gains an early return: when the request is drilled, it resolves to an empty array without calling the host implementation.
+
+Drilled means `request.drilled === true` **or** the query names a roster workspace path — the same predicate the plugin's own candidates use. Typing a path by hand puts the menu in Level 2 just as pressing a workspace row does, so the two entry points must produce the same menu; if only the flag counted, a hand-typed path would show the host's `对话`, `工作区` and `进入目录` rows above the plugin's session rows, which is the reported defect restored through the other entrance. The consequence is deliberate: while a typed path is in the query, the host's file and folder candidates are suppressed along with its session rows. That is the cost of one predicate instead of two, and it is the state in which the user has already committed to a workspace rather than to a file.
 
 This removes the host's `对话` session rows, the host's `工作区` drill header, and the `进入目录` directory rows from the drilled menu in one place. The plugin meanwhile contributes no header of its own: its `header` hook returns `undefined` unconditionally, so the drilled menu opens directly on session rows. An earlier revision of this spec had the hook render a two-row heading (`header.root` over the drilled workspace name) to replace the host's; that was withdrawn because it restored, under a different author, exactly the chrome the wrapper suppresses, and because it costs a workspace-roster snapshot read on every keystroke for a heading that duplicates what the workspace row already said. It stays within ADR-0041 Invariant 1, which permits replacing the reference source's candidate generator and nothing else: the trigger character, source name, slot registrations, and the restore path are untouched, and the wrapper still restores the original `candidates` on disposal.
 
@@ -125,11 +131,12 @@ Required fixture cases:
 - A hand-typed workspace path enters Level 2, producing no `工作区` heading and no `进入目录` affordance.
 - `header` returns `undefined` at Level 1, at Level 2, and for a hand-typed path, and the headerless hook reads no workspace snapshot.
 - With `drilled === true`, the wrapped native reference source resolves to an empty array without invoking the host generator.
+- A hand-typed roster path with `drilled` absent takes the same branch, so both entrances produce one menu.
 - The canvas edge count stays strictly zero.
 
 ### Asset Assertions
 
-`tests/mention-demo-asset.test.mjs` keeps pinning the demo geometry, the manifest pairing, the README bindings, and the short-ID shape. It gains assertions that the rendered demo contains the Level 1 `工作区` heading with workspace rows only, contains the Level 2 `对话` heading with session rows only, and contains no drill header, no `进入目录` label, and no directory rows.
+`tests/mention-demo-asset.test.mjs` keeps pinning the demo geometry, the manifest pairing, the README bindings, and the short-ID shape. It gains assertions that the rendered demo contains the Level 1 `工作区` heading with workspace rows only, that the Level 2 panel carries session rows only and **no section heading**, and that no drill header, `进入目录` label, or directory row appears anywhere. The absence assertion on the Level 2 heading is the one that keeps the figure honest: an earlier revision drew a `对话` title that the plugin never renders, which is exactly the kind of screenshot the reader cannot reconcile with the app.
 
 ### Test Location
 
