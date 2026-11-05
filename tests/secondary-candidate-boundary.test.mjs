@@ -744,3 +744,86 @@ test('Secondary candidates: the client store, not the projection, is what the Ho
   assert.equal(offeredIds(hidden).includes(REPORTED_SESSION_ID), false, 'once blank is settled on the row the plugin hides it');
   assert.equal(offeredIds(shown).includes(REPORTED_SESSION_ID), true, 'with the field missing the plugin offers it anyway');
 });
+
+
+/**
+/**
+ * Mounts the plugin with the Workspace snapshot handed through verbatim, including a
+ * malformed archivedSessionIds. The shared mock snapshot helper slices the value, which
+ * would throw on null and hide the degeneration this block is about.
+ */
+async function mountLevel2Raw(byId, { sessionIds, archivedSessionIds }) {
+  const { plugin } = loadClientInSandbox();
+  let registeredSource = null;
+  const ctx = {
+    effect: (fn) => fn(),
+    locale: { register: () => {}, bind: () => (key) => key },
+    slots: { inject: () => {}, register: () => {} },
+    get: (name) => {
+      if (name === 'inputTriggers') {
+        return { registerSource: (source) => { registeredSource = source; return () => {}; } };
+      }
+      if (name === 'sessions') return { list: { getSnapshot: () => sessionsSnapshot(byId) } };
+      if (name === 'workspaces') {
+        return {
+          list: {
+            getSnapshot: () => ({
+              items: [workspaceItem({ workspaceId: 'ws-boundary-alpha', path: WORKSPACE_PATH, sessionIds })],
+              archivedSessionIds
+            })
+          }
+        };
+      }
+      return null;
+    }
+  };
+  plugin.apply(ctx);
+  return registeredSource.candidates({ sessionId: CURRENT_SESSION_ID }, { query: WORKSPACE_PATH, drilled: true });
+}
+
+/**
+ * The same degeneration at the size the live store carries: 182 members, 618 archived
+ * ids. A malformed archive list costs the filter and nothing else, so each member still
+ * arrives through the ordinary visibility rule; a well-formed one removes the archived
+ * members. The reported Session is outside the archived list, so no archive shape hides
+ * it by accident.
+ */
+const LIVE_ROSTER_SIZE = 182;
+const LIVE_ARCHIVED_SIZE = 618;
+
+/** The live Workspace roster: 182 sequential members, newest first. */
+function liveRosterRows() {
+  const members = Array.from({ length: LIVE_ROSTER_SIZE }, (_, index) => 'session-live-' + String(index).padStart(3, '0'));
+  const rows = Object.fromEntries(members.map((id, index) => [
+    id,
+    titledRow(id, 'Live member ' + index, { cwd: WORKSPACE_PATH, updatedAt: REFERENCE_NOW - index * 1000 })
+  ]));
+  return { members, rows };
+}
+
+for (const shape of [
+  { label: 'a string', value: 'session-81fbb668-c69c-410a-a194-e22510bd3c6c' },
+  { label: 'null', value: null },
+  { label: 'a number', value: LIVE_ARCHIVED_SIZE }
+]) {
+  test('Secondary candidates: a live-size roster whose archive list is ' + shape.label + ' keeps every member', async () => {
+    const { members, rows } = liveRosterRows();
+    const candidates = await mountLevel2Raw(rows, { sessionIds: members, archivedSessionIds: shape.value });
+
+    assert.equal(offeredIds(candidates).length, 50, 'the cap still bounds the list, the filter is what was lost');
+    assert.equal(offeredIds(candidates)[0], 'session-live-000', 'the newest member still leads');
+  });
+}
+
+test('Secondary candidates: a live-size archive list still hides every archived member', async () => {
+  const { members, rows } = liveRosterRows();
+  const archived = Array.from({ length: LIVE_ARCHIVED_SIZE }, (_, index) => 'session-arch-' + String(index).padStart(4, '0'));
+  for (const id of archived.slice(0, 3)) {
+    rows[id] = titledRow(id, 'Archived member', { cwd: WORKSPACE_PATH, updatedAt: REFERENCE_NOW });
+  }
+  const candidates = await mountLevel2Raw(rows, { sessionIds: [...members, ...archived.slice(0, 3)], archivedSessionIds: archived });
+  const offered = offeredIds(candidates);
+
+  assert.equal(offered.includes(archived[0]), false, 'an archived member never surfaces, even as the newest row');
+  assert.equal(offered.includes('session-live-000'), true, 'its unarchived neighbours stay');
+});
