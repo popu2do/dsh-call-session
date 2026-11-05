@@ -673,3 +673,74 @@ test('Secondary candidates: an untitled blank Session without a blank flag carri
   assert.equal(item.label, 'Agent #6b440cb0', 'the label is the short id badge, which is what the report saw as a bare id');
   assert.equal(item.description, 'time.months', 'only the recency line describes the row, since it never had a title');
 });
+
+// ---------------------------------------------------------------------------
+// Live store: the reported Session inside the real Workspace roster
+// ---------------------------------------------------------------------------
+
+/**
+ * The live-environment reproduction, built from the store on this machine rather than
+ * from hand-written rows. Every piece below is what the Host actually serves:
+ *
+ * - the log at ~/.dsh/sessions/--home-dev-code-TSPR-dsh-call-session--/session-6b440cb0-.../
+ *   holds four metadata frames (session, permission/preset, sandbox/mode, approval/policy)
+ *   and no message, so the Session never left seq 0;
+ * - the projection cache row for that id is { ver: 1, seq: 2, val: { blank: true } }, which
+ *   is exactly what summarizeCold feeds into the summary;
+ * - workspace.json lists the id in that Workspace's sessionIds (182 members) and keeps it
+ *   out of archivedSessionIds (618 entries).
+ *
+ * The sidebar asks the *summary* row, where blank is a boolean, and hides it. The menu
+ * reads the client store row, which the Host projects from the *manager* entry — and that
+ * entry carries no blank at all for a member the client never opened.
+ */
+const REPORTED_SESSION_ID = UUID_SHAPED_ID;
+const REPORTED_LOG_FRAMES = ['session', 'permission/preset', 'sandbox/mode', 'approval/policy'];
+
+/** What summarizeCold publishes for the reported Session: the cache row proves seq 0. */
+function reportedColdSummary() {
+  return { sessionId: REPORTED_SESSION_ID, updatedAt: REFERENCE_NOW, blank: true };
+}
+
+/**
+ * What sessions.list.getSnapshot() hands the client for the same Session: the Host's
+ * projectList only copies the fields a manager entry has, and buildListSnapshot attaches
+ * blank solely from a projection store the client has no row for (an unopened member).
+ */
+function reportedClientStoreRow() {
+  return coldUntitledRow(REPORTED_SESSION_ID, WORKSPACE_PATH, { updatedAt: REFERENCE_NOW });
+}
+
+test('Secondary candidates: the reported Session is hidden by the summary and offered by the client row', async () => {
+  const summary = reportedColdSummary();
+  const storeRow = reportedClientStoreRow();
+  const candidates = await level2For({ [storeRow.id]: storeRow });
+  const offered = offeredIds(candidates);
+  const item = candidates.find((candidate) => JSON.parse(candidate.value).sessionId === REPORTED_SESSION_ID);
+
+  assert.equal('blank' in storeRow, false, 'the client store row the Host projects carries no blank field');
+  assert.equal(item !== undefined, true, 'the plugin offers the row, which is the reported defect');
+  assert.equal(offered[0], REPORTED_SESSION_ID, 'a seq-0 Session sorts first on updatedAt, so it lands above the real rows');
+  assert.equal(item.label, 'Agent #6b440cb0', 'the label is the id badge, which the report read as a bare id');
+
+  hostTest('Secondary candidates: the Host summary for the same Session keeps blank true', () => {
+    const hostVisible = hostJudgments().sessionVisible(summary, CURRENT_SESSION_ID, new Set(), 'default');
+    assert.equal(hostVisible, false, 'the Host summary carries blank === true, so the sidebar hides it');
+  });
+});
+
+/**
+ * The gate the plugin never consults: on the client side every list row is routed through
+ * the manager, whose buildListSnapshot always re-derives blank and drops any row that is
+ * the Session itself. A menu that reads sessions.list getSnapshot() therefore sees the
+ * settled answer, whereas reading the manager entry directly inherits the missing field.
+ */
+test('Secondary candidates: the client store, not the projection, is what the Host filters on', async () => {
+  const storeRow = reportedClientStoreRow();
+  const withBlank = { ...storeRow, blank: true };
+  const hidden = await level2For({ [withBlank.id]: withBlank });
+  const shown = await level2For({ [storeRow.id]: storeRow });
+
+  assert.equal(offeredIds(hidden).includes(REPORTED_SESSION_ID), false, 'once blank is settled on the row the plugin hides it');
+  assert.equal(offeredIds(shown).includes(REPORTED_SESSION_ID), true, 'with the field missing the plugin offers it anyway');
+});
