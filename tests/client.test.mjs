@@ -8,6 +8,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, '..');
 
 import { loadClientBundle, loadClientInSandbox, readClientSource, findVNodes, findNodeById, createCanvasRuntime, createStatelessMockReact, standardCanvasTelemetry, wideCanvasTelemetry } from './helpers/canvas-harness.mjs';
+import { CALL_TYPE_INTENTS } from '../lib/native-message-transport.mjs';
 
 test('Client Package Configuration: package.json exports and dsh.client specification', () => {
   const pkgPath = path.join(rootDir, 'package.json');
@@ -876,7 +877,7 @@ test('Three Relationship Edge Classes: Edge generation and boundary tolerance (m
   const callG = validCallNodes[0];
   const strokePath = callG.children[1];
   assert.ok(strokePath.props.d.startsWith('M '), '调用边必须包含路径点');
-  assert.equal(strokePath.props.markerEnd, 'url(#dsh-arrow-dispatch)');
+  assert.equal(strokePath.props.markerEnd, 'url(#dsh-arrow-soft)');
 });
 
 test('Text Truncation by Rendered Width: Chinese, English, and mixed inputs (PRD 5.4)', () => {
@@ -3663,4 +3664,33 @@ test('Zero-Dead-Code: Canvas dictionaries must have zero unused i18n keys and sy
 
 
 
+
+
+test('11. Canvas labels never leak a raw call type enum to the user', () => {
+  // A historical record may carry a type the frontend does not know (for example an
+  // old session replayed from disk). The tooltip must fall back to a localised
+  // label, never to the raw enum value.
+  const source = readClientSource();
+  const rawFallback = /t\(\s*'call\.'\s*\+\s*resolveCallTypeKey\([^)]*\)\s*\)\s*\|\|\s*ent\.callType/;
+  assert.doesNotMatch(source, rawFallback, 'tooltip must not fall back to the raw call type');
+});
+
+test('12. Every backend call type has a localised label in both client dictionaries', () => {
+  const source = readClientSource();
+  const backendTypes = Object.keys(CALL_TYPE_INTENTS);
+  const keyMapMatch = source.match(/var CALL_TYPE_I18N_KEYS = \{([\s\S]*?)\};/);
+  assert.ok(keyMapMatch, 'CALL_TYPE_I18N_KEYS must exist');
+  for (const type of backendTypes) {
+    assert.match(keyMapMatch[1], new RegExp(type + ':'), `client key map must cover ${type}`);
+  }
+
+  for (const locale of ['zh', 'en']) {
+    const dictMatch = source.match(new RegExp('var ' + locale + ' = \\{([\\s\\S]*?)\\n  \\};'));
+    assert.ok(dictMatch, locale + ' dictionary must exist');
+    for (const type of backendTypes) {
+      const key = type === 'task_soft' ? 'soft' : type === 'task_hard' ? 'hard' : type === 'task_report' ? 'report' : 'notice';
+      assert.match(dictMatch[1], new RegExp("'call\." + key + "':"), `${locale} must label call.${key}`);
+    }
+  }
+});
 
