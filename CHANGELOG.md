@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.12] - 2026-11-06
+
 ### Summary
 Call type refactoring, pending task ledger, and report obligation protocol release (ADR-0042). Replaces legacy `task_dispatch` with a four-state enumeration (`notice`, `task_soft`, `task_hard`, `task_report`), maintains an in-memory pending task ledger settled strictly via 1:1 first-in-first-out pairing, injects dynamic task reminders into system prompts, intercepts unfinished obliged tasks with a turn-stopping guard, and preserves active visual flow pulses on canvas edges until obligations settle.
 
