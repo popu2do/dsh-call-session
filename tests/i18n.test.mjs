@@ -360,7 +360,7 @@ test('ADR-0023: 原生工具执行摘要与双层渲染中英双语输出验证'
   const callZhPending = zhMessages.sessionCallSuccess('s2', 'followup', 'task_soft', 'pending', 'enqueued');
   assert.ok(callZhPending.includes('已入信箱等待调度'));
   const callZhReport = zhMessages.sessionCallSuccess('s2', 'followup', 'task_report', 'running', 'delivered');
-  assert.ok(callZhReport.includes('已完成收口汇报，无需回复'));
+  assert.ok(callZhReport.includes('已完成任务汇报，无需回复'));
   const callZhNotice = zhMessages.sessionCallSuccess('s2', 'followup', 'notice', 'running', 'delivered');
   assert.ok(callZhNotice.includes('单向通报阅后即止，无需回复'));
 

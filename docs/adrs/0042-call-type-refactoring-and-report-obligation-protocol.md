@@ -66,7 +66,7 @@ ADR Writing Guidelines (writing-for-agents):
 - `notice`：单向状态通报，纯通知属性，无汇报义务，接收方无需回复。
 - `task_soft`：通知任务。派发建议、前置准备或轻量任务，接收方应通过单次 `task_report` 结算；每步前获得上下文提示，但轮次结束不被拦截。
 - `task_hard`：履约任务。派发必须回执的任务，接收方若在未交付 `task_report` 的情况下尝试结束轮次，将被停机守卫拦截。
-- `task_report`：任务成果汇报。严格按 FIFO 闭环未结任务队列中的首个匹配项，接收方归档，无需回复。
+- `task_report`：任务汇报。严格按 FIFO 闭环未结任务队列中的首个匹配项，接收方归档，无需回复。
 
 任何传入 `task_dispatch` 的调用均被参数校验拦截，抛出 `[InvalidParameter] session_call: task_dispatch is deprecated. Use notice, task_soft, task_hard, or task_report.`
 
