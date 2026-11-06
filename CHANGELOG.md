@@ -8,19 +8,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Summary
-呼叫类型契约与回执义务闭环：四态枚举 ADR-0042 取代旧的 `task_dispatch`，未结任务账本与轮次结束守卫落地。
+Call type refactoring, pending task ledger, and report obligation protocol release (ADR-0042). Replaces legacy `task_dispatch` with a four-state enumeration (`notice`, `task_soft`, `task_hard`, `task_report`), maintains an in-memory pending task ledger settled strictly via 1:1 first-in-first-out pairing, injects dynamic task reminders into system prompts, intercepts unfinished obliged tasks with a turn-stopping guard, and preserves active visual flow pulses on canvas edges until obligations settle.
 
 ### Added
-- **呼叫类型四态枚举 ADR-0042**：`notice`、`task_soft`、`task_hard`、`task_report` 成为唯一合法取值，工具 JSON Schema 的枚举与运行时 `CALL_TYPES` 数组取自同一来源；报头意图标记映射改为模块私有，对外只暴露该数组。
-- **未结任务账本**：`session_call` 投递 `task_soft` 或 `task_hard` 后，在接收方会话上登记一笔未结项；`task_report` 先把范围收窄到「由本次回执的接收方派发」的条目，再按先进先出结算其中最早的一笔，向 A 回执不会抵掉 B 的账。`session_create` 的初始消息同样入账。看板连线在结算前保持流动脉冲。
-- **轮次结束守卫**：会话回合即将结束时若仍有未结的 `task_hard`，经 `agent.steer` 投递原生 UserMessage 催办；每个回合最多催办三次，`signal.aborted` 的回合直接放行。
+- **Call Type Four-State Enumeration (ADR-0042)**:
+  - Established `notice`, `task_soft`, `task_hard`, and `task_report` as authoritative call types, derived from single array source `CALL_TYPES` across Schemastery schemas and runtime validators.
+  - Kept header intent-marker mappings module-private, exposing only the normalized array to callers.
+- **In-Memory Pending Task Ledger (`lib/call-telemetry.mjs`)**:
+  - Enqueues pending obligations on recipient sessions upon successful delivery of `task_soft` or `task_hard` calls.
+  - Settles obligations strictly 1:1 in first-in-first-out order when receiving a `task_report` targeting the original caller, preventing cross-session debt cancellation.
+  - Enrolls initial task messages from `session_create` into the same ledger.
+  - Maintains active flowing pulse animations on canvas call connections until obligations settle.
+- **Turn-Stopping Interception Guard (`lib/turn-stopping-guard.mjs`)**:
+  - Intercepts host `agent/turn-stopping` events when unfulfilled `task_hard` obligations remain pending.
+  - Steers a native `UserMessage` reminder back to the model asking for `session_call` with `call_type: 'task_report'`, bounded by a per-turn budget of 3 attempts.
+  - Immediately releases turns when `signal.aborted` is true, avoiding zombie deadlocks.
 
 ### Changed
-- 系统提示词在每步执行前注入未结任务提示，无未结任务时不注入。
-- 呼叫类型在界面与提示词中统一称为 `task_soft` 通知任务、`task_hard` 履约任务，取代此前混用的「弹性任务 / 强制任务 / 调度任务」。
+- Injected dynamic `task:remind` context into `systemPrompt.context` prior to each execution step when unsettled obligations exist.
+- Standardized call type user-facing terminology to notify task for `task_soft` and obliged task for `task_hard`.
 
 ### Removed
-- **BREAKING**：`session_call` 不再接受 `task_dispatch`，传入即抛 `[InvalidParameter]`，且不提供别名映射；升级后旧插件与脚本会直接收到参数错误，需迁移到 `task_soft`（建议回执，不拦截轮次）或 `task_hard`（必须回执，未回执时轮次收尾被守卫拦截）。
+- **BREAKING**: Removed `task_dispatch` from `session_call` without alias fallback; invalid types reject immediately with `[InvalidParameter]`. Callers must migrate to `task_soft` for non-blocking notifications or `task_hard` for mandatory closed-loop execution.
 
 ## [0.1.11] - 2026-11-03
 
