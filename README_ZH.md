@@ -169,7 +169,7 @@ dsh plugin --profile web remove dsh-call-session
 
 | 环境 | 版本范围 | 实测验证 |
 | :--- | :--- | :--- |
-| DeepSeek Harness | `>=0.2.0-rc.2 <0.3.0-0` | `0.2.0-rc.2`、`0.2.1-rc.2` |
+| DeepSeek Harness | `>=0.2.0-rc.2 <0.3.0-0` | `0.2.0-rc.2`、`0.2.1-rc.2`、`0.2.1-rc.5` |
 | Cordis | `^4.0.2` | `4.0.2+` |
 | Node.js | `>=20.0.0` | `20.x`、`22.x` |
 
