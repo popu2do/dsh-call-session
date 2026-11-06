@@ -153,9 +153,3 @@ Invariant Verification:
 
 1. Wording only: the navigation strip is named 下钻标题 / Drill Header and its dictionary key is `header.root`; the retired key is renamed in code and in tests.
 2. The retired synonyms are registered in the CONTEXT.md avoid list and enforced by the repository-wide vocabulary gate.
-
-### 5.4 Revision 2026-11-05: Withdrawing The Drill Header
-
-1. The two-level drill header from Decision 4 is withdrawn in full. The `header` hook returns `undefined` at both levels, `header.root` is retired from both dictionaries, and the `workspace-root` entry that reset the trigger to a bare `@` is removed.
-2. Rationale: the header restated the workspace tier above a list that had already chosen a workspace, so Level 2 read as if a workspace were still a category inside the drill-down. Rendering a folder-shaped back-to-the-workspaces row was rejected as well, because the host's `进入目录` rows look identical and the composer already returns to Level 1 by deleting text.
-3. The mitigation in section 5.2 is withdrawn with it: switching workspaces is done by editing the composer text or by reopening the trigger, not by the root header entry.

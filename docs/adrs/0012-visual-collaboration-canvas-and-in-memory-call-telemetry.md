@@ -138,6 +138,8 @@
 
 #### 4.3.1 内存缓冲
 
+> **Amend**：`task_dispatch` 已废弃，现役取值为 `notice | task_soft | task_hard | task_report`，见 ADR-0042；本段保留为历史记录。
+
 ```typescript
 export interface CallTelemetryRecord {
   id: string;                      // 唯一标识 (如 call-1725800000000-a1b2c3d4)

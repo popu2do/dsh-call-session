@@ -8,10 +8,10 @@ import {
   CallTelemetryRingBuffer,
   formatPendingTaskReminderText
 } from '../lib/call-telemetry.mjs';
-import { CALL_TYPE_INTENTS, buildNativeUserMessage, buildTransportPayload } from '../lib/native-message-transport.mjs';
+import { CALL_TYPE_INTENTS, CALL_TYPES, buildNativeUserMessage, buildTransportPayload } from '../lib/native-message-transport.mjs';
 import { executeSessionCall } from '../lib/session-call.mjs';
 import { buildToolDefinitions } from '../lib/tools-registry.mjs';
-import { apply } from '../index.mjs';
+import { apply, runtimeSelfCheck } from '../index.mjs';
 import { assertNativeUserMessage, createMockAgent } from './helpers/mock-agent.mjs';
 
 function createMockContext() {
@@ -20,8 +20,14 @@ function createMockContext() {
   const tools = new Map();
   const eventHandlers = new Map();
   const agents = new Map();
+  const logs = [];
 
   const ctx = {
+    logs,
+    logger(scope) {
+      const record = (level) => (message) => logs.push({ scope, level, message });
+      return { debug: record('debug'), info: record('info'), warn: record('warn'), error: record('error') };
+    },
     systemPrompt: {
       context(def) { contexts.set(def.name, def); },
       getContext(name) { return contexts.get(name); },
@@ -61,9 +67,15 @@ test('1. Transport & Schema: call_type accepts notice, task_soft, task_hard, tas
   assert.deepEqual(Object.keys(CALL_TYPE_INTENTS).sort(), ['notice', 'task_hard', 'task_report', 'task_soft'].sort());
   assert.equal(CALL_TYPE_INTENTS.task_dispatch, undefined, 'task_dispatch must be removed');
 
-  // buildTransportPayload defaults to task_soft
-  const payloadDefault = buildTransportPayload('hello', { callerSessionId: 's1' });
-  assert.match(payloadDefault, /\[From: s1 \(Session\) \| CallType: task_soft\]/);
+  // 缺省沿用 task_soft（spec 0020 默认值）；枚举外的取值一律参数错误，绝不静默降级
+  assert.match(
+    buildTransportPayload('hello', { callerSessionId: 's1' }),
+    /CallType: task_soft\]/
+  );
+  assert.throws(
+    () => buildTransportPayload('hello', { callerSessionId: 's1', callType: 'task_dispatch' }),
+    /\[InvalidParameter\]/
+  );
 
   // Tools schema declaration
   const tools = buildToolDefinitions({}, {});
@@ -72,6 +84,12 @@ test('1. Transport & Schema: call_type accepts notice, task_soft, task_hard, tas
   const callTypeSchema = sessionCall.parameters.properties.call_type;
   assert.deepEqual(callTypeSchema.enum.sort(), ['notice', 'task_hard', 'task_report', 'task_soft'].sort());
   assert.equal(callTypeSchema.default, 'task_soft');
+  // 工具 Schema 的枚举直接取自运行时单一来源，新增类型不会只落一半
+  assert.deepEqual(
+    [...callTypeSchema.enum].sort(),
+    [...Object.keys(CALL_TYPE_INTENTS)].sort(),
+    'the tool schema enum must be derived from CALL_TYPE_INTENTS'
+  );
 
   // executeSessionCall rejects task_dispatch
   const ctx = createMockContext();
@@ -96,7 +114,7 @@ test('1. Transport & Schema: call_type accepts notice, task_soft, task_hard, tas
   );
 });
 
-test('2. Telemetry Ledger: task_soft and task_hard record obligations, task_report settles FIFO, notice does not record obligation', () => {
+test('2. Telemetry Ledger: a task is enqueued after delivery, reports settle strictly first-in-first-out, and only the receiver owes a report', () => {
   const telemetry = new CallTelemetryRingBuffer(200);
 
   // Notice records call but no pending task
@@ -107,6 +125,7 @@ test('2. Telemetry Ledger: task_soft and task_hard record obligations, task_repo
     messagePayload: 'FYI only'
   });
   assert.equal(telemetry.getPendingTasksForSession('session-b').length, 0);
+  assert.equal(telemetry.getPendingTasksForSession('session-a').length, 0, 'a notice owes nobody a report');
 
   // Dispatch soft task 1
   const rec1 = telemetry.record({
@@ -131,22 +150,22 @@ test('2. Telemetry Ledger: task_soft and task_hard record obligations, task_repo
   });
   assert.equal(telemetry.getPendingTasksForSession('session-b').length, 2);
 
-  // session-b reports back to session-a: FIFO settles task 1
+  // The obligation sits on the receiver only: the caller is waiting for a report, it owes none.
+  assert.equal(telemetry.getPendingTasksForSession('session-a').length, 0, 'the caller owes nothing while it waits');
+
+  // session-b reports back to session-a. The oldest owed task is the soft one, so that is
+  // the single entry the report settles; the hard task stays on the books and keeps chasing.
   telemetry.record({
     callerSessionId: 'session-b',
     targetSessionId: 'session-a',
     callType: 'task_report',
     messagePayload: 'Step 1 complete'
   });
-  const remaining = telemetry.getPendingTasksForSession('session-b');
-  assert.equal(remaining.length, 1);
-  assert.equal(remaining[0].callId, 'call-2');
+  assert.equal(telemetry.query().find(r => r.id === 'call-1').status, 'settled', 'the oldest owed task is the one a report settles');
+  assert.equal(telemetry.query().find(r => r.id === 'call-2').status, 'active', 'a report settles exactly one entry');
+  assert.equal(telemetry.getPendingTasksForSession('session-b').length, 1);
 
-  // Verify call-1 record in telemetry is marked settled
-  const queryRec1 = telemetry.query().find(r => r.id === 'call-1');
-  assert.equal(queryRec1.status, 'settled');
-
-  // session-b reports back again: FIFO settles task 2
+  // A second report closes the hard one.
   telemetry.record({
     callerSessionId: 'session-b',
     targetSessionId: 'session-a',
@@ -154,8 +173,32 @@ test('2. Telemetry Ledger: task_soft and task_hard record obligations, task_repo
     messagePayload: 'Step 2 complete'
   });
   assert.equal(telemetry.getPendingTasksForSession('session-b').length, 0);
-  const queryRec2 = telemetry.query().find(r => r.id === 'call-2');
-  assert.equal(queryRec2.status, 'settled');
+  assert.equal(telemetry.query().find(r => r.id === 'call-2').status, 'settled');
+
+  // A report with nothing left to settle is a no-op, not a throw.
+  assert.doesNotThrow(() => telemetry.record({
+    callerSessionId: 'session-b',
+    targetSessionId: 'session-a',
+    callType: 'task_report',
+    messagePayload: 'Duplicate'
+  }));
+  assert.equal(telemetry.getPendingTasksForSession('session-b').length, 0);
+  assert.equal(telemetry.lastUnmatchedReport?.callerSessionId, 'session-b', 'a report that settles nothing still leaves a trace');
+
+  // Strict FIFO is queue order, not per-type order: an earlier soft task is settled
+  // before a later hard one, in the order the obligations were taken on.
+  const fifo = new CallTelemetryRingBuffer(200);
+  fifo.record({ id: 'f-soft', callerSessionId: 'a', targetSessionId: 'b', callType: 'task_soft' });
+  fifo.record({ id: 'f-hard', callerSessionId: 'a', targetSessionId: 'b', callType: 'task_hard' });
+  fifo.record({ callerSessionId: 'b', targetSessionId: 'a', callType: 'task_report' });
+  assert.equal(fifo.query().find(r => r.id === 'f-soft').status, 'settled', 'the queue settles its oldest entry');
+  assert.equal(fifo.query().find(r => r.id === 'f-hard').status, 'active');
+
+  // Pairing still gates the sweep: a report only settles work from the pair it names.
+  fifo.record({ id: 'f-other', callerSessionId: 'c', targetSessionId: 'b', callType: 'task_hard' });
+  fifo.record({ callerSessionId: 'b', targetSessionId: 'a', callType: 'task_report' });
+  assert.equal(fifo.query().find(r => r.id === 'f-hard').status, 'settled');
+  assert.equal(fifo.query().find(r => r.id === 'f-other').status, 'active', 'another caller\'s order stays owed');
 });
 
 test('3. Lifecycle Cascade: cleanupSession removes pending tasks and settles records', async () => {
@@ -264,7 +307,8 @@ test('5. Hard task interception: agent/turn-stopping triggers steer on pending t
   assert.match(steeredMessage.content[0].text, /Master/);
   assert.match(steeredMessage.content[0].text, /task_report/);
 
-  // Report 1: FIFO settles task_soft, task_hard remains pending and still steers
+  // The first report settles the oldest owed task, which is the soft one, so the mandatory
+  // task is still owed and the chase continues.
   ctx.callTelemetry.record({
     callerSessionId: 'agent-worker',
     targetSessionId: 'agent-master',
@@ -275,9 +319,9 @@ test('5. Hard task interception: agent/turn-stopping triggers steer on pending t
   for (const h of handlers) {
     await h({ agent: callee, turn: 3 });
   }
-  assert.ok(steeredMessage, 'task_hard is still pending after first report');
+  assert.ok(steeredMessage, 'a report settles one entry, so the hard task keeps chasing');
 
-  // Report 2: FIFO settles task_hard, turn-stopping no longer steers and cleans up
+  // Report 2 settles the hard task; nothing is owed any more.
   ctx.callTelemetry.record({
     callerSessionId: 'agent-worker',
     targetSessionId: 'agent-master',
@@ -332,7 +376,7 @@ test('6. Guard resolves the session from the real payload shape { turn, signal, 
     callType: 'task_hard'
   });
   for (const handler of ctx.getEventHandlers('agent/turn-stopping')) {
-    await handler(hostTurnPayload(callee, 1));
+    await handler(hostTurnPayload(callee, 2));
   }
   assert.ok(steeredMessage, 'task_hard must chase via steer');
   assert.match(steeredMessage.content[0].text, /Master/);
@@ -360,11 +404,23 @@ test('7. Guard never steers once the host turn signal is aborted', async () => {
     await handler(hostTurnPayload(callee, 1, { aborted: true, reason: 'user stop' }));
   }
   assert.deepEqual(steered, [], 'an aborted turn must not be resurrected');
+
+  // The stop must return immediately: the ledger is not even consulted, so no
+  // budget is spent and nothing is logged for a turn the operator ended.
+  const warnings = ctx.logs.filter((entry) => entry.level === 'warn');
+  assert.deepEqual(warnings, [], 'an aborted turn must not consume budget or warn');
+
+  // A later healthy turn still gets the full chase budget.
+  for (const handler of ctx.getEventHandlers('agent/turn-stopping')) {
+    await handler(hostTurnPayload(callee, 1));
+  }
+  assert.equal(steered.length, 1, 'the aborted turn must not have spent this turn\'s budget');
 });
 
-test('8. Guard budget is per turn: 3 chases, then a warning, and a new turn starts fresh', async () => {
+test('8. Guard budget is per turn: 3 chases, then one warning, and a new turn starts fresh', async () => {
   const ctx = createMockContext();
   apply(ctx, { locale: 'zh' });
+  const warnings = () => ctx.logs.filter((entry) => entry.level === 'warn').map((entry) => entry.message);
 
   const steered = [];
   const callee = createMockAgent('agent-worker', {
@@ -386,6 +442,9 @@ test('8. Guard budget is per turn: 3 chases, then a warning, and a new turn star
     }
   }
   assert.equal(steered.length, 3, 'at most 3 chases within one host turn');
+  assert.equal(warnings().length, 1, 'the exhausted budget must be reported exactly once, not per hook call');
+  assert.match(warnings()[0], /agent-worker/, 'the warning must name the session that ran out of chases');
+  assert.match(warnings()[0], /1 pending task\(s\)/, 'the warning must state how much work is still owed, in ledger terms');
 
   // Turn 2 is a fresh budget, not a continuation of the exhausted one.
   for (const handler of ctx.getEventHandlers('agent/turn-stopping')) {
@@ -422,11 +481,57 @@ test('9. Guard stops chasing the moment the hard task is settled', async () => {
     messagePayload: 'done'
   });
   for (const handler of ctx.getEventHandlers('agent/turn-stopping')) {
-    await handler(hostTurnPayload(callee, 1));
+    await handler(hostTurnPayload(callee, 2));
   }
   assert.equal(steered.length, 1, 'a settled task must not be chased again');
+
+  // The caller is a party to the obligation, but it owes nothing: its own turn must not be
+  // chased while it is still waiting for the report.
+  const caller = createMockAgent('agent-master', { steerFn: async () => { steered.push('caller'); } });
+  ctx.addAgent(caller);
+  const obligationHeldByCaller = ctx.callTelemetry.record({
+    callerSessionId: 'agent-worker',
+    callerTitle: 'Worker',
+    targetSessionId: 'agent-master',
+    callType: 'task_hard'
+  });
+  for (const handler of ctx.getEventHandlers('agent/turn-stopping')) {
+    await handler(hostTurnPayload(caller, 1));
+  }
+  assert.equal(steered.length, 2, 'a session that owes a hard report must be chased');
+  ctx.callTelemetry.record({
+    callerSessionId: 'agent-master',
+    targetSessionId: 'agent-worker',
+    callType: 'task_report',
+    messagePayload: 'done'
+  });
+  assert.equal(obligationHeldByCaller.status, 'settled', 'reporting back settles the obligation placed on the caller');
 });
 
+
+test('10. Transport never fabricates a call type: unknown types are rejected, and bootstrap keeps the real one', () => {
+  // An unknown type must never be echoed into the header, nor quietly swapped for one.
+  assert.throws(
+    () => buildTransportPayload('x', { callerSessionId: 's1', callType: 'task_dispatch' }),
+    /\[InvalidParameter\].*task_dispatch/,
+    'a retired call type is a parameter error, not a silent substitution'
+  );
+  assert.throws(
+    () => buildNativeUserMessage({ rawMessage: 'x', callType: 'task_dispatch' }),
+    /\[InvalidParameter\]/,
+    'the message builder must reject it too, before any header is written'
+  );
+
+  // A real type survives the bootstrap form instead of being pinned to task_soft.
+  const bootstrap = buildNativeUserMessage({
+    rawMessage: 'boot',
+    form: 'session_create',
+    callerSessionId: 'parent',
+    callerTitle: 'Parent',
+    callType: 'task_hard'
+  });
+  assert.match(bootstrap.content[0].text, /\| CallType: task_hard\]/);
+});
 
 test('11. Guard steers a native UserMessage, never a bare string', async () => {
   // Live capture: a string reached agent.steer, the host spliced it into the inbox
@@ -462,20 +567,69 @@ test('11. Guard steers a native UserMessage, never a bare string', async () => {
   assert.match(message.content[0].text, /Master/, 'the reminder still names the caller');
 });
 
-test('10. Transport never fabricates a call type: unknown types degrade, and bootstrap keeps the real one', () => {
-  // An unknown type must never be echoed into the header or summarised as if real.
-  const unknownHeader = buildTransportPayload('x', { callerSessionId: 's1', callType: 'task_dispatch' });
-  assert.match(unknownHeader, /\| CallType: task_soft\]/, 'unknown types degrade to the least intrusive type');
-  assert.doesNotMatch(unknownHeader, /task_dispatch/);
-
-  // A real type survives the bootstrap form instead of being pinned to task_soft.
-  const bootstrap = buildNativeUserMessage({
-    rawMessage: 'boot',
-    form: 'session_create',
-    callerSessionId: 'parent',
-    callerTitle: 'Parent',
+test('12. session_create carries the caller-chosen call type into the initial message', async () => {
+  const { formatInitialMessage } = await import('../lib/peer-bootstrap.mjs');
+  const hard = formatInitialMessage({
+    initialMessage: '请回执',
+    callerSessionId: 'agent-master',
+    callerTitle: 'Master',
     callType: 'task_hard'
   });
-  assert.match(bootstrap.content[0].text, /\| CallType: task_hard\]/);
+  assert.match(hard.content[0].text, /\| CallType: task_hard\]/, 'the chosen type must survive bootstrap');
+  assert.throws(
+    () => formatInitialMessage({ initialMessage: 'x', callType: 'task_dispatch' }),
+    /\[InvalidParameter\]/,
+    'a retired type is rejected at the schema boundary too'
+  );
+
+  const def = formatInitialMessage({ initialMessage: 'hi', callerSessionId: 'agent-master' });
+  assert.match(def.content[0].text, /\| CallType: task_soft\]/, 'without a choice the documented default applies');
+
+  const tools = buildToolDefinitions({}, {});
+  const createSchema = tools.find(t => t.name === 'session_create').parameters.properties.call_type;
+  assert.deepEqual([...createSchema.enum].sort(), [...CALL_TYPES].sort(), 'session_create exposes every live type');
+});
+
+test('13. Reminders say nothing when nothing is owed, and are bilingual', async () => {
+  const zh = (await import('../lib/locales/zh.mjs')).default.prompts;
+  const en = (await import('../lib/locales/en.mjs')).default.prompts;
+  for (const prompts of [zh, en]) {
+    assert.equal(prompts.taskHardTurnReminder([]), '', 'no pending work means no injected text');
+    assert.equal(prompts.taskHardTurnReminder(undefined), '');
+    assert.match(prompts.taskHardTurnReminder([{ callerSessionId: 'agent-master', callerTitle: 'Master' }]), /task_report/);
+  }
+
+  // And the prompt section itself contributes nothing once the ledger is clear.
+  const ctx = createMockContext();
+  apply(ctx, { locale: 'zh' });
+  const worker = createMockAgent('agent-worker', { title: 'Worker W' });
+  ctx.addAgent(worker);
+  const section = ctx.systemPrompt.getContext('task:remind');
+  assert.equal(await section.text({ agent: worker }), '');
+});
+
+test('14. Restart self-check answers what this process actually loaded', async () => {
+  // The check must read the live plugin instance, not a module-level copy: it is
+  // the gate that separates "the new code never loaded" from "the new code is inert".
+  const ctx = createMockContext();
+  const registered = [];
+  ctx.provide = (key, value) => registered.push([key, value]);
+  apply(ctx, { locale: 'zh' });
+
+  const exposed = new Map(registered);
+  assert.equal(typeof exposed.get('callSessionSelfCheck'), 'function', 'the host can query the plugin state');
+
+  const snapshot = exposed.get('callSessionSelfCheck')();
+  assert.deepEqual(snapshot.callTypes, ['notice', 'task_soft', 'task_hard', 'task_report']);
+  assert.equal(snapshot.defaultCallType, 'task_soft');
+  assert.equal(snapshot.guard.registered, true);
+  assert.equal(snapshot.guard.listening, true, 'the guard is actually on the turn-stopping hook');
+  assert.equal(snapshot.guard.maxRemindersPerTurn, 3);
+  assert.equal(snapshot.ledger.attached, true);
+
+  // A host that never wired the guard must report it instead of pretending.
+  const inert = runtimeSelfCheck(createMockContext(), { getPendingTasksForSession() {} }, null);
+  assert.equal(inert.guard.registered, false);
+  assert.equal(inert.guard.listening, null);
 });
 

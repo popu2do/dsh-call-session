@@ -43,15 +43,16 @@ ADR Writing Guidelines (writing-for-agents):
 
 ## 选型
 
-### 方案一：兼容模式保留 task_dispatch 别名
+### 方案一
 - **描述**：允许旧有的 `task_dispatch` 作为 `task_soft` 的别名共存。
 - **缺陷**：造成契约漂移与历史包袱，调用方继续滥用模糊语义，破坏新协议的确定性要求。
 
-### 方案二：批量结算与复杂任务 ID 映射
+### 方案二
 - **描述**：在 `task_report` 中传入关联的任务 ID 数组，支持多任务合并汇报或部分结算。
 - **缺陷**：大幅增加智能体认知负荷与参数编排复杂度，多智能体协议极易因 ID 错漏引发卡死。
 
-### 方案三（入选）：严格正交四态与 1:1 FIFO 结算
+### 方案三
+- **入选**：严格正交四态与 1:1 FIFO 结算。
 - **描述**：入参严格限定为 `notice | task_soft | task_hard | task_report`，彻底拒绝 `task_dispatch`；引入内存轻量队列，`task_report` 按 FIFO 自动结算单一未结任务；结合前置上下文与停机守卫形成双重保障。
 - **优势**：极简透明，模型零配置即可天然闭环；彻底消除遗留歧义。
 
@@ -67,20 +68,23 @@ ADR Writing Guidelines (writing-for-agents):
 - `task_hard`：强制任务。派发具有明确汇报义务的硬性任务，接收方若在未交付 `task_report` 的情况下尝试结束轮次，将被停机守卫拦截。
 - `task_report`：任务成果汇报。严格按 FIFO 闭环未结任务队列中的首个匹配项，接收方归档，无需回复。
 
-任何传入 `task_dispatch` 的调用均被参数校验拦截，抛出 `[InvalidParameter] session_call: task_dispatch is deprecated. Use notice, task_soft, task_hard, or task_report.`。
+任何传入 `task_dispatch` 的调用均被参数校验拦截，抛出 `[InvalidParameter] session_call: task_dispatch is deprecated. Use notice, task_soft, task_hard, or task_report.`
+
+`session_create` 同样接受 `call_type`（取值与上面四态一致，缺省 `task_soft`），它只描述创建时那条初始消息的语气与义务强度，不改变创建语义；非法取值与 `session_call` 一样直接抛 `[InvalidParameter]`。
 
 ### 账本
 
 调用内存环形缓冲区（CallTelemetryRingBuffer）维护会话维度的内存未结任务账本 `_pendingTasks`：
-1. **入队记录**：当单播调用类型为 `task_soft` 或 `task_hard` 且投递成功时，记录包含 `taskId`、`callerSessionId`、`targetSessionId`、`callType`、`contentSnippet`、`timestamp` 与 `isHard` 的任务项。
-2. **先进先出结算**：当接收方调用 `session_call` 且类型为 `task_report` 时，从该会话作为目标的所有未结任务中查找最先派发的一项，将其标记为 `settled` 并记入结算时间与汇报编号。
-3. **会话级联清理**：当会话归档或销毁时，自动从账本中移除以该会话为发件人或接收人的未结项，杜绝内存泄漏。
+1. **入队记录**：当单播调用类型为 `task_soft` 或 `task_hard` 且投递成功时（`session_create` 携带初始消息并成功投递也按同一规则入队，两种入口共用一本账），记录包含 `taskId`、`callerSessionId`、`targetSessionId`、`callType`、`contentSnippet`、`timestamp` 与 `isHard` 的任务项。
+2. **先进先出结算**：当接收方调用 `session_call` 且类型为 `task_report` 时，从该会话作为目标的所有未结任务中查找最先派发的一项（严格全局 FIFO，不按发件人分桶，早到的软任务不会被后来的硬任务插队饿死），将其标记为 `settled` 并记入结算时间与汇报编号；找不到匹配项时不报错，只在账本上留下一条未匹配记录。
+3. **义务归属**：义务只落在接收方身上，只有接收方会被要求回执；发件方只是在等结果，不会因为没有收到回执而被拦下。
+4. **会话级联清理**：当会话归档或销毁时，自动从账本中移除以该会话为发件人或接收人的未结项，杜绝内存泄漏。
 
 ### 守卫
 
 结合原生宿主机制构建双重推进防护：
 1. **执行前上下文注入**：注册 `systemPrompt.context` 提供者 `task:remind`。当会话存在未结任务时，在每步执行前动态注入待履约任务清单与发件人指示；若无待办则返回空串，不消耗上下文。
-2. **轮次停机拦截守卫**：监听宿主 `agent/turn-stopping` 事件。当会话仍有未结 `task_hard` 且未达到防死锁预算上限（默认 3 次）时，取消停机动作并通过 `agent.steer` 注入催办指令，强行拉起新步进要求智能体履约；预算耗尽时放行停机并记录告警。
+2. **轮次停机拦截守卫**：监听宿主 `agent/turn-stopping` 事件，载荷为 `{ turn, signal, agent }`，会话标识只能从 `agent.session.id` 解析。当会话仍有未结 `task_hard` 且本轮催办次数未达防死锁预算（默认 3 次）时，通过 `agent.steer` 注入一个原生 UserMessage 催办消息，把回合顶回去要求智能体履约（宿主只接受 UserMessage，字符串载荷会让整个回合失败，见 `docs/agents/evidence/0020-turn-stopping.md`）；本轮预算耗尽后放行停机并记录一次告警，下一轮次重新获得完整预算。若载荷 signal 已 abort，守卫直接放行——中止的回合不得被拽回。
 
 ### 动效
 
@@ -107,5 +111,8 @@ ADR Writing Guidelines (writing-for-agents):
 
 ## 验证
 
-- 单元测试 `tests/report-obligation.test.mjs` 覆盖全部 5 核心场景：Schema 拒绝、任务账本 1:1 FIFO 结算、级联清理、`task:remind` 上下文注入、`agent/turn-stopping` 停机拦截与预算耗尽放行。
-- 现有全量回归测试套件（557 项测试）通过率 100%，无破坏性回退。
+三类证据分开陈述，缺任一类都不算验收通过。
+
+- 自动化测试：`tests/report-obligation.test.mjs` 覆盖 Schema 拒绝与缺省类型、账本全局 FIFO 结算（含跨发件人配对门禁与未匹配记录）、义务只落接收方、级联清理、`task:remind` 上下文注入、`agent/turn-stopping` 停机拦截、逐回合预算耗尽放行、空账本不注入，以及重启自检返回本进程实际加载的取值与守卫注册状态；`tests/session-create.test.mjs` 覆盖 `session_create` 的初始消息与 `session_call` 记进同一本账。全量回归见 `npm run verify` 的当次输出，不在本文硬编码条数。
+- 红绿对照：逐条撤销守卫的关键判断（中途放行、预算恒假、过滤放宽、steer 传裸字符串）时对应用例转红，恢复后全绿，实验记录在 `docs/agents/evidence/0020-turn-stopping.md` 的「T-C 验收：红绿对照」。
+- 实机取证：探针 profile 装载本插件后，记录到纯文本收尾与工具调用收尾两条路径都触发 `agent/turn-stopping`；并捕获到裸字符串载荷会让宿主以 `Cannot read properties of undefined (reading 'kind')` 结束回合，换成原生 UserMessage 后同一会话正常续命，时间线见 `docs/agents/evidence/0020-turn-stopping.md`。

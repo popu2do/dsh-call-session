@@ -3,8 +3,8 @@
  * 进程内会话单播通信契约与分发逻辑
  */
 
-/** 单播呼叫意图类型：单向通知、软调度任务、硬调度任务、任务汇报 */
-export type CallType = 'notice' | 'task_soft' | 'task_hard' | 'task_report';
+/** 单播呼叫意图类型：单向通知、软调度任务、硬调度任务、任务汇报，取自运行时枚举单一来源 */
+export type CallType = (typeof import('../lib/native-message-transport.mjs').CALL_TYPES)[number];
 
 /** 两态分发模式：运行态 steer 引导，空闲态 followup 唤醒 */
 export type DeliveryMode = 'steer' | 'followup';

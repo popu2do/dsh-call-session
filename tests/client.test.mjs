@@ -9,6 +9,7 @@ const rootDir = path.resolve(__dirname, '..');
 
 import { loadClientBundle, loadClientInSandbox, readClientSource, findVNodes, findNodeById, createCanvasRuntime, createStatelessMockReact, standardCanvasTelemetry, wideCanvasTelemetry } from './helpers/canvas-harness.mjs';
 import { CALL_TYPE_INTENTS } from '../lib/native-message-transport.mjs';
+import { CALL_TYPE_I18N_KEYS, CALL_TYPE_UNKNOWN_KEY } from '../lib/locales/table.mjs';
 
 test('Client Package Configuration: package.json exports and dsh.client specification', () => {
   const pkgPath = path.join(rootDir, 'package.json');
@@ -3667,30 +3668,110 @@ test('Zero-Dead-Code: Canvas dictionaries must have zero unused i18n keys and sy
 
 
 test('11. Canvas labels never leak a raw call type enum to the user', () => {
-  // A historical record may carry a type the frontend does not know (for example an
-  // old session replayed from disk). The tooltip must fall back to a localised
-  // label, never to the raw enum value.
-  const source = readClientSource();
-  const rawFallback = /t\(\s*'call\.'\s*\+\s*resolveCallTypeKey\([^)]*\)\s*\)\s*\|\|\s*ent\.callType/;
-  assert.doesNotMatch(source, rawFallback, 'tooltip must not fall back to the raw call type');
+  // A historical record may carry a type this build does not know (an old session
+  // replayed from disk). Its label must be a localised string — never the raw enum,
+  // and never the soft-task label, which would invent an obligation.
+  const plugin = loadClientBundle();
+  for (const locale of ['zh', 'en']) {
+    const t = (key) => plugin[locale][key];
+    for (const type of Object.keys(CALL_TYPE_INTENTS)) {
+      const label = plugin.callTypeLabel(type, t);
+      assert.notEqual(label, type, `${locale}: ${type} must not render as its raw enum`);
+    }
+    const unknown = plugin.callTypeLabel('task_dispatch', t);
+    assert.equal(unknown, plugin[locale]['call.unknown']);
+    assert.notEqual(unknown, plugin[locale]['call.soft'], `${locale}: an unknown type must not read as a soft task`);
+    assert.notEqual(unknown, 'task_dispatch');
+  }
 });
 
-test('12. Every backend call type has a localised label in both client dictionaries', () => {
-  const source = readClientSource();
-  const backendTypes = Object.keys(CALL_TYPE_INTENTS);
-  const keyMapMatch = source.match(/var CALL_TYPE_I18N_KEYS = \{([\s\S]*?)\};/);
-  assert.ok(keyMapMatch, 'CALL_TYPE_I18N_KEYS must exist');
-  for (const type of backendTypes) {
-    assert.match(keyMapMatch[1], new RegExp(type + ':'), `client key map must cover ${type}`);
-  }
+test('12. A mixed fixture keeps unsettled obligations flowing and decays settled ones', () => {
+  // 同一个看板里同时放四类调用：硬性任务未结、软任务未结、已结项、只是一条通知。
+  // 未结的义务必须在画布上保持满不透明与流动虚线，结项后按历史连线淡化。
+  const now = Date.now();
+  const base = {
+    callerSessionId: 's1',
+    targetSessionId: 's2',
+    callerTitle: 'Session 1',
+    targetTitle: 'Session 2',
+    timestamp: now - 1000
+  };
+  const telemetry = {
+    currentWorkspace: '/ws/main',
+    workspaces: [{ id: '/ws/main', name: 'main', isCurrent: true, sessionIds: ['s1', 's2'] }],
+    sessions: [
+      { id: 's1', workspace: '/ws/main', status: 'running', title: 'Session 1' },
+      { id: 's2', workspace: '/ws/main', status: 'idle', title: 'Session 2' }
+    ],
+    posts: [],
+    calls: [
+      { ...base, id: 'call-hard-open', callType: 'task_hard', status: 'active' },
+      { ...base, id: 'call-soft-open', callType: 'task_soft', status: 'active' },
+      { ...base, id: 'call-hard-settled', callType: 'task_hard', status: 'settled' },
+      { ...base, id: 'call-notice', callType: 'notice', status: 'active' }
+    ]
+  };
 
-  for (const locale of ['zh', 'en']) {
-    const dictMatch = source.match(new RegExp('var ' + locale + ' = \\{([\\s\\S]*?)\\n  \\};'));
-    assert.ok(dictMatch, locale + ' dictionary must exist');
-    for (const type of backendTypes) {
-      const key = type === 'task_soft' ? 'soft' : type === 'task_hard' ? 'hard' : type === 'task_report' ? 'report' : 'notice';
-      assert.match(dictMatch[1], new RegExp("'call\." + key + "':"), `${locale} must label call.${key}`);
+  // minimal 常态会抑制已结项连线，用 full 模式把四类同时摆出来比较
+  const { view } = createTestCanvasHarness(telemetry, null, 'full');
+  const edges = findNodeById(view, 'dsh-canvas-call-edges').children.filter(Boolean);
+  const edgeOf = (id) => {
+    const group = edges.find((e) => e.props && e.props.key === id);
+    assert.ok(group, `edge ${id} must be rendered`);
+    return group.children.filter(Boolean).find((n) => n && n.props && n.props.markerEnd);
+  };
+
+  // 1. 未结的强制任务：满不透明、流动虚线、琥珀色箭头
+  const hardOpen = edgeOf('call-hard-open').props;
+  assert.equal(hardOpen.opacity, 1.0, 'an unsettled hard task keeps full opacity');
+  assert.equal(hardOpen.strokeDasharray, '6 4', 'an unsettled obligation keeps the flowing dash');
+  assert.equal(hardOpen.markerEnd, 'url(#dsh-arrow-hard)', 'task_hard has its own arrow marker');
+  assert.notEqual(hardOpen.stroke, edgeOf('call-soft-open').props.stroke, 'task_hard is coloured apart from task_soft');
+
+  // 2. 未结的软任务与硬任务同样保留
+  const softOpen = edgeOf('call-soft-open').props;
+  assert.equal(softOpen.opacity, 1.0, 'an unsettled soft task keeps full opacity');
+  assert.equal(softOpen.markerEnd, 'url(#dsh-arrow-soft)');
+
+  // 3. 结项后按历史连线淡化
+  const hardSettled = edgeOf('call-hard-settled').props;
+  assert.equal(hardSettled.opacity, 0.3, 'a settled obligation decays like a historical call');
+  assert.equal(hardSettled.strokeDasharray, '4 4', 'a settled obligation stops flowing');
+
+  // 4. 通知保留自己的箭头，颜色与三类任务都不相同
+  const notice = edgeOf('call-notice').props;
+  assert.equal(notice.markerEnd, 'url(#dsh-arrow-notice)');
+  assert.ok(new Set([hardOpen.stroke, softOpen.stroke, notice.stroke]).size >= 2);
+
+  // 5. 四类在抽屉里都有本地化标签，且都不等于裸枚举
+  const plugin = loadClientBundle();
+  for (const type of ['task_soft', 'task_hard', 'task_report', 'notice']) {
+    for (const locale of ['zh', 'en']) {
+      const label = plugin.callTypeLabel(type, (k) => plugin[locale][k]);
+      assert.ok(label && label !== type, `${locale} must label ${type}`);
     }
+  }
+});
+
+test('13. Every backend call type has a localised label in both client dictionaries', () => {
+  // 词条键有唯一来源：枚举新增一种类别时，只要它没进共享表，这条断言先红。
+  const backendTypes = Object.keys(CALL_TYPE_INTENTS);
+  assert.deepEqual(
+    Object.keys(CALL_TYPE_I18N_KEYS).sort(),
+    [...backendTypes].sort(),
+    'the shared locale table must cover exactly the backend call types'
+  );
+
+  const plugin = loadClientBundle();
+  for (const locale of ['zh', 'en']) {
+    for (const type of backendTypes) {
+      const label = plugin.callTypeLabel(type, (key) => plugin[locale][key]);
+      assert.ok(label, `${locale} must label ${type}`);
+      assert.notEqual(label, type, `${locale}: ${type} must not fall back to the raw enum`);
+    }
+    // 回放来的旧记录也要有词条，且不能借用某一类既定义务的文案。
+    assert.ok(plugin[locale]['call.' + CALL_TYPE_UNKNOWN_KEY], `${locale} must label the unknown call type`);
+    assert.notEqual(plugin[locale]['call.' + CALL_TYPE_UNKNOWN_KEY], plugin[locale]['call.soft']);
   }
 });
 

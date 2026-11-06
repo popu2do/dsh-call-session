@@ -384,31 +384,41 @@ test('buildTransportPayload: 带 Context Ref 时换行追加引用且格式化 #
   assert.match(payload, HEADER_REGEX);
 });
 
-test('buildTransportPayload: 回退机制 (参数缺省、空串、非法类型)', () => {
-  // 1. 无第二个参数或空对象
-  const p1 = buildTransportPayload('Hello fallback');
+test('buildTransportPayload: 发件人缺省回退，呼叫类别非法即抛错', () => {
+  // 1. 发件人字段缺省或空白时回退到客观占位，呼叫类别必须显式给出
+  const p1 = buildTransportPayload('Hello fallback', { callType: 'task_soft' });
   assert.equal(p1, '[From: unknown-caller (Session) | CallType: task_soft]\n\nHello fallback');
 
-  const p2 = buildTransportPayload('Hello fallback', {});
-  assert.equal(p2, '[From: unknown-caller (Session) | CallType: task_soft]\n\nHello fallback');
-
-  // 2. 空白字符串与非法 callType 回退
-  const p3 = buildTransportPayload('Fallback with spaces', {
+  const p2 = buildTransportPayload('Fallback with spaces', {
     callerSessionId: '   ',
     callerTitle: '',
-    callType: 'unsupported_call_type',
+    callType: 'task_soft',
     cleanPostIds: []
   });
-  assert.equal(p3, '[From: unknown-caller (Session) | CallType: task_soft]\n\nFallback with spaces');
+  assert.equal(p2, '[From: unknown-caller (Session) | CallType: task_soft]\n\nFallback with spaces');
 
-  // 3. null / undefined 字段容错
-  const p4 = buildTransportPayload('Fallback with nulls', {
+  const p3 = buildTransportPayload('Fallback with nulls', {
     callerSessionId: null,
     callerTitle: null,
-    callType: null,
+    callType: 'task_soft',
     cleanPostIds: null
   });
-  assert.equal(p4, '[From: unknown-caller (Session) | CallType: task_soft]\n\nFallback with nulls');
+  assert.equal(p3, '[From: unknown-caller (Session) | CallType: task_soft]\n\nFallback with nulls');
+
+  // 2. 未给出呼叫类别时沿用默认的 task_soft（spec 0020：session_create 与工具入口同源）
+  assert.equal(
+    buildTransportPayload('Default type', { callerSessionId: 'caller-session-99999999' }),
+    '[From: caller-session-99999999 (Session) | CallType: task_soft]\n\nDefault type'
+  );
+
+  // 3. 枚举外或空白的呼叫类别是参数错误，绝不静默替换成另一种义务等级
+  for (const bad of ['unsupported_call_type', 42, '']) {
+    assert.throws(
+      () => buildTransportPayload('x', { callType: bad }),
+      /\[InvalidParameter\].*invalid call_type/,
+      `call_type ${JSON.stringify(bad)} must be rejected`
+    );
+  }
 });
 
 test('buildTransportPayload: 原始正文 100% 逐字无损与禁止指令污染 (Zero-Envelope & Zero-Preach)', () => {

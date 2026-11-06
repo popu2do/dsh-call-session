@@ -57,9 +57,14 @@ test('NativeMessageTransport - 客观传输报头装配与零正文篡改 (build
   assert.ok(payload.startsWith(expectedHeader));
   assert.ok(payload.endsWith(`\n\n${rawMsg}`));
 
-  // 回退边界处理
-  const fallbackPayload = buildTransportPayload('Hello fallback');
+  // 发件人缺省回退；呼叫类别缺省沿用默认的 task_soft（spec 0020）
+  const fallbackPayload = buildTransportPayload('Hello fallback', { callType: 'task_soft' });
   assert.ok(fallbackPayload.startsWith('[From: unknown-caller (Session) | CallType: task_soft]\n\nHello fallback'));
+  assert.ok(
+    buildTransportPayload('Hello fallback').startsWith('[From: unknown-caller (Session) | CallType: task_soft]'),
+    'a missing call_type falls back to the documented default instead of failing'
+  );
+  assert.throws(() => buildTransportPayload('Hello fallback', { callType: 'task_dispatch' }), /\[InvalidParameter\]/);
 });
 
 test('NativeMessageTransport - 标准 DSH UserMessage 原子装配与摘要截断 (buildNativeUserMessage)', () => {
@@ -113,7 +118,8 @@ test('NativeMessageTransport - 标准 DSH UserMessage 原子装配与摘要截�
   const truncatedMsg = buildNativeUserMessage({
     rawMessage: longText,
     form: 'notice',
-    callerTitle: 'Caller'
+    callerTitle: 'Caller',
+    callType: 'notice'
   });
   assert.ok(truncatedMsg.source.summary.length <= 120);
   assert.ok(truncatedMsg.source.summary.endsWith('...'));
