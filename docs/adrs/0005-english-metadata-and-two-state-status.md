@@ -1,6 +1,13 @@
+<!--
+ADR Writing Guidelines (writing-for-agents):
+1. Focus on architectural intent, forces, decisions, and invariants.
+2. Avoid code dumps that duplicate live code.
+3. Keep prose dense, factual, and scannable without parenthetical annotations.
+4. If writing in Chinese, ensure all subheadings are <= 4 characters.
+-->
 # ADR-0005: English Metadata and Normalized Two-State Status Protocol
 
-- **Status**: Accepted
+- **Status**: Superseded by ADR-0031
 - **Date**: 2026-09-03
 - **Deciders**: Architect, Engineering Team, Core Contributors
 - **Consulted**: Prompt Engineering Lead, QA Automation, Front-End UI Team
@@ -17,12 +24,12 @@ Multi-agent coordination requires discovering live sessions and determining whet
 Exposing these raw, transient internal states to LLM subagents caused significant operational friction:
 1. **Prompt Confusion & Hallucination**: When an agent saw a peer in `waiting` or `interrupted` status, LLMs frequently hallucinated that the agent had crashed permanently or required emergency reboot prompts, rather than recognizing that it was simply ready for its next turn.
 2. **Title Resolution Fragility**: Across different DSH releases, session titles were stored inconsistently: sometimes in `agent.session.header.title`, sometimes in an ephemeral `sessionTitle` service, and sometimes only inside historical events (`session/title`). Unhandled discrepancies caused sessions to be rendered as empty strings or `Untitled`, breaking human observability.
-3. **Token Inefficiency and Mixed-Language Serialization**: Early experimental tools emitted verbose Chinese keys (`会话ID`, `当前状态`, `工作目录`). This wasted precious prompt tokens and routinely caused JSON parsing failures when consumed by English-centric reasoning models.
+3. **Token Inefficiency and Mixed-Language Serialization**: Early experimental tools emitted verbose Chinese keys like 会话ID, 当前状态, and 工作目录. This wasted prompt tokens and routinely caused JSON parsing failures when consumed by English-centric reasoning models.
 
 ### 1.2 Architectural Forces & Constraints
 
 - **Minimalist State Surface**: LLM agents only need to know a binary condition: can this agent accept new tasks right now, or is it currently busy?
-- **Strict English JSON Schema for Outputs**: Machine-to-machine tool outputs must use clean, standardized, camelCase English keys (ADR-0016: 出参严格使用 camelCase，入参严格使用 snake_case)。
+- **Strict English JSON Schema for Outputs**: Machine-to-machine tool outputs must use clean, standardized, camelCase English keys per ADR-0016 where outputs use camelCase and inputs use snake_case.
 - **Human Observability**: Humans inspecting the web GUI need rich, formatted Markdown previews without sacrificing raw data fidelity.
 
 ---
@@ -32,7 +39,7 @@ Exposing these raw, transient internal states to LLM subagents caused significan
 - **Driver 1 (Two-State Protocol Simplification)**: Collapse complex internal runtime states into a deterministic binary status: `'running' | 'idle'`.
 - **Driver 2 (Robust Title Fallback Hierarchy)**: Guarantee that session titles resolve accurately across all current and historical DSH versions.
 - **Driver 3 (Token Economy & Pure English Metadata)**: Ensure all tool schema keys and programmatic outputs use concise English tokens.
-- **Driver 4 (Dual-Layer Separation: Data vs Render)**: Return strict typed JSON objects for LLM consumption while attaching rendered Markdown text for GUI presentation.
+- **Driver 4 (Dual-Layer Separation)**: Return strict typed JSON objects for LLM consumption while attaching rendered Markdown text for GUI presentation.
 
 ---
 
@@ -44,7 +51,7 @@ Exposing these raw, transient internal states to LLM subagents caused significan
 - **Cons**: High cognitive load on LLMs; leads to prompt bloat and unpredictable decision branching.
 
 ### Option 2: Human-Language Formatted Strings Only
-- **Description**: Return pre-formatted localized strings (e.g. `"会话 session-123 当前正在执行任务"`).
+- **Description**: Return pre-formatted localized strings.
 - **Pros**: Easy for human reading in chat windows.
 - **Cons**: Unusable for automated agent routing; requires regex parsing to extract session IDs; high token cost.
 
@@ -66,43 +73,18 @@ Exposing these raw, transient internal states to LLM subagents caused significan
 ### 4.1 Core Architectural Principles & Invariants
 
 1. **Deterministic Two-State Invariant**:
-   - For every agent query, `status` is strictly normalized:
-     ```javascript
-     // lib/session-query.mjs Line 97-98
-     const status = agent.status === 'running' ? 'running' : 'idle';
-     ```
-   - Any other internal status (`paused`, `waiting`, `interrupted`, or `null`) maps deterministically to `'idle'`.
+   - For every agent query, `status` is strictly normalized: `status === 'running'` maps to `'running'`; any other internal status (`paused`, `waiting`, `interrupted`, or `null`) maps deterministically to `'idle'`.
 2. **Four-Tier Title Resolution Cascade (`resolveSessionTitle`)**:
    - Priority 1: `agent?.session?.title`
    - Priority 2: `agent?.title`
-   - Priority 3: `ctx.get('sessionTitle')?.get(agent.session)?.title`
-   - Priority 4: Reverse search in `agent?.session?.events` for `{ type: 'session/title' }`
-   ```javascript
-   // lib/session-query.mjs Line 28-51
-   export function resolveSessionTitle(ctx, agent) {
-     if (typeof agent?.session?.title === 'string' && agent.session.title) return agent.session.title;
-     if (typeof agent?.title === 'string' && agent.title) return agent.title;
-     const titleService = ctx?.get ? ctx.get('sessionTitle') : ctx?.sessionTitle;
-     if (titleService && typeof titleService.get === 'function' && agent?.session) {
-       const res = titleService.get(agent.session);
-       if (typeof res?.title === 'string' && res.title) return res.title;
-     }
-     if (Array.isArray(agent?.session?.events)) {
-       for (let i = agent.session.events.length - 1; i >= 0; i--) {
-         const ev = agent.session.events[i];
-         if (ev?.type === 'session/title' && typeof ev.data?.title === 'string' && ev.data.title) {
-           return ev.data.title;
-         }
-       }
-     }
-     return '';
-   }
-   ```
+   - Priority 3: `ctx.sessionTitle?.get(agent.session)?.title`
+   - Priority 4: Reverse chronological search in `agent?.session?.events` for `{ type: 'session/title' }`
+   - Fallback: Return empty string if unresolved.
 3. **Strict English JSON Schema (Machine Layer Outputs, ADR-0016 Complement)**:
    - Output property keys: `sessionId`, `title`, `status`, `workspace`, `isCurrent`, `totalCount`, `activeCount`, `idleCount`.
    - Outputs strictly use `camelCase`. Tool inputs to `session_query` strictly use `snake_case` (`query`, `running_only`, `cross_workspace`, `top_level_only`, `limit`).
    - The historical alias `active_only` is formally abolished; `running_only` is the single canonical input.
-   - Never use localized or multi-lingual keys in data payloads.
+   - Prohibit localized or multi-lingual keys in data payloads.
 
 ### 4.2 System Architecture & Topology
 
@@ -144,11 +126,11 @@ Exposing these raw, transient internal states to LLM subagents caused significan
 ### 4.3 Interface & Protocol Contracts
 
 #### `session_query` Input Parameters (Model Layer, `snake_case`)
-- `query` (`string`): 搜索关键词，匹配 Session ID 或 Title。
-- `running_only` (`boolean`): 仅查询 running 状态会话。废止 `active_only` 别名。
-- `cross_workspace` (`boolean`): 是否跨工作区查询会话。
-- `top_level_only` (`boolean`): 是否仅列出顶层会话。
-- `limit` (`integer`): 返回结果上限。
+- `query` (`string`): Search keyword matching Session ID or title.
+- `running_only` (`boolean`): Query running sessions only; active_only alias is deprecated.
+- `cross_workspace` (`boolean`): Whether to query sessions across workspaces.
+- `top_level_only` (`boolean`): Whether to list only top-level sessions.
+- `limit` (`integer`): Maximum number of results returned.
 
 #### `session_query` Output Schema (Machine Layer, `camelCase`)
 ```json
@@ -189,7 +171,7 @@ Exposing these raw, transient internal states to LLM subagents caused significan
 
 ### 5.2 Negative Consequences (Tradeoffs & Mitigations)
 - **Loss of Sub-Status Visibility**: An orchestrator cannot distinguish between an agent waiting on a tool call vs waiting on user input from `session_query` alone.
-  - *Mitigation*: Detailed per-agent telemetry is handled via DSH core inspector tools rather than the lightweight inter-session dispatcher.
+  - *Mitigation*: Detailed per-agent telemetry is handled via DSH core inspector tools rather than the lightweight inter-session dispatcher. Superseded in ADR-0031 by native 3-state resolution (`running | idle | error`).
 
 ### 5.3 Neutral & Operational Shifts
 - Tests and mock fixtures must provide standard `{ status, session: { events: [...] } }` shapes to simulate title cascades.
@@ -219,13 +201,16 @@ Exposing these raw, transient internal states to LLM subagents caused significan
 
 - **2026-09-03**: Proposed by Engineering & Prompt Design Team.
 - **2026-09-03**: Accepted; implemented in `lib/session-query.mjs`.
+- **2026-10-18**: Superseded by ADR-0031.
 - **Related ADRs**:
+  - Superseded by: [ADR-0031](./0031-cross-session-handshake-verification-and-native-3state-status.md) (Two-state protocol superseded by native 3-state protocol and handshake verification)
   - Related to: [ADR-0001](./0001-separation-of-concerns-board-vs-call.md) (Board vs Call Separation)
   - Related to: [ADR-0003](./0003-workspace-scoped-isolation-by-default.md) (Workspace Isolation)
+  - Related to: [ADR-0016](./0016-unified-parameter-naming-and-session-id-standard.md) (Parameter Naming Standard)
 - **Implementation Artifacts**:
-  - `lib/session-query.mjs` (Line 8-51, 79-131)
-  - `index.mjs` (Line 754-817)
+  - `lib/session-query.mjs`
+  - `index.mjs`
 
 ## Revision
 
-- 2026-10-29: Wording only — the living-session noun uses the canonical 存活会话 / live session naming; the two-state status model is unchanged.
+- 2026-10-29: Wording alignment: live session terminology aligned with CONTEXT.md without changing the two-state protocol baseline.

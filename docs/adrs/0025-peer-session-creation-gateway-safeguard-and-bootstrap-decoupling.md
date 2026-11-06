@@ -1,4 +1,11 @@
-# ADR-0025: Peer Session Creation Host Gateway, Safeguard Lease, and Bootstrap Decoupling
+<!--
+ADR Writing Guidelines (writing-for-agents):
+1. Focus on architectural intent, forces, decisions, and invariants.
+2. Avoid code dumps that duplicate live code.
+3. Keep prose dense, factual, and scannable without parenthetical annotations.
+4. If writing in Chinese, ensure all subheadings are <= 4 characters.
+-->
+# ADR-0025: 对等会话创建网关、安全租约与引导解耦
 
 - **Status**: Accepted
 - **Date**: 2026-09-23
@@ -8,101 +15,105 @@
 
 ---
 
-## 1. Context and Problem Statement
+## 背景
 
-### 1.1 Background & Problem Context
-session_create 作为多智能体进程内协作的核心原语，负责根据调用方指令拉起独立的同级根会话（Peer Root Session）。随着代际熔断（ADR-0010）、模型动态继承（ADR-0015）、统一命名契约（ADR-0016）、标题事件持久化（ADR-0017）以及并发运行配额（ADR-0021）的引入，lib/session-create.mjs 膨胀为 923 行的过程式单体，暴露出显著的架构摩擦与接缝泄露：
+### 问题背景
+同级会话创建作为多智能体进程内协作的核心原语，负责根据派发方指令拉起独立的对等根会话。随着代际熔断、模型动态继承、统一命名契约、标题事件持久化以及并发运行配额的引入，创建逻辑膨胀为 900 余行的过程式单体，暴露出显著的架构摩擦与接缝泄露：
 
-1. **宿主侵入与脆弱探测 (Host Intrusion & Leaky Seam)**：
-   PeerSessionFactory 直接侵入式探测 6 个 Cordis 宿主服务（agents、agentDefaultModel、sessionController、agentPresets、sessionTitle、workspaceRegistry），并在内存中直接修改私有会话对象的属性（session.header.title、session.header.cwd、session.metadata，甚至防御性规避 Object.isFrozen）。这导致单元测试需要构造复杂的嵌套 mock 对象，一旦宿主微调私有字段或冻结策略，插件面临崩溃风险。
-2. **防护策略浅层暴露 (Shallow Safeguard Facade)**：
-   滑动窗口限频（sessionCreationsMap）、在途并发防超发（inFlightCreationsByWorkspace）、工作区运行态配额（MAX_ACTIVE_PEER_SESSIONS）与代际深度熔断（MAX_GENERATION）散落为 8 个静态方法挂载在工厂类上。异常时依赖零散的手动 try/catch 进行时间戳回滚，缺乏原子租约事务保障，存在配额泄漏隐患。
-3. **初始启动消息与黑板通知耦合 (Entangled Bootstrap)**：
-   会话创建完成后的初始指令清洗、上下文引用包装（#post-xxx）、插件消息摘要截断（120 字符限制）与公共黑板引导公告（session:bootstrap）直接内联在工厂流程中，导致工厂强依赖底层通信与存储模块。
+1. 宿主侵入与脆弱探测：创建工厂直接侵入式探测 6 个宿主服务，并在内存中直接修改私有会话对象的属性，甚至防御性规避对象冻结。这导致测试需要构造复杂的嵌套模拟对象，一旦宿主微调私有字段，插件面临崩溃风险。
+2. 防护策略浅层暴露：滑动窗口限频、在途并发防超发、工作区运行态配额与代际深度熔断散落为 8 个静态方法挂载在工厂类上。异常时依赖零散的手动异常捕获进行时间戳回滚，缺乏原子租约事务保障，存在配额泄漏隐患。
+3. 初始启动消息与黑板通知耦合：会话创建完成后的初始指令清洗、上下文引用包装、插件消息摘要截断与公共黑板引导公告直接内联在工厂流程中，导致工厂强依赖底层通信与存储模块。
 
-### 1.2 Architectural Forces & Constraints
-- **Deep Modules & Leverage**：遵循 codebase-design 原则，深层模块应当拥有狭窄的高杠杆接口，隐藏复杂的降级与适配细节。
-- **Zero-Trace Host Boundaries**：与 DSH 宿主的交互必须收敛在单一接缝适配器内，严禁业务层直接侵入修改宿主内部私有结构。
-- **Atomic Concurrency Guarantee**：配额预留、限频锁定与资源占用必须具备原子租约语义，异常时必须无损回滚。
-- **100% Backward Compatibility**：保持所有既有导出方法、类契约、错误码与 TypeScript 类型定义 100% 兼容。
+### 架构约束
+- 深层模块与高杠杆：遵循深层模块设计原则，深层接缝应当拥有狭窄的高杠杆接口，隐藏复杂的降级与适配细节。
+- 零侵入宿主边界：与宿主的交互必须收敛在单一接缝适配器内，严禁业务层直接侵入修改宿主内部私有结构。
+- 原子并发事务保证：配额预留、限频锁定与资源占用必须具备原子租约语义，异常时必须无损回滚。
+- 完整向后兼容：保持所有既有导出方法、类契约、错误码与类型定义完全兼容。
 
 ---
 
-## 2. Decision Drivers
+## 驱动
 
-- **Driver 1 (Hermetic Host Seam)**：将 6 项宿主服务探测、属性修补与事件写入收敛至独立的宿主网关，使核心业务无需感知 Cordis 服务拓扑。
-- **Driver 2 (Transactional Admission Lease)**：以租约模式封装准入防护，保证在途锁定与滑动窗口限频在创建失败时自动原子回滚。
-- **Driver 3 (Separation of Bootstrap Concerns)**：将消息格式化与公共黑板公告解耦至独立的生命周期协同器。
-- **Driver 4 (Radical Simplification)**：将 session-create.mjs 从 920+ 行单体精简为轻量级组合协调器。
-
----
-
-## 3. Considered Options
-
-### Option 1: 维持 920 行单体，仅增加注释与补丁
-- **Pros**: 无新增模块文件。
-- **Cons**: 宿主侵入点分散在各处；测试 mock 成本居高不下；配额与频次回滚依然脆弱。
-
-### Option 2: 拆分子模块但保留直接属性篡改
-- **Pros**: 拆散代码行数。
-- **Cons**: 依然没有解决宿主越界与脆弱对象修改问题，接缝依然泄漏。
-
-### Option 3 (Chosen): 三大支柱深层模块解耦 + 原子租约模式 + 组合编排
-- **Pros**:
-  - DshHostGateway 提供清晰的宿主接缝与防御屏障；
-  - SessionSafeguard 提供原子性租约（AdmissionLease）；
-  - PeerBootstrapper 隔离初始消息与黑板协同；
-  - lib/session-create.mjs 代码量大幅下降 ~65%，职责聚焦于纯粹的流程编排。
+- 严密宿主接缝：将宿主服务探测、属性修补与事件写入收敛至独立的宿主网关，使核心业务无需感知底层容器服务拓扑。
+- 事务性准入租约：以租约模式封装准入防护，保证在途锁定与滑动窗口限频在创建失败时自动原子回滚。
+- 关注点分离：将消息格式化与公共黑板引导公告解耦至独立的启动协同器。
+- 单体极简重构：将创建逻辑从 900 余行单体精简为轻量级组合协调器。
 
 ---
 
-## 4. Decision Outcome
+## 选型
 
-### 4.1 三大架构支柱
+### 方案一
+维持过程式单体，仅增加注释与局部补丁。
+- 缺陷：宿主侵入点分散在各处，测试成本居高不下，配额与频次回滚依然脆弱。
+
+### 方案二
+拆分子文件但保留直接对象属性修改。
+- 缺陷：未解决宿主越界与私有对象脆弱修改问题，接缝依然泄漏。
+
+### 方案三
+深层模块解耦、原子租约模式与组合编排。
+- 描述：引入宿主网关收敛宿主操作，引入准入守卫签发原子租约，引入启动协同器处理引导消息，工厂聚焦纯粹编排。
+- 优势：职责正交清晰，事务回滚自洽，测试完全解耦。
+- 决策：采纳方案三。
+
+---
+
+## 决策
+
+### 核心支柱
 
 #### 宿主网关
-- 封装 6 项 Cordis 服务探测（agents、agentDefaultModel、sessionController、agentPresets、sessionTitle、workspaceRegistry）。
-- 封装 resolveEffectiveModel（支持调用方运行时请求头、静态选项及宿主默认配置三级级联回退）与 resolvePresetSetup（组合预设与 setup 链）。
-- 封装 createRootAgent：安全处理深冻结对象（Object.isFrozen）、元数据清洗（剔除 parentSession/origin）与归属关联。
-- 封装 appendTitleEvent（优先复用 sessionTitle.rename，回退安全追加 session/title 事件）与 attachWorkspace。
-- 交付单元测试：tests/dsh-host-gateway.test.mjs。
+- 统一封装宿主服务探测，隔离底层容器变动。
+- 封装有效模型解析与预设装配逻辑，支持派发方运行时请求头、静态选项及宿主默认配置三级级联回退。
+- 封装根代理创建，安全处理深冻结对象与元数据清洗。
+- 封装标题事件追加与工作区目录关联，优先复用宿主重命名接口，回退安全追加标准标题事件。
 
 #### 准入守卫
-- 集中收敛滑动窗口限频（5 次/min）、工作区并发运行配额（5 个）、在途并发防超发与代际深度熔断（<= 2 代）。
-- 引入原子租约 AdmissionLease：通过 safeguard.admit() 乐观锁定配额与在途标题；创建成功后调用 lease.commit()，异常时调用 lease.release() 自动无损回滚。
-- 交付单元测试：tests/session-safeguard.test.mjs。
+- 集中收敛滑动窗口限频、工作区并发运行配额 5 个上限、在途并发防超发与代际深度熔断。
+- 引入原子租约机制：准入申请时乐观锁定配额与在途标题；创建成功后提交租约，创建异常时释放租约并自动无损回滚。
 
 #### 协同启动
-- 封装初始消息装配：formatInitialMessage（换行与连续空白归一化折叠、上下文引用 > Context Ref: #post-xxx 注入、120 字符摘要生成及标准 UserMessage 装配）。
-- 封装消息派发：dispatchInitialMessage（安全调用 dispatchNativeMessage 并确定运行态）。
-- 封装引导公告：publishBootstrapNotice（向公共黑板安全发布 session:bootstrap，设定 1 小时 TTL 与溯源元数据）。
-- 交付单元测试：tests/peer-bootstrap.test.mjs。
+- 封装初始消息装配：换行与连续空白归一化折叠、上下文黑板引用注入、短摘要截断及标准用户消息装配。
+- 封装消息派发：安全执行原生单播并确立初始运行状态。
+- 封装引导公告：向公共黑板发布启动公告，设定确定性生命周期与溯源元数据。
 
 #### 会话工厂
-- 工厂类由 923 行过程式代码重构为高内聚协调器（~340 行），通过构造函数组合网关、守卫与协同器。
-- 对外完整保留全部既有静态方法与导出函数，确保 100% 平滑过渡与向后兼容。
+- 工厂类重构为高内聚协调器，通过构造函数组合网关、守卫与协同器。
+- 对外完整保留全部既有静态方法与导出函数，确保向后兼容与平滑过渡。
 
 ---
 
-## 5. Invariants & Guardrails
+## 约束
 
-- **不变量 1 (Host Seam Purity)**：任何跨插件与宿主 Cordis 服务的交互必须经由 DshHostGateway，严禁业务代码直接穿透修改宿主对象。
-- **不变量 2 (Atomic Lease Consistency)**：所有会话创建流程必须持有 AdmissionLease，创建异常时必须在 catch 块中执行 lease.release()。
-- **不变量 3 (Quota Integrity)**：单工作区并发运行根会话上限严格受控于 5，在途创建严格纳入并发计算。
-- **不变量 4 (Zero-Trace Blackboard Hygiene)**：会话就绪公告必须具备确定性过期机制，生命周期结束或测试执行前后必须无残留。
+- 宿主接缝纯度约束：任何跨插件与宿主容器服务的交互必须经由宿主网关，严禁业务代码直接穿透修改宿主私有对象。
+- 原子租约一致性约束：所有会话创建流程必须持有准入租约，创建异常时必须在异常处理块中显式释放租约。
+- 配额完整性约束：单工作区并发运行根会话上限严格受控于 5，在途创建严格纳入并发计算。
+- 黑板无痕卫生约束：会话就绪公告必须具备确定性过期机制，生命周期结束或测试执行前后无残留。
 
 ---
 
-## 6. Consequences & Verification
+## 影响
 
-### Positive
-- **高内聚低耦合**：核心模块职责明确，行数下降 ~65%，模块深度与杠杆率显著提升。
-- **测试隔离与可测性**：宿主网关、准入守卫与启动协同器均具备独立纯单元测试，摆脱复杂的集成 mock 依赖。
-- **事务性安全**：原子租约杜绝了创建失败时的频次与在途配额泄漏。
+### 正向收益
+- 高内聚低耦合：核心模块职责明确，代码量大幅缩减，模块深度与杠杆率显著提升。
+- 独立可测性：宿主网关、准入守卫与启动协同器均具备独立单元测试，摆脱复杂的集成模拟依赖。
+- 事务性安全：原子租约杜绝了创建失败时的频次与在途配额泄漏。
 
-### Negative / Tradeoffs
-- 新增了 3 个物理子模块文件，增加了极轻微的模块导入开销（在 V8 启动阶段耗时 < 1ms，在预算之内）。
+### 架构代价
+- 拆分出独立物理子模块，产生微量模块加载开销，经评测在毫秒级预算内完全忽略不计。
 
-### Verification Criteria
-- 单元与集成测试全量通过：全仓 338 项测试通过率 100%（npm test）。
-- 类型检查与代码规范门禁 100% 通过（npm run verify 与 npm run typecheck）。
+### 验证标准
+- 单元与集成测试全量通过，覆盖网关降级、租约回滚与协同消息组装。
+- 静态类型检查与代码门禁全量通过。
+
+---
+
+## 演化
+
+- 2026-09-23：接受深层模块解耦与原子租约架构。
+- 关联决策：
+  - 演进：[ADR-0028](./0028-deep-admission-safeguard-seam-and-lease-single-source-of-truth.md) 准入守卫深层接缝与租约单一事实源
+  - 关联：[ADR-0010](./0010-dynamic-state-mirror-and-peer-session-lifecycle.md) 动态镜像投影与代际熔断
+  - 关联：[ADR-0015](./0015-peer-session-model-and-preset-inheritance.md) 同级会话模型与预设继承
+  - 关联：[ADR-0021](./0021-concurrent-running-quota-and-model-inheritance-alignment.md) 运行态并发配额与模型继承对齐

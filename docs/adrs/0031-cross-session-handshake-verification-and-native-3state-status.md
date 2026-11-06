@@ -1,3 +1,10 @@
+<!--
+ADR Writing Guidelines (writing-for-agents):
+1. Focus on architectural intent, forces, decisions, and invariants.
+2. Avoid code dumps that duplicate live code.
+3. Keep prose dense, factual, and scannable without parenthetical annotations.
+4. If writing in Chinese, ensure all subheadings are <= 4 characters.
+-->
 # ADR-0031: Cross-Session Handshake Verification, Classified Wait Contracts, and Native 3-State Status Protocol
 
 - **Status**: Accepted - Verification heuristics and output contracts evolved by ADR-0036
@@ -19,7 +26,7 @@ This design caused severe failures during runtime instability and plugin develop
 3. **Status Masking**: Under ADR-0005, all non-running agents were collapsed to `idle`. Probing with `session_query` returned `idle`, indistinguishable from healthy readiness.
 
 ### 1.2 Architectural Forces & Constraints
-- **Zero-Invasion Invariant**: State verification must use DSH native runtime surfaces (`agent.phase` and `session.events`) without daemon processes or monkey-patches.
+- **Zero-Invasion Invariant**: State verification must use DSH native runtime surfaces without daemon processes or monkey-patches.
 - **Latency Budget**: Handshake waits must be bounded within 300ms, fail-fast on startup crashes, and avoid blocking LLM tool calls.
 - **Strict Boundary Isolation**: Session failures must be contained within the affected session; no error pollution on the public blackboard or unconstrained reverse wake-ups.
 
@@ -29,7 +36,7 @@ This design caused severe failures during runtime instability and plugin develop
 
 - Driver 1: Fail-fast interception of startup and plugin crashes within milliseconds.
 - Driver 2: Truthful return schemas separating mailbox enqueueing from physical execution verification.
-- Driver 3: DSH native 3-state resolution (`running | idle | error`) with natural event-stream self-healing.
+- Driver 3: DSH native 3-state resolution with natural event-stream self-healing.
 - Driver 4: Classified wait contracts preventing non-critical calls from blocking.
 
 ---
@@ -56,9 +63,9 @@ This design caused severe failures during runtime instability and plugin develop
 
 ### 4.1 Core Architectural Principles & Invariants
 
-> **Amend**：`task_dispatch` 已废弃，现役取值为 `notice | task_soft | task_hard | task_report`，见 ADR-0042；本段保留为历史记录。
+> **Amend**: `task_dispatch` is obsolete; active types are `notice | task_soft | task_hard | task_report` per ADR-0042. This note is retained as historical context.
 
-1. **Classified Wait Contract**: `session_create` and `session_call(task_dispatch)` wait up to 300ms for physical execution confirmation; `task_report` and `notice` return immediately with zero wait.
+1. **Classified Wait Contract**: `session_create` and `session_call` with task dispatch wait up to 300ms for physical execution confirmation; `task_report` and `notice` return immediately with zero wait.
 2. **Native 3-State Status**: Status resolves to `running`, `idle`, or `error`. When idle, the latest `turn/end` event in `session.events` determines if an error occurred.
 3. **Natural Event-Stream Healing**: If an errored session later completes a normal turn, the new normal event naturally supersedes the error without manual cleanup.
 4. **Decoupled Delivery Semantics**: Return payloads replace false `running` with explicit `deliveryState` and `executionState`.
@@ -99,7 +106,7 @@ Caller Tool Call (task_dispatch)
 
 ### 5.2 Negative Consequences & Mitigations
 - *Tradeoff*: Task dispatch adds up to 300ms light wait.
-  - *Mitigation*: Non-critical calls (notice, task_report) remain non-blocking (0ms); wait duration is configurable via `wait_ms`.
+  - *Mitigation*: Non-critical calls remain non-blocking; wait duration is configurable via `wait_ms`.
 
 ---
 
@@ -115,4 +122,4 @@ Caller Tool Call (task_dispatch)
 - **2026-10-18**: Accepted.
 - **2026-10-20**: Verification heuristics and output contracts evolved by ADR-0036.
 - **Supersedes**: ADR-0005 (Normalized Two-State Status Protocol).
-- **Related to**: ADR-0001, ADR-0006, ADR-0010, ADR-0016, ADR-0023, ADR-0025, ADR-0029, ADR-0036.
+- **Related to**: ADR-0001, ADR-0006, ADR-0010, ADR-0016, ADR-0023, ADR-0025, ADR-0029, ADR-0036, ADR-0042.

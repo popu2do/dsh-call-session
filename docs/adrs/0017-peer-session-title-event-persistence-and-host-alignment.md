@@ -1,92 +1,75 @@
-# ADR-0017: Peer Session Title Event Persistence, Model Parameter Declaration, and Host Alignment Specification
+<!--
+ADR Writing Guidelines (writing-for-agents):
+1. Focus on architectural intent, forces, decisions, and invariants.
+2. Avoid code dumps that duplicate live code.
+3. Keep prose dense, factual, and scannable without parenthetical annotations.
+4. If writing in Chinese, ensure all subheadings are <= 4 characters.
+-->
+# ADR-0017: 会话标题事件持久化与宿主对齐规范
 
-- **Status**: Accepted (Title resolution superseded by ADR-0028)
+- **Status**: Accepted - Title resolution superseded by ADR-0028
 - **Date**: 2026-09-12
 - **Deciders**: Architect, Core Maintainers, Multi-Agent Runtime Team
 - **Consulted**: Code Reviewer, QA Automation Lead
 - **Informed**: All DSH Agent Developers, Tool Authors
 
-
-> **Architecture Evolution Notice**:
-> The multi-stage title event persistence and heuristic deduction described here was superseded by atomic title resolution and single-source lease reservation inside `SessionSafeguard` in [ADR-0028](./0028-deep-admission-safeguard-seam-and-lease-single-source-of-truth.md).
-
-
-**Chosen Decision**: 采纳 Option 3。
 ---
 
-## 1. Context and Problem Statement
+## 背景
 
-### 1.1 Background & Issues
+### 问题背景
+在创建同级会话的机制中，存在两项与宿主设计及调用预期不一致的问题：
 
-在 `session_create` 创建同级会话（Peer Session）的机制中，存在两项与宿主设计及调用预期不一致的问题：
+1. 同级会话标题在图形界面中默认回退为工作区目录名：
+   - 当派发方创建同级会话时，无论入参是否指定标题或提供初始消息，在网页界面与会话列表侧边栏中，新建的会话依然显示为工作区目录名称。
+   - 根本原因分析：宿主前端会话列表通过显示标题计算逻辑渲染标题。若会话日志中没有记录标题，标题为空，系统自动回退显示为工作目录名称。
+   - 宿主的标题管理基于增量事件驱动模型，标题状态由会话事件日志中的标题事件投影决定。
+   - 创建目标会话时，仅在内存中给代理对象的标题赋值，未向目标会话的日志追加标题事件；且首条初始任务消息标记为插件源，被宿主内置的自动标题服务过滤。因此新建会话缺少标题事件，导致前端持续显示工作区目录名。
 
-1. **同级会话标题在 Web GUI 中默认回退为工作区目录名**：
-   - 当调用方通过 `session_create` 创建同级会话时，无论入参是否指定 `title` 或提供 `initial_message`，在 Web 界面与会话列表侧边栏中，新建的会话依然显示为工作区目录名称（例如 `dsh-call-session`）。
-   - 根本原因分析：DSH 宿主前端会话列表（`dsh-api-session-controller`）通过 `displayTitleOf(title, cwd, id)` 渲染标题。若会话日志中没有记录标题，`title` 为 `undefined`，系统自动回退显示为工作目录名称（`workspaceTitleOf(cwd)`）。
-   - DSH 宿主的标题管理（`@deepseek-ai/dsh-session-title`）基于纯增量事件驱动模型，标题状态由会话事件日志（Event Log）中的 `session/title` 事件投影决定。
-   - `session_create` 在创建目标会话时，仅在内存中给 `targetAgent.title` 及 `targetAgent.session.title` 赋值，**未向目标会话的日志追加 `session/title` 事件**；且首条初始任务消息标记为插件源（`source.kind: 'plugin'`），被宿主内置的自动标题服务过滤（该服务仅响应 `source.kind: 'user'` 的人类输入）。因此新建会话缺少标题事件，导致前端持续显示工作区目录名。
+2. 模型参数与预设参数声明缺失：
+   - 既有规范已定义模型参数与预设能力的继承规范，底层逻辑也已在网关中实现。
+   - 但在向大模型声明的工具入参契约中，遗漏了推理强度与预设字段的声明，且工具说明文案未明确告知默认继承当前会话的模型参数与预设配置，导致派发方在需要差异化配置时缺乏指导。
 
-2. **模型参数与预设参数声明缺失**：
-   - ADR-0015 已定义模型参数与预设能力的继承规范（优先入参覆写 -> 其次继承创建者 -> 最后全局回退），底层逻辑也已在 `resolvePeerAgentOptions` 中实现。
-   - 但在向大模型声明的工具入参 Schema 中，遗漏了 `reasoning_effort` 与 `preset` 字段的声明，且工具说明文案未明确告知“默认继承当前会话的模型参数与预设配置，除非手动指定”，导致调用方在需要差异化配置时缺乏明确指导。
-
-### 1.2 Architectural Forces & Constraints
-
-- **Plugin Boundary Isolation**：所有修复严格限制在当前插件代码作用域内，严禁修改任何插件外部的宿主或依赖库代码。
-- **Immutable Event Log Standard**：遵循 DSH 会话日志只追加（Append-Only）原则，标题变更必须通过合法的 `session/title` 事件记录。
-- **Zero Ambiguity Parameter Contract**：严格遵守 ADR-0016，入参统一为 `snake_case`，出参统一为 `camelCase`，禁止使用双轨别名。
+### 架构约束
+- 插件边界隔离：所有实现严格限制在插件代码作用域内，严禁直接修改宿主或外部依赖库代码。
+- 不可变事件日志标准：遵循宿主日志追加写原则，标题变更必须通过合法的标题事件记录。
+- 零歧义参数契约：严格遵守入参 snake_case 与出参 camelCase 规范，禁止使用双轨别名。
 
 ---
 
-## 2. Decision Drivers
+## 驱动
 
-- **Driver 1 (Immediate Title Visibility)**：确保通过 `session_create` 创建的新会话在 Web 界面上立即呈现确定的规范化标题，避免回退为默认工作区目录名。
-- **Driver 2 (Log-Backed Durability)**：标题记录在会话事件日志中，在会话回放、持久化恢复和分页加载中均能准确还原。
-- **Driver 3 (Explicit Capability Declaration)**：在工具定义中完整暴露 `model`、`reasoning_effort` 与 `preset`，并明确说明继承规则，消除调用歧义。
-
----
-
-## 3. Considered Options
-
-### Option 1: 仅依赖内存属性并期待宿主捕获（Status Quo）
-- **描述**：仅设置 `targetAgent.title`，不向日志写入事件。
-- **否决原因**：宿主基于 Event Log 做持久化与投影，内存赋值无法触发 `session/title` 投影更新，导致前端永久显示工作区名称。
-
-### Option 2: 将初始任务消息强制伪造成人类消息（`source.kind: 'user'`）
-- **描述**：将初始任务指令的来源改为人类用户，触发宿主内置的 `dsh-session-title-first-prompt-llm` 自动提炼标题。
-- **否决原因**：
-  - 破坏调用溯源语义（该消息确实是由插件协同分发的，伪造成用户消息会破坏审计与安全边界）；
-  - 自动提炼具有异步延迟和不确定性，无法保证调用方显式传入的 `title` 得到优先保障。
-
-### Option 3 (Chosen): 直接追加 `session/title` 日志事件 + 完善 Schema 声明
-- **描述**：
-  1. `session_create` 在创建目标会话后，通过目标会话句柄向事件日志直接追加 `session/title` 事件（`session.append('session/title', ...)`），若宿主存在 `ctx.sessionTitle.rename` 则优先复用；
-  2. 在 `index.mjs` 中补全 `reasoning_effort` 与 `preset` 的 Schema 定义与描述，同步更新类型定义。
-- **采纳优势**：
-  - 符合 DSH 日志事件设计规范；
-  - 标题即时生效并持久化到事件日志；
-  - 作用域严格收敛在插件内部。
+- 标题即时可见：确保新建会话在界面上立即呈现确定的规范化标题，避免回退为默认工作区目录名。
+- 日志持久留痕：标题记录在会话事件日志中，在会话回放、持久化恢复和分页加载中均能准确还原。
+- 显式能力声明：在工具定义中完整暴露模型、推理强度与预设，并明确说明继承规则，消除调用歧义。
 
 ---
 
-## 4. Decision Outcome
+## 选型
 
-### 4.1 核心架构不变式（Architectural Invariants）
+### 方案一
+仅依赖内存属性并期待宿主捕获。
+- 缺陷：宿主基于事件日志执行持久化与投影，内存赋值无法触发标题投影更新，导致前端显示工作区名称。
 
-1. **Invariant 1 (Title Event Persistence Invariant)**：
-   `session_create` 在创建目标同级会话后，必须确保目标会话事件日志中存在一条对应的 `session/title` 事件。
-   - 若宿主注册了 `sessionTitle` 服务且支持 `rename`，优先调用 `ctx.sessionTitle.rename(targetSession, finalTitle)`；
-   - 若未加载该服务，则直接调用 `targetSession.append('session/title', { title: finalTitle, messageSeqs: [], source: { kind: 'user' } })`，确保日志中具备标准标题事件。
+### 方案二
+将初始任务消息强制伪造成人类消息。
+- 缺陷：破坏调用溯源语义；自动提炼具有异步延迟与不确定性，无法保证显式传入的标题得到即时呈现。
 
-2. **Invariant 2 (Model & Effort Inheritance and Override Invariant)**：
-   同级会话创建时，默认继承创建方当前使用的模型（`model`）、推理强度（`reasoning_effort`）及预设（`preset`）。当调用方显式传入参数时，覆盖对应配置。
-
-3. **Invariant 3 (Strict Input Schema & Naming Invariant)**：
-   工具入参遵循 ADR-0016 规范，明确声明 `title`、`initial_message`、`context_post_ids`、`model`、`reasoning_effort`、`preset`，严禁引入驼峰别名。
+### 方案三
+直接追加标题日志事件并补全参数模式定义。
+- 优势：符合宿主日志事件设计规范，标题即时生效并持久化到事件日志，作用域严格收敛在插件内部。
+- 决策：采纳方案三。
 
 ---
 
-### 4.2 数据流拓扑
+## 决策
+
+### 核心约束
+1. 标题事件持久化约束：创建目标同级会话后，必须确保目标会话事件日志中存在一条对应的标题事件。若宿主注册了标题服务且支持重命名，优先调用重命名接口；若未加载该服务，则直接向目标会话追加标准标题事件。
+2. 模型与推理强度继承覆盖约束：同级会话创建时，默认继承派发方当前使用的模型、推理强度及预设。当派发方显式传入参数时，覆盖对应配置。
+3. 严格入参命名约束：工具入参遵循统一规范，明确声明标题、初始消息、上下文黑板引用、模型、推理强度与预设，严禁引入驼峰别名。
+
+### 数据拓扑
 
 ```
                      [ session_create(title, model, ...) ]
@@ -102,40 +85,35 @@
                        │   targetAgent.session 创建就绪 │
                        └───────────────┬───────────────┘
                                        │
-                                       ▼ (Invariant 1)
+                                       ▼ (约束 1)
                      session.append('session/title', { title: finalTitle })
                                        │
                                        ▼
                      dispatchNativeMessage(targetAgent, initialMessage)
                                        │
                                        ▼
-                     前端与会话列表即时感知 session/title，正确显示 finalTitle
+                     前端与会话列表即时感知标题事件，正确显示目标标题
 ```
 
 ---
 
-## 5. Consequences
+## 影响
 
-### 5.1 Positive Consequences
-- 新建的同级会话在 Web 界面和侧边栏中立即呈现清晰准确的标题，不再回退显示工作区目录名。
-- 调用方可以灵活选择继承创建者模型或指定专属模型与推理强度。
-- 遵循 DSH 规范，日志事件具备完整回放与持久化能力。
+### 正向收益
+- 新建的同级会话在界面和侧边栏中立即呈现清晰准确的标题，不再回退显示工作区目录名。
+- 派发方可以灵活选择继承派发者模型或指定专属模型与推理强度。
+- 遵循宿主规范，日志事件具备完整回放与持久化能力。
 
-### 5.2 Verification Suite
-- `tests/session-create.test.mjs`：增加断言验证新建会话日志包含 `session/title` 事件，验证模型继承与入参覆写。
-- `tests/session-create-adversarial.test.mjs`：覆盖异常边界。
+### 验证测试
+- 单元测试增加断言验证新建会话日志包含标题事件，验证模型继承与入参覆写。
+- 对抗测试套件覆盖极端边界与服务缺失回退场景。
 
 ---
 
-## 6. Status History & Related Artifacts
+## 演化
 
-- **2026-09-12**: Proposed and Accepted.
-- **Related ADRs**:
-  - Amends & Complements: [ADR-0010](./0010-dynamic-state-mirror-and-peer-session-lifecycle.md)
-  - Amends & Complements: [ADR-0015](./0015-peer-session-model-and-preset-inheritance.md)
-  - Follows: [ADR-0016](./0016-unified-parameter-naming-and-session-id-standard.md)
-- **Primary Implementation Files**:
-  - `lib/session-create.mjs`
-  - `index.mjs`
-  - `types/session-create.d.ts`
-  - `tests/session-create.test.mjs`
+- 2026-09-12：确立标题事件写入基线与参数声明。
+- 关联决策：
+  - 演进：[ADR-0028](./0028-deep-admission-safeguard-seam-and-lease-single-source-of-truth.md) 原子标题解析与准入守卫单一事实源，替代本篇中的多阶段推导与外层编排
+  - 关联：[ADR-0015](./0015-peer-session-model-and-preset-inheritance.md) 同级会话模型与预设继承
+  - 关联：[ADR-0016](./0016-unified-parameter-naming-and-session-id-standard.md) 统一参数命名契约

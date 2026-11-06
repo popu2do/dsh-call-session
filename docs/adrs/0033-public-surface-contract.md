@@ -1,3 +1,10 @@
+<!--
+ADR Writing Guidelines (writing-for-agents):
+1. Focus on architectural intent, forces, decisions, and invariants.
+2. Avoid code dumps that duplicate live code.
+3. Keep prose dense, factual, and scannable without parenthetical annotations.
+4. If writing in Chinese, ensure all subheadings are <= 4 characters.
+-->
 # ADR-0033: Public Surface Contract and Ecosystem Presence Registry
 
 - **Status**: Accepted
@@ -118,108 +125,3 @@ maintainer --edits--> presence.json --then--> docs/agents/ecosystem-presence.md 
       "lastVerified": "YYYY-MM-DD"
     }
   ]
-}
-```
-
-Contract rules:
-1. `positioning.en` and `positioning.zh` carry the same claim; neither is a weaker translation.
-2. `keywords` holds at least eight unique lowercase hyphenated discovery terms that a prospective user would search for: the outcome, the platform and the tool names. The semantic fitness of those terms and the parity of the two language claims are review items, not gate items; the gate asserts count, shape and uniqueness.
-3. Every entry in `assets` satisfies `0 < minBytes < maxBytes` and names a repository-relative path.
-4. `firstScreen` anchors name the section that must sit at or before `demoMaxLine`, the declared offset, in the rendered document. The gate asserts the placement: it locates the anchor heading line and fails when that line exceeds the offset, so a later section move cannot pass.
-5. Every entry in `catalogs` carries a non-empty identifier, requirement and status, a `submittedCopy` and a `submissionRef` that exist and are strings, and a `lastVerified` that matches `YYYY-MM-DD` and parses as a date. The status values in use are `listed` for a catalog that renders an entry, `submitted` for a submission under review, and `not-registered` for a catalog with nothing submitted. A record whose status is `listed` must carry a non-empty `submittedCopy`; the gate enforces that one state, and the registry is the record for the rest.
-6. `repository` holds the host-side metadata intent: `description` equal to `packageDescription`, `topics` equal to `keywords`, and `socialPreview.status` a non-empty string with a `verifiedOn` that matches `YYYY-MM-DD` and parses as a date. These are host-side settings and are not versioned, so the manifest holds the intended values and the registry records the verification.
-7. `README.md` references `./assets/hero.png`, so the hero budget is bound to a document that points at the asset.
-8. `docs/agents/ecosystem-presence.md` carries one section per catalog and repeats the same six fields plus the refresh procedure.
-
-### 4.4 Amendment to ADR-0009 Section 4.2
-ADR-0009 section 4.2 fixes the user-facing document structure as: Hero & Tagline, Overview, Installation, Scenarios, Canvas, Tools, Comparison, Config, Architecture, Compatibility, License. This record amends the ordering requirement and admits exactly one further section to that inventory, as set out below.
-
-The collaboration canvas demonstration and a concrete two-session scenario may appear on the first screen, ahead of the Overview section, when the manifest's first-screen anchor placement is satisfied. The canvas section keeps its content contract from ADR-0009: a read-only topology showcase with an authentic, sanitized demonstration captured from a real session.
-
-The allowance also covers one further demonstration, the session reference interaction, placed directly after the canvas section and ahead of the Overview section. Neither figure is a hand-taken screenshot; both come from a script in the repository, so this record does not distinguish them on provenance. It distinguishes them on what they render. The canvas figure loads `lib/client.js` and renders the shipped canvas component with stubbed telemetry. The reference figure is authored markup, because the composer menu and the inline reference marker are drawn by the host from a candidate source this plugin registers, and this repository ships no component for either. Being authored, it reproduces byte for byte; the canvas figure renders a live component with a heartbeat, so successive runs of the same script differ in a few pixels and it is committed as an artifact rather than compared byte for byte.
-
-Its content contract is the whole interaction, not one panel: a workspace column with one entry marked current, a session column of five candidates with the workspace path as its first row, each candidate carrying its title, a # plus eight lowercase hex characters and one of the three native session states, the first candidate marked as picked, and a composer holding that picked title as a reference chip. All names and identifiers are invented; none may describe a real host session. The section is a heading, the figure, one sentence and at most two bullets. The section 4.1 invariants apply unchanged, sanitization included. The first screen holds no third demonstration.
-
-Everything else stands unchanged. The section inventory gains exactly the one demonstration section described above and holds no further addition; the horizontal divider cadence, the hero slot, Installation, Scenarios, Tools, Comparison, Config, Architecture, Compatibility and License remain as specified; the invariants in section 4.1 remain in force, specifically zero emoji, Chinese subheadings of at most four characters, plain technical language, architectural separation, ecosystem modesty and agent enforcement; the revision in section 4.3 remains in force. This amendment changes placement, priority and the admission of one section, not tone, sanitization or structural parity. ADR-0009 keeps its Accepted status as amended here.
-
----
-
-## 5. Consequences
-
-### 5.1 Positive Consequences (Benefits)
-- **Benefit 1**: One edit point. Catalog copy, repository metadata and the first screen derive from one manifest instead of drifting across four hand-edited places.
-- **Benefit 2**: Drift, budget violations and disclosure become pipeline failures with artifact names in the message, so a regression is caught before a reader sees it.
-- **Benefit 3**: Registration is reproducible. Each catalog records its submission mechanism, verbatim copy, reference, status and verification date.
-- **Benefit 4**: The first screen can lead with the demonstration while the restrained documentation decision keeps its tone and structural guarantees.
-
-### 5.2 Negative Consequences (Tradeoffs & Mitigations)
-- **Tradeoff 1**: A copy change now touches the manifest and must keep the suite green.
-  - *Mitigation*: The gate message names the artifact and the violated contract, so the fix does not require reading test source.
-- **Tradeoff 2**: One more tracked artifact and one more test module to maintain, and the new module genuinely overlaps the existing canvas asset module: both open the PNG header for the format signature and both assert a byte floor, so a canvas asset change is checked twice against two records.
-  - *Mitigation*: `presence.json` is the single source for asset budgets, including the floors; the older module keeps its own ADR-0023 and ADR-0026 contract, namely the 1440x840 pixel dimensions, the `screenshots.json` registration and its 50000-byte floor. The overlap is recorded here rather than removed, and the new module asserts observable artifacts only, with no production seam.
-- **Tradeoff 3**: The gate can verify agreement and budgets, not persuasion. Copy can be consistent and still weak.
-  - *Mitigation*: Catalog entries and the registry are reviewed by hand before publication, and the no-superlative discipline stays in force.
-- **Tradeoff 4**: A tightened asset budget forces recompression of an already published asset.
-  - *Mitigation*: Budgets live in the manifest, so the ceiling is explicit and the encoding decision is reviewed there rather than inside the test.
-
-### 5.3 Neutral & Operational Shifts
-- A release that changes positioning must update the manifest, then the registry, then run the suite; the order is fixed by the contract.
-- Catalog submissions stay manual and external. The maintainer confirms remote state and records the verification date; the build never fetches remote catalog state.
-- Registration status can legitimately lag the manifest while a submission is pending; the gap is made visible rather than hidden.
-- Capturing a figure stays a build step a maintainer runs, not something the contract performs: the renderers write the files, and no test regenerates an asset on its own. What constitutes an acceptable figure is fixed by section 4.4; producing one is not.
-
----
-
-## 6. Compliance, Validation & Verification
-
-### 6.1 Automated Verification Suite
-- **Static Contract Tests** (`tests/public-surface-integrity.test.mjs`): manifest completeness; asset existence, format signature and byte budget; the hero binding to `README.md`; repository metadata intent, the description, topics and social preview; agreement between the `package.json` description and keywords and the manifest; verbatim positioning copy in both language documents; the demonstration line and the anchor line within `demoMaxLine`; catalog record structure with a parseable verification date.
-- **Sanitization**: `scripts/scan-secrets.mjs --all` invoked as a subprocess and required to exit clean, so credential rules keep one source. The gate adds exactly four disclosure rule classes: a Unix absolute home directory path, a Windows user-directory path and a private host name over the published surface, namely `README.md`, `README_ZH.md`, `AGENTS.md`, `CONTRIBUTING.md`, `CHANGELOG.md`, `DESIGN.md`, `SECURITY.md`, `presence.json`, `package.json`, every file under `docs/` and every file under `.github/`; and a personal account identifier over the catalog records in `presence.json` and `docs/agents/ecosystem-presence.md`. The file set is enumerated from the Git index rather than from the filesystem. Source and test fixtures, and ignored local artifacts, are out of scope by design.
-- **Documentation Invariants**: zero emoji, Chinese subheadings of at most four characters, and equal level-2 heading counts across `README.md` and `README_ZH.md`.
-- **ADR Governance** (`tests/adr-integrity.test.mjs`): continuous numbering, index-to-disk one-to-one alignment and template-required sections.
-- **Network Policy**: remote catalog state is deliberately not tested over the network; the build stays deterministic and offline.
-
-### 6.2 Code Review & Maintenance Checklist
-- [ ] Positioning changed in `presence.json` before any document or catalog entry was edited.
-- [ ] Both language claims assert the same thing, with no weaker translation.
-- [ ] Every added asset declares a format and a byte floor and ceiling, and stays inside them.
-- [ ] Catalog records carry an identifier, a mechanism, verbatim submitted copy, a reference when one exists, a status and a fresh verification date.
-- [ ] The repository description, topics and social preview are declared in `presence.json` and their host-side application is recorded in the registry with a verification date.
-- [ ] The registry repeats the manifest values and contains no personal account identifiers or developer-local paths.
-- [ ] No paid placement, star solicitation or coordinated engagement was introduced.
-
-### 6.3 Gate Boundary: Mechanical and Review-Enforced
-
-The scanned surface is the tracked published set, enumerated from the Git index with `git ls-files`: the nine root documents and manifests, every tracked file under `docs/` and every tracked file under `.github/`, with `tests/` and `lib/` excluded by design. Ignored local artifacts are out of scope by construction rather than by exclusion, because they are never published: a rendered visual check, a scratch note and any other ignored file cannot enter the set even when it sits in a developer checkout. Enumerating tracked paths rather than walking the filesystem is what makes the gate deterministic, because a filesystem walk yields a different file set in every checkout. The defect that motivated this rule was concrete: a filesystem walk failed a developer checkout on an ignored `.visual-check` artifact while passing in CI, so the gate reported a disclosure that could never have been published. The gate pins this boundary behaviourally: it asserts that the surface carries a representative published document from each part of the set, that it carries no path under `tests/` or `lib/`, and that no scanned path is one Git ignores.
-
-The gate enforces mechanically, and nothing beyond this:
-- Manifest completeness, the lowercase hyphenated discovery vocabulary, asset budgets and format signatures, the hero binding, catalog record structure and dates.
-- Repository metadata intent, the description, topics and social preview block shape.
-- Agreement between `package.json` and the manifest, verbatim positioning copy in both READMEs, the demonstration line and the anchor line within `demoMaxLine`.
-- The four disclosure rule classes over the surfaces named in section 4.1 invariant 3, plus a clean `scripts/scan-secrets.mjs --all` exit.
-
-Review enforces by hand, and no section of this record claims a gate for it:
-- The semantic fitness of the discovery terms, namely whether a prospective user would search them, and the parity of the two language claims.
-- The truth of a catalog `submittedCopy` against the remote catalog, and the freshness of `lastVerified`.
-- Whether the host-side repository settings were actually applied; the gate checks the intent values, the registry records the verification.
-- The factual tone of the copy and the absence of engagement mechanics.
-
----
-
-## 7. Status History & Related Artifacts
-
-- **2026-10-16**: Proposed by the maintainer following the ecosystem presence specification.
-- **2026-10-16**: Accepted with the public surface manifest, the integrity gate and the presence registry.
-- **2026-10-16**: Repository description and topics applied from the manifest, verified against the host. Two catalog submissions opened: an entry rewrite in the curated catalog and a registration in the ecosystem radar. Both are under review, so the registry records them as submitted rather than live.
-- **2026-10-16**: Follow-up defect from the same review: the disclosure scan walked the filesystem, so an ignored `.visual-check` artifact failed a developer checkout and passed in CI. The scan now enumerates the tracked published set from the Git index, and this record states the boundary and its determinism rationale.
-- **2026-10-17**: The curated catalog merged the entry rewrite, so the catalog now renders the outcome copy and the registry records the catalog as verified rather than pending. The radar registration remains open with no review activity, and its catalog file has not changed since 2026-09-29, so that record stays submitted.
-- **2026-10-16**: Two-axis code review of the merged change. The gate was widened to the published surface and the four disclosure rule classes; the anchor line, the catalog copy and reference fields, the repository metadata block and the hero binding became assertable; and this record was corrected where it claimed more than the gate could check, namely the keyword intent, the catalog copy derivation and the asset-module overlap.
-- **Related ADRs**:
-  - Amends: ADR-0009 section 4.2
-  - Related to: ADR-0022, ADR-0020, ADR-0012
-- **Implementation Artifacts**:
-  - Primary source: `presence.json`
-  - Test suite: `tests/public-surface-integrity.test.mjs`
-  - Registry: `docs/agents/ecosystem-presence.md`
-  - Reused scanner: `scripts/scan-secrets.mjs`
-  - Note: the repository metadata and first-screen assertions have landed; the gate now checks the manifest, both READMEs, `package.json` and the published documentation set.

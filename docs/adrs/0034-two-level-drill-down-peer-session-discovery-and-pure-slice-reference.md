@@ -1,3 +1,10 @@
+<!--
+ADR Writing Guidelines (writing-for-agents):
+1. Focus on architectural intent, forces, decisions, and invariants.
+2. Avoid code dumps that duplicate live code.
+3. Keep prose dense, factual, and scannable without parenthetical annotations.
+4. If writing in Chinese, ensure all subheadings are <= 4 characters.
+-->
 # ADR-0034: Two-Level Drill-Down Peer Session Discovery and Pure Slice Reference Contract
 
 - **Status**: Accepted
@@ -64,7 +71,7 @@ Under previous single-level mention designs, typing the trigger character `@` di
 
 1. **Two-Level Drill-Down State Machine Invariant**:
    The input trigger source registered under trigger `@` and name `peer-session` operates in two distinct phases:
-   - *Level 1 (Undrilled)*: Exposes solely workspace directories with folder icons, grouped under section `section.workspaces` (Chinese: 工作区, English: Workspaces). Each candidate declares `drill: true`. The current workspace is automatically pinned to index 0 with description `workspace.current` (Chinese: 当前, English: Current). Session entities are strictly forbidden from appearing at Level 1.
+   - *Level 1 (Undrilled)*: Exposes solely workspace directories with folder icons, grouped under section `section.workspaces` in the localized dictionaries. Each candidate declares `drill: true`. The current workspace is automatically pinned to index 0 with description `workspace.current`. Session entities are strictly forbidden from appearing at Level 1.
    - *Level 2 (Drilled)*: Triggered by user drill action or query path match. Renders a flat session list within the selected workspace without micro-sections (`section: undefined`). The current live session is strictly excluded from candidate proposals.
 
 2. **Subagent/Archived Exclusion & Recency Ordering Invariant**:
@@ -75,7 +82,7 @@ Under previous single-level mention designs, typing the trigger character `@` di
    Every session candidate displays a canonical short ID formatted as `#xxxxxxxx` (exactly 9 characters beginning with `#` followed by 8 lowercase alphanumeric characters). The label presents the session title, gracefully falling back to `Agent #xxxxxxxx` if the title is absent. The candidate description presents the native 3-state execution status (`session.running`, `session.idle`, `session.error`, or `session.offline`).
 
 4. **Drill Header Return Navigation Invariant**:
-   When drilled, the source header hook publishes a two-level drill header: `header.root` (Chinese: 工作区根目录, English: Workspace Root) and the drilled workspace name. Activating the root entry returns `@` with `continue: true`, cleanly resetting the trigger back to Level 1.
+   When drilled, the source header hook publishes a two-level drill header referencing `header.root` alongside the drilled workspace name. Activating the root entry returns `@` with `continue: true`, cleanly resetting the trigger back to Level 1.
 
 5. **Zero Cross-Boundary Side-Effect Invariant**:
    Throughout candidate discovery, drill-down, query filtering, session selection, chip insertion, and codec serialization:
@@ -89,7 +96,7 @@ Under previous single-level mention designs, typing the trigger character `@` di
    Session selection produces an insert action referencing `dsh-session:<sessionId>` with appearance `session`. The text delivered to the language model consists strictly of public session status and read-only message history slices. No private host objects, internal tokens, or unverified memory contexts are probed or leaked.
 
 7. **Bilingual Localization Invariant**:
-   In strict compliance with ADR-0023, all dictionary keys (`section.workspaces`, `header.root`, `workspace.current`, `session.running`, `session.idle`, `session.error`, `session.offline`) are defined symmetrically across Chinese and English dictionaries with zero missing keys. `section.workspaces` carries the plain word (Chinese: 工作区, English: Workspaces); the coexistence wording introduced by spec 013 ticket 04 was reverted by user decision, so the plugin block shares the native vocabulary.
+   In strict compliance with ADR-0023, all dictionary keys (`section.workspaces`, `header.root`, `workspace.current`, `session.running`, `session.idle`, `session.error`, `session.offline`) are defined symmetrically across Chinese and English dictionaries with zero missing keys. `section.workspaces` carries the canonical term for workspaces; the coexistence wording introduced by spec 013 ticket 04 was reverted by user decision, so the plugin block shares the native vocabulary.
 
 8. **UI Frame Budget & Deterministic Performance SLA Invariant**:
    In accordance with ADR-0020, candidate resolution executes 100% in-memory with zero disk I/O and zero network fetch during keystroke autocomplete. Level 1 workspace discovery latency P99 <= 2ms; Level 2 session filtering and recency sorting latency P99 <= 5ms. Returned candidate sets are strictly clamped to a maximum of 50 items to ensure butter-smooth 60fps rendering without UI frame drops.
@@ -102,7 +109,7 @@ User types '@' in Composer
         ▼
 Level 1: Workspace Discovery
 ┌──────────────────────────────────────────────────────────┐
-│ [Folder] current-repo           (当前 / Current) [Drill] │
+│ [Folder] current-repo           [Current]        [Drill] │
 │ [Folder] external-service-a                      [Drill] │
 │ [Folder] external-service-b                      [Drill] │
 └──────────────────────────────────────────────────────────┘
@@ -111,11 +118,11 @@ Level 1: Workspace Discovery
         ▼
 Level 2: Drilled Workspace Sessions
 ┌──────────────────────────────────────────────────────────┐
-│ Header: [工作区根目录 / Workspace Root] / current-repo   │
+│ Header: [Workspace Root] / current-repo                  │
 ├──────────────────────────────────────────────────────────┤
-│ #a1b2c3d4  Architecture Coordinator (运行中 / Running)  │
-│ #e5f67890  Automated Test Runner    (就绪 / Idle)        │
-│ #12345678  Linter Auditor           (异常 / Error)       │
+│ #a1b2c3d4  Architecture Coordinator [Running]            │
+│ #e5f67890  Automated Test Runner    [Idle]               │
+│ #12345678  Linter Auditor           [Error]              │
 └──────────────────────────────────────────────────────────┘
         │
         │ User picks session
@@ -151,7 +158,7 @@ Invariant Verification:
 
 ### 5.3 Revision 2026-10-29: Drill Header Terminology
 
-1. Wording only: the navigation strip is named 下钻标题 / Drill Header and its dictionary key is `header.root`; the retired key is renamed in code and in tests.
+1. Wording only: the navigation strip is canonically named Drill Header with dictionary key `header.root`; the retired key is renamed in code and in tests.
 2. The retired synonyms are registered in the CONTEXT.md avoid list and enforced by the repository-wide vocabulary gate.
 
 ### 5.4 Revision 2026-11-05: Withdrawing The Drill Header

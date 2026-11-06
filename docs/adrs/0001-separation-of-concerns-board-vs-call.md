@@ -1,3 +1,10 @@
+<!--
+ADR Writing Guidelines (writing-for-agents):
+1. Focus on architectural intent, forces, decisions, and invariants.
+2. Avoid code dumps that duplicate live code.
+3. Keep prose dense, factual, and scannable without parenthetical annotations.
+4. If writing in Chinese, ensure all subheadings are <= 4 characters.
+-->
 # ADR-0001: Separation of Concerns: Pull-based Public Board vs Push-based Strict Unicast Call
 
 - **Status**: Accepted (Transport superseded by ADR-0006 and ADR-0029; tool binding evolved by ADR-0027 and ADR-0030)
@@ -26,7 +33,7 @@ In multi-agent collaborative workflows orchestrated by DeepSeek Harness (DSH), a
 Historically, multi-agent frameworks often conflate these two communication paradigms into a single monolithic messaging bus or reactive event pub/sub mechanism. In our initial iterations and legacy MCP setups, publishing a status update or milestone entity to shared memory automatically dispatched notifications or triggered regex-based listeners across the runtime.
 
 This architectural coupling produced severe operational failures in production:
-- **Notification Storms ("All-Hands Awakening")**: When an agent published a progress update or intermediate milestone, every live session received an unsolicited event or prompt, causing all agents to wake up simultaneously.
+- **Notification Storms**: When an agent published a progress update or intermediate milestone, every live session received an unsolicited event or prompt, causing all agents to wake up simultaneously.
 - **Context Poisoning & Token Drain**: Unrelated agents had their LLM context windows flooded with irrelevant task notices, degrading reasoning quality and multiplying API token expenditures exponentially.
 - **Deadlocks and Contention**: Agents competing to acknowledge broadcast messages entered infinite ping-pong loops or triggered conflicting responses.
 - **Self-Loop Whispers**: Agents posting task updates frequently matched their own outbound broadcast hooks, waking themselves up in a recursive, self-referential hallucination loop.
@@ -51,17 +58,17 @@ This architectural coupling produced severe operational failures in production:
 
 ## 3. Considered Options
 
-### Option 1: Monolithic Reactive Event Bus (Status Quo)
+### Option 1: Monolithic Reactive Event Bus
 - **Description**: Single channel where all state changes emit global events. Agents register filters to decide whether to consume or react.
 - **Pros**: Easy to implement; mimics classical event-driven buses.
 - **Cons**: High cognitive load on LLMs; filter false-positives wake up wrong agents; massive token wastage; non-deterministic execution order.
 
-### Option 2: Polling-Only Architecture (Pure Black-Board)
+### Option 2: Polling-Only Architecture
 - **Description**: Shared board only; eliminate all push notifications. Agents must periodically query `board_list` to discover assigned tasks or status updates.
 - **Pros**: Zero unexpected wakeups; minimal complexity in message routing.
 - **Cons**: High latency for interactive agent handoffs; excessive token and compute waste on continuous busy-polling; cannot support real-time team coordination.
 
-### Option 3 (Chosen): Explicit Dual-Domain Separation — Pull Board vs Push Unicast
+### Option 3: Explicit Dual-Domain Separation
 - **Description**: Two completely independent domains:
   1. **Board Domain (Pull)**: `board_post`, `board_list`, `board_clear` — dedicated to passive state storage with guaranteed zero wake-up side-effects.
   2. **Call Domain (Push)**: `session_call` — dedicated to strict, single-target unicast notifications with anti-ambiguity fuses, minimum prefix constraints, and self-loop guards.
@@ -118,17 +125,17 @@ This architectural coupling produced severe operational failures in production:
 
 ### 4.3 Interface & Protocol Contracts
 
-#### Board Domain Tools (`index.mjs`)
+#### Board Domain Tools
 - `board_post({ topic: string, content: string, tags?: string[], ttl?: number, metadata?: object }) => { success: boolean, postId: string, topic: string, authorSessionId: string, createdAt: string, expiresAt: string, scope: string, message: string, error?: string }`
 - `board_list({ id?: string, topic?: string, topic_prefix?: string, tag?: string, active_only?: boolean, cross_workspace?: boolean, titles_only?: boolean, limit?: number }) => { success: boolean, count: number, scope: string, titlesOnly: boolean, posts: object[] }`
 - `board_clear({ id?: string, topic?: string, mode?: "dismiss" | "purge" }) => { success: boolean, clearedCount: number, action: string, message: string }`
 
-> **Amend**：`task_dispatch` 已废弃，现役取值为 `notice | task_soft | task_hard | task_report`，见 ADR-0042；本段保留为历史记录。
+> **Amend**: `task_dispatch` is deprecated. Active values are `notice | task_soft | task_hard | task_report` per ADR-0042; retained here as historical record.
 
-#### Call Domain Tool (`index.mjs` & `lib/session-call.mjs`)
+#### Call Domain Tools
 - `session_call({ target_session_id: string, message: string, call_type?: "task_dispatch" | "task_report" | "notice", context_post_ids?: string[] }) => { success: boolean, targetSessionId: string, targetTitle: string, targetStatus: string, deliveryMode: string, callType: string, callerSessionId: string, contextPostIds?: string[], message: string, error?: string }`
 
-### 4.4 Dual-Domain Protocol Boundary & Naming Invariant (ADR-0016 Amendment)
+### 4.4 Dual-Domain Protocol Boundary and Naming Invariant
 
 1. **Model Parameter Domain (Inputs)**: All tool input parameters exposed to LLMs must strictly adhere to `snake_case` (e.g. `target_session_id`, `call_type`, `context_post_ids`, `active_only`, `cross_workspace`, `titles_only`).
 2. **Machine/Web Consumption Domain (Outputs)**: All tool execution return payloads consumable by Web GUI (Canvas) and internal machinery must strictly adhere to `camelCase` (e.g. `targetSessionId`, `callerSessionId`, `contextPostIds`, `totalCount`, `activeCount`).
@@ -138,12 +145,12 @@ This architectural coupling produced severe operational failures in production:
 
 ## 5. Consequences
 
-### 5.1 Positive Consequences (Benefits)
+### 5.1 Positive Consequences
 - **Eliminated Cascading Token Costs**: Prevents spurious agent wakeups; token consumption during multi-agent collaboration is limited to intentional interactions.
 - **Deterministic Workflows**: Multi-step orchestrations can reliably await subagent completion through point-to-point task dispatches and structured `task_report` replies.
 - **Clear Separation of Concerns**: Developers and LLMs understand whether an action publishes durable state or requests an immediate turn.
 
-### 5.2 Negative Consequences (Tradeoffs & Mitigations)
+### 5.2 Negative Consequences and Mitigations
 - **Two-Step Publishing for Notifications**: If an agent must post 10KB of audit data and notify the lead, it must call `board_post` first to get a `postId`, then call `session_call` with `context_post_ids: [postId]`.
   - *Mitigation*: The `session_call` prompt template automatically instructs the recipient to read `board_list(cross_workspace=true)` for referenced post IDs.
 - **Stricter Prefix Requirements**: Users cannot pass 4-character shorthand session IDs.
@@ -182,4 +189,4 @@ This architectural coupling produced severe operational failures in production:
 
 ## Revision
 
-- 2026-10-29: Wording only — the living-session noun uses the canonical 存活会话 / live session naming; no decision changed.
+- 2026-10-29: Wording only — the living-session noun uses the canonical live session naming; no decision changed.

@@ -1,3 +1,10 @@
+<!--
+ADR Writing Guidelines (writing-for-agents):
+1. Focus on architectural intent, forces, decisions, and invariants.
+2. Avoid code dumps that duplicate live code.
+3. Keep prose dense, factual, and scannable without parenthetical annotations.
+4. If writing in Chinese, ensure all subheadings are <= 4 characters.
+-->
 # ADR-0038: Cold Resume Model Inheritance and Prompt Assembly Survivability
 
 - **Status**: Accepted
@@ -5,7 +12,7 @@
 - **Deciders**: Architect, Engineering Team
 - **Consulted**: Runtime Ops, Multi-Agent Orchestrators
 - **Informed**: All DSH Developers
-- **Related**: ADR-0015, ADR-0021, ADR-0025
+- **Related**: ADR-0015, ADR-0021, ADR-0025, ADR-0036
 
 ---
 
@@ -13,29 +20,29 @@
 
 ### 1.1 Background & Problem Context
 
-`session_call` accepts targets that are not loaded in the current host process. `SessionDirectory.resolveTarget()` cold-resumes such targets with `agents.resume({ resumeSessionId })`. Before this decision the call passed no `agentOptions`, so the restored agent was assembled with empty options and `agent.options.provider` / `agent.options.model` stayed `undefined`.
+`session_call` accepts targets that are not loaded in the current host process. The session directory cold-resumes such targets with the host resume API. Before this decision the call passed no agent options, so the restored agent was assembled with empty options and `agent.options.provider` / `agent.options.model` stayed undefined.
 
-The default web deployment persona prefix is the template `You are a coding agent powered by the {{model}} model.`. Prompt assembly reads `context.agent?.options.model` and throws when the value is missing:
+The default deployment persona prefix requires the model name. Prompt assembly reads `context.agent?.options.model` and throws when the value is missing:
 
 ```
 prompt variable "{{model}}" has no value for this assembly (section "deployment:persona-prefix")
 ```
 
-The dispatched turn failed before any model request, and the broken agent remained resident, so every later message to that session failed identically until the host restarted. The host's own resume path never exhibits this failure because it always supplies options.
+The dispatched turn failed before any model request, and the broken agent remained resident in memory, causing every subsequent message to that session to fail identically until the host restarted. This failure mode was first captured under ADR-0036. The host's own resume path avoids this failure because it always supplies options.
 
 ### 1.2 Architectural Forces & Constraints
 
-- **Host contract alignment**: `@deepseek-ai/dsh-api-session-controller` resumes with `{ resumeSessionId, agentOptions, setup }`, and `@deepseek-ai/dsh-agent-loop` builds the agent from `options.agentOptions ?? {}`. Recovery without options is therefore structurally incompatible with prompt variables registered from `context.agent.options`.
-- **Model domain ownership**: model resolution lives in `lib/dsh-host-gateway.mjs` (ADR-0015, ADR-0021). `lib/session-directory.mjs` must not reimplement it.
-- **Dependency direction**: `lib/dsh-host-gateway.mjs` already imports `resolveAgentsService` from `lib/session-directory.mjs`, so `lib/session-directory.mjs` cannot import model resolution back without a cycle. The resolver enters through `resolveTarget({ resolveResumeAgentOptions })` from `lib/session-call.mjs`, the only production call site, which keeps the directory module model-agnostic.
-- **Failure isolation**: option resolution is a best-effort enrichment. Failing to resolve a model must not disable session recovery altogether.
+- **Host contract alignment**: The host session controller resumes with options, and the host agent loop builds the agent from those options. Recovery without options is structurally incompatible with prompt variables registered from agent options.
+- **Model domain ownership**: Model resolution lives in the host gateway per ADR-0015 and ADR-0021. The session directory must not reimplement it.
+- **Dependency direction**: The host gateway already imports service resolvers from the session directory, so the directory cannot import model resolution back without a circular dependency. The resolver enters via dependency injection from the dispatch entry point, keeping the directory model-agnostic.
+- **Failure isolation**: Option resolution is a best-effort enrichment. Failing to resolve a model must not disable session recovery altogether.
 
 ---
 
 ## 2. Decision Drivers
 
-- Driver 1: Cold resume must reproduce the host's own resume contract closely enough that prompt assembly cannot fail on a missing model.
-- Driver 2: One model resolution authority shared by `session_create` and cold resume.
+- Driver 1: Cold resume must reproduce the host resume contract closely enough that prompt assembly cannot fail on a missing model.
+- Driver 2: One model resolution authority shared by peer creation and cold resume.
 - Driver 3: No caller option leakage into a foreign session.
 - Driver 4: Recovery is attempted even when enrichment fails.
 
@@ -44,41 +51,41 @@ The dispatched turn failed before any model request, and the broken agent remain
 ## 3. Considered Options
 
 ### Option 1: Keep the optionless resume
-- **Pros**: Smallest diff.
-- **Cons**: Leaves the reported failure intact; every cold target becomes unusable until host restart.
+- **Pros**: Minimal diff.
+- **Cons**: Leaves the prompt assembly failure intact; cold targets become unusable until host restart.
 
-### Option 2: Pass the full `resolveEffectiveModel` result
-- **Pros**: Mirrors `session_create` literally.
-- **Cons**: That result also carries caller leftovers (`cwd`, `preset`, `temperature`). Resuming a foreign session with the caller's working directory or preset silently changes the target session's identity.
+### Option 2: Pass full resolved model options
+- **Pros**: Mirrors peer creation literally.
+- **Cons**: Carries caller working directory, preset, and temperature. Resuming a foreign session with caller options silently changes target identity.
 
 ### Option 3 (Chosen): Pass a narrowed model triple resolved by the gateway
 - **Pros**: Satisfies the host contract, reuses the single model authority, keeps caller leftovers out.
-- **Cons**: A second narrowing point next to `resolveEffectiveModel`, mitigated by keeping it in the same module as one exported helper.
+- **Cons**: Second narrowing point next to model resolution, mitigated by co-locating it as an exported helper.
 
-### Option 4: Also pass `setup` from the target's own preset
-- **Pros**: Matches the host resume path one step further.
-- **Cons**: The target's preset is reachable through the target `agentPreset` projection, which the host resolves for observation, but `resolvePresetSetup` derives presets from the caller chain; reusing it would mount the caller's preset onto the target session. Out of scope for this decision: a resumed session keeps no preset, recorded as Tradeoff 1.
+### Option 4: Also pass setup from the target preset
+- **Pros**: Matches host resume path further.
+- **Cons**: Reusing preset setup resolution would mount caller presets onto foreign sessions. Out of scope for this decision.
 
 ---
 
 ## 4. Decision Outcome
 
-**Chosen Option**: Option 3. Cold resume carries the effective model, and `setup` stays unpassed.
+**Chosen Option**: Option 3. Cold resume carries the effective model triple, and preset setup stays unpassed.
 
 ### 4.1 Core Architectural Principles & Invariants
 
-1. **Invariant 1 — Model inheritance on recovery**: cold resume supplies `agentOptions` with the caller's effective `provider`, `model`, and `reasoningEffort`, falling back to the host default selection, exactly as peer creation does.
-2. **Invariant 2 — Narrow projection**: only those three keys cross into `resumeOptions.agentOptions`. Any other caller option is dropped.
-3. **Invariant 3 — Single authority, injected**: the projection is exported from `lib/dsh-host-gateway.mjs` as `resolveResumeAgentOptions` and injected into `resolveTarget` by `lib/session-call.mjs`. `lib/session-directory.mjs` never re-derives a model and never imports the gateway.
-4. **Invariant 4 — Usability gate**: the helper returns `undefined` unless `model` resolved, and the caller attaches `agentOptions` only for a defined result. Persona assembly reads `agent.options.model`, so a provider or a reasoning effort alone cannot make a resumed agent usable. The same helper `pickModelSelection` backs the `session_create` model selection sync, so both paths project the same three keys.
-5. **Invariant 5 — Degradation, not cancellation**: a resolution failure is logged at debug level and the resume proceeds without `agentOptions`; a resolver that was never injected skips enrichment silently. Recovery that yields no callable agent reports `[InvalidParameter]` for a target shorter than the prefix minimum and `[TargetNotFound]` otherwise, unchanged from before this decision.
+1. **Invariant 1 — Model inheritance on recovery**: Cold resume supplies agent options with caller effective provider, model, and reasoning effort, falling back to host defaults, exactly as peer creation does.
+2. **Invariant 2 — Narrow projection**: Only those three keys cross into resume agent options. Any other caller option is dropped.
+3. **Invariant 3 — Single authority, injected**: The projection is exported from the host gateway and injected into target resolution by the dispatch caller. The session directory never re-derives a model and never imports the gateway.
+4. **Invariant 4 — Usability gate**: The helper returns undefined unless model resolved, and the caller attaches agent options only for a defined result. Persona assembly reads model name, so provider or effort alone cannot make a resumed agent usable.
+5. **Invariant 5 — Degradation, not cancellation**: A resolution failure is logged at debug level and the resume proceeds without agent options; an omitted resolver skips enrichment silently.
 
 ### 4.2 System Architecture & Topology
 
 ```
 session_call (lib/session-call.mjs)
   └─ SessionDirectory.resolveTarget(target, { callerAgent, resolveResumeAgentOptions })
-       └─ options.resolveResumeAgentOptions()          // injected, no import back
+       └─ options.resolveResumeAgentOptions()          // injected, no circular import
             └─ resolveResumeAgentOptions({ ctx, callerAgent })   // lib/dsh-host-gateway.mjs
                  └─ pickModelSelection(resolveEffectiveModel(...))
                       └─ agents.resume({ resumeSessionId, agentOptions? })
@@ -93,12 +100,12 @@ resolveTarget(rawTarget, {
   callerSessionId,
   callerAgent,
   exec,
-  resolveResumeAgentOptions?,   // () => model triple | undefined
+  resolveResumeAgentOptions,   // () => model triple | undefined
 })
 
 agents.resume({
   resumeSessionId,          // canonical session-<uuid>
-  agentOptions?,            // provider/model/reasoningEffort only when model resolved
+  agentOptions,             // provider/model/reasoningEffort only when model resolved
 })
 ```
 
@@ -109,21 +116,20 @@ agents.resume({
 ### 5.1 Positive Consequences (Benefits)
 
 - Cold targets survive prompt assembly and become usable immediately after recovery.
-- One model resolution authority; `session_create` and cold resume cannot drift.
+- One model resolution authority; peer creation and cold resume cannot drift.
 - Caller workspace and preset never leak into a resumed session.
 
 ### 5.2 Negative Consequences (Tradeoffs & Mitigations)
 
-- **Tradeoff 1**: A resumed session still mounts no preset and gets no `sessionController` selection alignment (`selectForNextRequest`).
-  - *Mitigation*: documented here and on the pull request as residual risk; each is a separate decision.
-- **Tradeoff 2**: A resolver that is not injected degrades silently to an optionless resume, which reproduces the original assembly failure on a host that also lacks `agentDefaultModel`.
-  - *Mitigation*: the single production call site always injects, a dedicated test pins that behaviour, and the host default selection normally covers the gap.
+- **Tradeoff 1**: A resumed session mounts no preset and receives no controller selection alignment.
+  - *Mitigation*: Documented as residual risk for a separate preset persistence decision.
+- **Tradeoff 2**: A resolver that is not injected degrades silently to an optionless resume.
+  - *Mitigation*: The single production call site always injects, pinned by dedicated tests.
 
 ### 5.3 Neutral & Operational Shifts
 
-- Cold resume now behaves like peer creation on the model axis, so both paths fail the same way and log through the same authority.
-- Operators gain one log signal: a debug line naming the target when model resolution throws.
-- A host-side default reselection after cold resume remains possible because `selectForNextRequest` is not applied; the resumed agent keeps the provider/model it was given until then.
+- Cold resume behaves like peer creation on the model axis, failing and logging through the same authority.
+- Operators gain a debug line naming the target when model resolution throws.
 
 ---
 
@@ -131,26 +137,27 @@ agents.resume({
 
 ### 6.1 Automated Verification Suite
 
-- **Unit / Contract Tests** (`tests/session-directory.test.mjs`): caller inheritance; host default fallback; three-key projection dropping caller leftovers; resume still issued when resolution throws, with exactly one debug line naming the target and nothing at warn or error; no `agentOptions` when the resolver is absent or the model is incomplete.
-- **Unit / Contract Tests** (`tests/dsh-host-gateway.test.mjs`): the exported helper drops caller leftovers, falls back to the host default selection, returns `undefined` for provider-only, effort-only and empty input.
-- **Regression**: existing cold-resume canonical id test in the same suite.
-- **Integration / Smoke**: none automated; the worktree has no `dsh-api-session-controller` / `dsh-agent-loop` dependency, so the host resume contract is exercised only through the mock context.
-- **Live Verification (manual, required before merge)**: register the local checkout in `cordis.patch.yml`, restart `dsh web`, call `session_call` against a target absent from host memory, and confirm `agent.options.provider` / `agent.options.model` match the caller, the persona `{{model}}` assembly no longer throws, the target is not left in the error state, and the session accepts a second message before any restart.
-- **Contract checks**: `npm run verify`, `npm run typecheck`.
+- **Unit and Contract Tests**: Tests in `tests/session-directory.test.mjs` and `tests/dsh-host-gateway.test.mjs` assert caller inheritance, host default fallback, three-key projection dropping caller leftovers, and recovery execution when resolution throws.
+- **Regression**: Existing cold-resume canonical ID tests.
+- **Contract checks**: `npm run verify` and `npm run typecheck`.
 
 ### 6.2 Code Review & Maintenance Checklist
 
-- [ ] Any new resume path passes `agentOptions` resolved by the gateway.
-- [ ] No caller option beyond the model triple reaches `agentOptions`.
-- [ ] Recovery remains attempted when enrichment throws.
+- [x] Any new resume path passes agent options resolved by the gateway.
+- [x] No caller option beyond the model triple reaches agent options.
+- [x] Recovery remains attempted when enrichment throws.
 
 ---
 
 ## 7. Status History & Related Artifacts
 
 - **2026-10-29**: Proposed and accepted with the fix for issue #10.
+- **Resolves**: Root-cause failure in cold resume prompt assembly identified in ADR-0036.
 - **Related ADRs**:
-  - Related to: ADR-0015, ADR-0021, ADR-0025
+  - Related to: [ADR-0015](./0015-peer-session-model-and-preset-inheritance.md)
+  - Related to: [ADR-0021](./0021-concurrent-running-quota-and-model-inheritance-alignment.md)
+  - Related to: [ADR-0025](./0025-peer-session-creation-gateway-safeguard-and-bootstrap-decoupling.md)
+  - Related to: [ADR-0036](./0036-target-acceptance-causal-verification-and-structured-error-contract.md)
 - **Implementation Artifacts**:
   - Primary source: `lib/session-directory.mjs`, `lib/dsh-host-gateway.mjs`
   - Test suites: `tests/session-directory.test.mjs`, `tests/dsh-host-gateway.test.mjs`

@@ -1,3 +1,10 @@
+<!--
+ADR Writing Guidelines (writing-for-agents):
+1. Focus on architectural intent, forces, decisions, and invariants.
+2. Avoid code dumps that duplicate live code.
+3. Keep prose dense, factual, and scannable without parenthetical annotations.
+4. If writing in Chinese, ensure all subheadings are <= 4 characters.
+-->
 # ADR-0040: Canvas Geometry Single-Source Headless Extraction and Inlined Deterministic Embedding
 
 - **Status**: Accepted (Supersedes the boundary note in ADR-0027)

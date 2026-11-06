@@ -1,3 +1,10 @@
+<!--
+ADR Writing Guidelines (writing-for-agents):
+1. Focus on architectural intent, forces, decisions, and invariants.
+2. Avoid code dumps that duplicate live code.
+3. Keep prose dense, factual, and scannable without parenthetical annotations.
+4. If writing in Chinese, ensure all subheadings are <= 4 characters.
+-->
 # ADR-0011: Board List Token Governance, Exact ID Retrieval, and Prompt KV Cache Protection
 
 - **Status**: Accepted
@@ -139,48 +146,48 @@ However, operational field analysis and multi-agent execution in AgentTeams reve
 ```javascript
 {
   name: 'board_list',
-  description: '查询公共黑板上的有效公告与共享状态。默认仅返回标题与元数据摘要（titles_only: true）；支持通过 id 精确查阅单条详情（自动包含正文）。默认仅限当前工程工作区。',
+  description: 'Query active posts and shared state on the public blackboard. Defaults to titles and metadata summary only (titles_only: true); specify id to retrieve full content. Scoped to current workspace by default.',
   isConcurrencySafe: true,
   parameters: {
     type: 'object',
     properties: {
       id: {
         type: 'string',
-        description: '按条目唯一 ID 精确检索（如 post-1725300000000-abcd）。指定 id 时 titles_only 默认自动分流为 false 以便直取正文。'
+        description: 'Exact lookup by post id (e.g. post-1725300000000-abcd). When id is specified, titles_only defaults to false to include content automatically.'
       },
       topic: {
         type: 'string',
-        description: '按完整主题过滤，例如 task:audit。'
+        description: 'Filter by exact topic, e.g. task:audit.'
       },
       topic_prefix: {
         type: 'string',
-        description: '按主题前缀过滤，例如 task:。'
+        description: 'Filter by topic prefix, e.g. task:.'
       },
       tag: {
         type: 'string',
-        description: '按单个标签过滤。'
+        description: 'Filter by tag.'
       },
       active_only: {
         type: 'boolean',
         default: true,
-        description: '是否仅返回未过期且未归档的活跃记录。默认为 true。'
+        description: 'Whether to return only non-expired, non-archived active posts. Defaults to true.'
       },
       cross_workspace: {
         type: 'boolean',
         default: false,
-        description: '是否查询所有工作区的条目。默认为 false（仅当前工作区）。'
+        description: 'Whether to query across all workspaces. Defaults to false (current workspace only).'
       },
       titles_only: {
         type: 'boolean',
         default: true,
-        description: '是否仅返回标题与元数据摘要（不含 content 正文）。未指定 id 时默认为 true，指定 id 时默认为 false。'
+        description: 'Whether to return titles and metadata summary only (omitting content body). Defaults to true when id is omitted, false when id is supplied.'
       },
       limit: {
         type: 'integer',
         minimum: 1,
         maximum: 100,
         default: 20,
-        description: '返回条数限制。默认 20，最大 100。'
+        description: 'Maximum number of items to return. Defaults to 20, max 100.'
       }
     }
   }
@@ -188,7 +195,7 @@ However, operational field analysis and multi-agent execution in AgentTeams reve
 ```
 
 #### 4.3.2 Canonical Resolution Logic in `BoardStore.prototype.list` (ADR-0016 Amendment)
-> **规范修正 (ADR-0016)**：`board_list` 工具对外暴露的入参严格收敛为纯正 `snake_case`（`id`, `topic`, `topic_prefix`, `tag`, `active_only`, `cross_workspace`, `titles_only`, `limit`）。历史草稿中的 `topicPrefix`、`crossWorkspace`、`titlesOnly` 等驼峰别名在工具层全面废除。
+> **Specification Amendment (ADR-0016)**: The parameter surface of `board_list` strictly converges on snake_case (`id`, `topic`, `topic_prefix`, `tag`, `active_only`, `cross_workspace`, `titles_only`, `limit`). Legacy camelCase aliases such as `topicPrefix`, `crossWorkspace`, and `titlesOnly` are deprecated and removed.
 
 ```javascript
 list({

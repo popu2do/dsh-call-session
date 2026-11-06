@@ -1,3 +1,10 @@
+<!--
+ADR Writing Guidelines (writing-for-agents):
+1. Focus on architectural intent, forces, decisions, and invariants.
+2. Avoid code dumps that duplicate live code.
+3. Keep prose dense, factual, and scannable without parenthetical annotations.
+4. If writing in Chinese, ensure all subheadings are <= 4 characters.
+-->
 # ADR-0009: Restrained Minimalist Technical Documentation and Anti-AI-Slop Governance
 
 - **Status**: Accepted
@@ -64,7 +71,7 @@ As `dsh-call-session` evolved into version 0.1.0, the accompanying user document
 7. **Operational Discipline Decoupling Invariant**: All ongoing agent tone, language, and zero-parentheses rules are maintained live in `AGENTS.md`; this ADR serves strictly as the immutable historical decision record, per ADR-0022.
 1. **Zero Emoji Invariant**: Exactly 0 Unicode pictographs and pseudographics across all documentation.
 2. **Four-Character Heading Invariant**: Level 2 and Level 3 Chinese headings must not exceed 4 characters.
-3. **Plain Technical Language Invariant**: Forbid metaphorical jargon. Use "单播呼叫" (unicast call) and "共享黑板" (shared board).
+3. **Plain Technical Language Invariant**: Forbid metaphorical jargon. Use canonical domain terms "单播调用" and "公共黑板".
 4. **Architectural Separation Invariant**: Detailed state-machine diagrams and lock retry mechanisms belong in `docs/adrs/`, not in the user README.
 5. **Ecosystem Modesty Invariant**: Explicitly inform users to prefer native DSH capabilities (such as built-in `subagent` process-internal delegation) for single-task delegation before introducing cross-session coordination.
 6. **Agent Enforcement Invariant**: Operational output discipline and language constraints for autonomous agents are maintained in `AGENTS.md` as always-loaded context; this record serves as the architectural rationale.
@@ -72,17 +79,17 @@ As `dsh-call-session` evolved into version 0.1.0, the accompanying user document
 ### 4.2 Documentation Structural Specification
 
 User-facing documentation (`README.md` and `README_ZH.md`) must strictly adhere to a standardized layout separated by horizontal dividers (`---`):
-1. **Hero & Tagline / 标语与横幅**: Centered mascot hero banner (`assets/hero.png`), project tagline, and status badges.
-2. **Overview / 概述**: Concise definition and scope of the plugin without marketing hyperbole.
-3. **Installation / 安装**: Zero-friction setup via profile commands (`dsh plugin --profile web add ...`).
-4. **Scenarios / 场景**: Human-centric natural language prompts driving peer handoffs, blackboard posting, and session creation.
-5. **Canvas / 看板**: Read-only topology showcase with sanitized, authentic UI demonstration (`assets/canvas-demo.png`).
-6. **Tools / 工具**: Compact capability matrix without internal parameter dumps.
-7. **Comparison / 对比**: Objective distinction between native process-internal `subagent` delegation and cross-session coordination.
-8. **Config / 配置**: Minimalist configuration options and overrides.
-9. **Architecture / 架构**: Single-point external links to formal ADRs and offline topology panorama.
-10. **Compatibility / 兼容**: Explicit supported and verified DSH, Cordis, and Node.js versions.
-11. **License / 许可**: Explicit open-source licensing declaration.
+1. **Hero & Tagline**: Centered mascot hero banner (`assets/hero.png`), project tagline, and status badges.
+2. **Overview**: Concise definition and scope of the plugin without marketing hyperbole.
+3. **Installation**: Zero-friction setup via profile commands (`dsh plugin --profile web add ...`).
+4. **Scenarios**: Human-centric natural language prompts driving peer handoffs, blackboard posting, and session creation.
+5. **Canvas**: Read-only topology showcase with sanitized, authentic UI demonstration (`assets/canvas-demo.png`).
+6. **Tools**: Compact capability matrix without internal parameter dumps.
+7. **Comparison**: Objective distinction between native process-internal `subagent` delegation and cross-session coordination.
+8. **Config**: Minimalist configuration options and overrides.
+9. **Architecture**: Single-point external links to formal ADRs and offline topology panorama.
+10. **Compatibility**: Explicit supported and verified DSH, Cordis, and Node.js versions.
+11. **License**: Explicit open-source licensing declaration.
 
 ### 4.3 Revision 2026-09-20: Human-Centric Scenarios and Visual Cadence
 1. **Human-Centric Scenario Invariant**: User documentation presents capabilities through realistic natural language conversational prompts, deprecating machine-level JSON tool-call schema blocks in primary documentation.
@@ -108,3 +115,13 @@ User-facing documentation (`README.md` and `README_ZH.md`) must strictly adhere 
 
 ### Neutral
 - Authors must resist the impulse to re-introduce decorative styling or conversational sales hooks during future releases.
+---
+
+## 6. Status History & Related Artifacts
+
+- **2026-09-04**: Accepted by Architect, Documentation Team, Core Contributors.
+- **2026-09-20**: Human-centric scenarios and visual cadence revision.
+- **2026-10-29**: Single-source vocabulary contract revision.
+- **Evolution**:
+  - Evolved by: [ADR-0022](./0022-verifiable-architecture-topology-and-agent-discipline-decoupling.md) (Architecture Topology Artifacts and Agent Discipline Decoupling)
+  - Evolved by: [ADR-0033](./0033-public-surface-contract.md) (Public Surface Contract)

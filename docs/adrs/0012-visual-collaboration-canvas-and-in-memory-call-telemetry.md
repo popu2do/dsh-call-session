@@ -1,3 +1,10 @@
+<!--
+ADR Writing Guidelines (writing-for-agents):
+1. Focus on architectural intent, forces, decisions, and invariants.
+2. Avoid code dumps that duplicate live code.
+3. Keep prose dense, factual, and scannable without parenthetical annotations.
+4. If writing in Chinese, ensure all subheadings are <= 4 characters.
+-->
 # ADR-0012: Visual Collaboration Canvas and In-Memory Call Telemetry Architecture
 
 - **Status**: Accepted (Workspace isolation superseded by ADR-0013; canvas geometry evolved by ADR-0014, ADR-0018, ADR-0019, ADR-0026)
@@ -6,91 +13,78 @@
 - **Consulted**: Frontend Engineering Team, UX Reviewer, Security Auditor
 - **Informed**: All Plugin Consumers, Downstream Subagents, DSH Web Users
 
-
-> **Architecture Evolution Notice**:
-> - **Workspace Scoping**: Superseded by [ADR-0013](./0013-human-canvas-global-transparency-vs-agent-workspace-isolation.md) (Human Canvas Global Transparency vs Agent Workspace Isolation).
-> - **Gutter Routing & Theme**: Standardized by [ADR-0014](./0014-canvas-gutter-routing-and-scoped-theme-parity.md).
-> - **Motion Tokens & Invariants**: Enforced by [ADR-0018](./0018-canvas-motion-and-visual-restraint.md).
-> - **Channel Split Geometry**: Decoupled by [ADR-0019](./0019-channel-split-routing-and-lineage-on-demand-focus.md).
-> - **Rounded Rectangle Cards**: Refined by [ADR-0026](./0026-canvas-rounded-rect-cards-toolbar-streamlining-and-dual-lineage-modes.md).
-> - **Terminology**: Strictly obeys `CONTEXT.md`: use **看板数据 / Canvas Data** and **调用连线 / Call Connection**, and avoid telemetry or monitoring jargon.
----
-
-## 1. Context and Problem Statement
-
-### 1.1 Background & Observability Vacuum
-`dsh-call-session` 为 DeepSeek Harness (DSH) 提供了两套核心协作原语：
-1. 基于拉取（Pull）的公共黑板系统（`board_post`, `board_list`, `board_clear`，ADR-0001, ADR-0002, ADR-0004）；
-2. 基于推送（Push）的严格 1:1 进程内单播调用（`session_call`，含 `steer` 与 `followup`，ADR-0001, ADR-0006）。
-
-然而，在多智能体协作与团队编排场景下，系统缺乏全局可观测性（Observability Vacuum）：
-- **调用痕迹瞬态丢失**：`session_call` 直接在内存中以事件方式分发至目标 Agent，调用完成后无结构化轨迹留存，无法回顾「谁调用了谁」、「何时触发了什么协作任务」；
-- **全景拓扑盲区**：用户仅能在对话列表单条会话内查看折叠行通知，缺乏全局视角的协作看板，无法直观感知跨工作区、多 Agent 之间的拓扑连接度与黑板条目关联；
-- **排障成本高**：发生多 Agent 死锁、调用级联风暴或任务交接断裂时，开发者只能通过零散的系统日志或人工逐个会话排查。
-
-### 1.2 Architectural Forces & Constraints
-- **Strict Read-Only Boundary**：协作看板仅作为系统的观察界面，不提供修改状态、删除记录或主动触发调用的入口。
-- **Zero Passive Wake-up (ADR-0001)**：看板状态获取与调用记录读取均为只读，不触发 Agent 实例被动唤醒。
-- **Workspace-Scoped Isolation by Default (ADR-0003)**：看板数据与拓扑节点保持工作区边界隔离，跨工作区透视需显式声明。
-- **Prompt KV Cache Invariant & Anti-Slop (ADR-0010, ADR-0011, ADR-0009)**：
-  - 看板数据接口不注册为大模型的 Native Tool，避免 Agent 上下文膨胀与 Prompt KV Cache 失效；
-  - 看板数据结构遵循标准英文紧凑契约，无装饰性符号与冗余元数据。
-- **Bounded In-Memory Footprint & Zero Disk Contention**：瞬态调用痕迹属于看板数据，容量受限，避免内存泄漏与磁盘 I/O 争用。
+> **架构演化**：
+> - 工作区边界：由 [ADR-0013](./0013-human-canvas-global-transparency-vs-agent-workspace-isolation.md) 全局透明度替代；
+> - 外侧布线与主题：由 [ADR-0014](./0014-canvas-gutter-routing-and-scoped-theme-parity.md) 规约；
+> - 动效令牌与几何不变式：由 [ADR-0018](./0018-canvas-motion-and-visual-restraint.md) 规约；
+> - 双通道分流走线：由 [ADR-0019](./0019-channel-split-routing-and-lineage-on-demand-focus.md) 确立；
+> - 圆角矩形卡片：由 [ADR-0026](./0026-canvas-rounded-rect-cards-toolbar-streamlining-and-dual-lineage-modes.md) 演进；
+> - 领域词汇：严格遵循 CONTEXT.md 规约，使用 看板数据 与 调用连线，替换非标术语。
 
 ---
 
-## 2. Decision Drivers
+## 背景
 
-- **Driver 1 (Non-Intrusive Observability)**：在不修改 `session_call` 和 `board-store` 核心语义的前提下，构建只读看板数据视图。
-- **Driver 2 (Bounded RingBuffer Lifecycle)**：采用固定容量内存环形缓冲区（FIFO 淘汰），保证 O(1) 记录与查询性能，内存占用受控。
-- **Driver 3 (Workspace Isolation Alignment)**：记录调用的发起工作区与目标工作区，遵循 ADR-0003 隔离过滤规范。
-- **Driver 4 (Prompt KV Cache Defense)**：将看板数据与 Agent LLM 工具集隔离，避免 Token 消耗与 KV Cache 抖动。
-- **Driver 5 (Web Native Slot Integration)**：挂载至 DSH Web `conversation.view` 扩展插槽，提供视觉拓扑展示。
+### 痛点
+插件为系统提供了两套核心协作原语：
+1. 基于拉取的公共黑板，涵盖 board_post、board_list、board_clear；
+2. 基于推送的严格 1 对 1 进程内单播调用 session_call。
 
----
+在多智能体协作与团队编排场景下，系统缺乏全局直观透视：
+- 调用痕迹瞬态丢失：单播调用直接在内存中以事件方式分发至目标智能体，调用完成后无结构化轨迹留存，无法回顾调用关系与协作任务；
+- 全景拓扑盲区：用户仅能在对话列表单条会话内查看折叠行通知，缺乏全局视角的协作看板，无法直观感知跨工作区与多智能体之间的拓扑连接度及黑板条目关联；
+- 排障成本高：发生多智能体协作死锁、调用级联或任务交接断裂时，开发者只能通过零散的系统日志或人工逐个会话排查。
 
-## 3. Considered Options
-
-### Option 1: Append-Only Disk Persistence (`telemetry.jsonl`)
-- **Description**: 每笔 `session_call` 完成后，追加写入本地 JSONL 文件。
-- **Pros**: 进程重启后历史调用连线不丢失。
-- **Cons**: 引入高频磁盘 I/O，在 Windows 环境下极易与 `board.json` 发生文件锁争用（违背 ADR-0004）；文件体积无限膨胀需要日志轮转器；调用记录作为瞬态会话观测，落盘性价比极低。
-
-### Option 2: Global EventBus Broadcast & Reactive Subscriptions
-- **Description**: 在 `executeSessionCall` 完成后向全局 EventEmitter 广播事件，前端 WebSocket 直接监听。
-- **Pros**: 实时推送体验好。
-- **Cons**: 违反 ADR-0001 核心原则；全局广播容易被误配的 Agent 监听器捕获，引发不可预期的级联被动唤醒；网络断连期间事件丢失，无法拉取完整全景快照。
-
-### Option 3 (Chosen): Bounded In-Memory Ring Buffer + Read-Only Telemetry Facade + Native Web View Slot
-- **Description**:
-  1. 在后端实现轻量纯内存环形缓冲区 `CallTelemetryRingBuffer`（默认容量 200 条，FIFO 淘汰）；
-  2. `executeSessionCall` 在投递成功后同步（或微任务异步）记录 1 条轻量调用记录快照；
-  3. 提供只读门面接口 `getCanvasTelemetry({ workspace, crossWorkspace, limit })` 聚合会话、黑板与连线；
-  4. 调用记录接口作为内部查询暴露给 Web 前端，不向 Agent 暴露为 LLM Tool，避免影响 KV Cache；
-  5. 前端通过 `conversation.view` 插槽挂载「看板」视图，采用 SVG + DOM 分层渲染与 RAF 节流实现 60fps。
-- **Pros**: 内存开销小、无磁盘 I/O、无被动唤醒、内存占用受限、不影响 Prompt KV Cache、契合 DSH 原生扩展规范。
-- **Cons**: 宿主进程重启后瞬态连线重置（拓扑自动基于存活会话与黑板重新投影，符合实时观测预期）。
+### 约束
+- 严格只读边界：协作看板仅作为系统的观察界面，不提供修改状态、删除记录或主动触发调用的入口；
+- 零被动唤醒：看板状态获取与调用记录读取均为只读，绝不触发智能体实例被动唤醒；
+- 提示词缓存防护：看板数据接口不注册为大模型的原生工具，避免智能体上下文膨胀与提示词前缀缓存失效；
+- 受控内存占用与零磁盘争用：瞬态调用痕迹属于看板数据，容量受限，避免内存泄漏与磁盘文件锁争用。
 
 ---
 
-## 4. Decision Outcome
+## 动因
 
-**Chosen Option**: Option 3 — Bounded In-Memory Ring Buffer + Read-Only Telemetry Facade + Native Web View Slot.
+- 非侵入可观测性：在不修改单播调用和黑板存储核心语义的前提下，构建纯只读看板数据视图；
+- 有界环形生命周期：采用固定容量内存环形缓冲区，保证先进先出淘汰与常数时间记录查询，控制内存开销；
+- 工作区边界对齐：记录调用的发起工作区与目标工作区，遵循工作区隔离过滤规范；
+- 提示词缓存保护：将看板数据与智能体工具集隔离，避免令牌消耗与提示词缓存失效；
+- 网页原生插槽集成：挂载至网页扩展插槽，提供视觉拓扑展示。
 
-### 4.1 架构原则
+---
 
-1. **Invariant 1 (Strict Read-Only Boundary)**：
-   看板与调用记录服务作为只读观察者，不包含修改数据、删除会话或反向触发调用的入口。
-2. **Invariant 2 (Zero Passive Wake-up Invariant)**：
-   获取拓扑快照和调用记录直接在内存中读取，不调用任何会话的 `steer`, `followup`, `send` 或触发 prompt 执行。
-3. **Invariant 3 (Bounded FIFO Memory Invariant)**：
-   `CallTelemetryRingBuffer` 设置容量上限（默认 200 条，配置项 `telemetryCapacity`，范围 10~2000）。当缓冲区满时，最旧记录自动弹出，防止内存无限增长。
-4. **Invariant 4 (Prompt KV Cache Defense Invariant)**：
-   调用记录查询接口不作为 Tool 注入给智能体。保护服务端 Prefix KV Cache 幂等命中。
-5. **Invariant 5 (Workspace Isolation Invariant)**：
-   调用记录查询默认隔离在当前工作区；只有显式传递 `cross_workspace: true` 时才返回所有工作区数据。
+## 方案
 
-### 4.2 拓扑数据
+### 方案一
+每笔单播调用完成后追加写入本地 JSONL 文件。
+- 收益：进程重启后历史调用连线不丢失。
+- 弊端：引入高频磁盘操作，易发生文件锁争用，文件体积膨胀且瞬态调用落盘性价比极低。
+
+### 方案二
+在单播调用完成后向全局事件发射器广播事件，前端直接监听。
+- 收益：实时推送体验直接。
+- 弊端：全局广播容易被误配的智能体监听器捕获，引发级联被动唤醒，且断网期间事件丢失无法拉取完整全景快照。
+
+### 方案三
+内建有界内存环形缓冲区，暴露只读门面接口，由网页视图插槽拉取渲染。
+- 收益：内存开销低、零磁盘争用、无被动唤醒、不影响提示词缓存、契合原生扩展规范。
+- 弊端：宿主进程重启后瞬态连线重置，拓扑自动基于存活会话与黑板重新投影，符合实时观测预期。
+
+---
+
+## 决策
+
+采纳方案三：采用有界内存环形缓冲区与只读看板数据门面。
+
+### 原则
+
+1. 严格只读边界：看板与调用记录服务作为只读观察者，不包含修改数据、删除会话或反向触发调用的入口；
+2. 零被动唤醒不变式：获取拓扑快照和调用记录直接在内存中读取，不调用任何会话的调度接口或触发提示词执行；
+3. 有界内存不变式：环形缓冲区设置容量上限，默认 200 条，满额时最旧记录自动弹出，防止内存无限增长；
+4. 提示词缓存防护不变式：调用记录查询接口不作为工具注入给智能体，保护服务端前缀缓存命中；
+5. 工作区隔离不变式：调用记录查询默认隔离在当前工作区，仅在显式请求跨工作区时返回全局视图。
+
+### 拓扑
 
 ```
 +---------------------------------------------------------------------------------------------------+
@@ -134,15 +128,15 @@
 +---------------------------------------------------------------------------------------------------+
 ```
 
-### 4.3 接口契约
+### 契约
 
-#### 4.3.1 内存缓冲
+#### 缓冲
 
-> **Amend**：`task_dispatch` 已废弃，现役取值为 `notice | task_soft | task_hard | task_report`，见 ADR-0042；本段保留为历史记录。
+> 演进说明：task_dispatch 历史类型已废弃，现役取值为 notice、task_soft、task_hard、task_report，见 ADR-0042。
 
 ```typescript
 export interface CallTelemetryRecord {
-  id: string;                      // 唯一标识 (如 call-1725800000000-a1b2c3d4)
+  id: string;                      // 唯一标识如 call-1725800000000-a1b2c3d4
   callerSessionId: string;         // 调用方 Session ID
   callerTitle: string;             // 调用方会话标题
   callerWorkspace: string;         // 调用方工作区规范化路径
@@ -151,18 +145,18 @@ export interface CallTelemetryRecord {
   targetWorkspace: string;         // 目标方工作区规范化路径
   callType: 'task_dispatch' | 'task_report' | 'notice';
   deliveryMode: 'steer' | 'followup';
-  timestamp: number;               // 发生时间戳 (毫秒)
+  timestamp: number;               // 发生时间戳
   durationMs: number;              // 执行投递耗时
   contextPostIds: string[];        // 携带引用的黑板条目 ID
-  messageSnippet: string;          // 消息纯文本摘要（最多 120 字符）
-  messagePayload: string;          // 完整消息内容（只读）
+  messageSnippet: string;          // 消息纯文本摘要
+  messagePayload: string;          // 完整消息内容
   status: 'active' | 'settled';    // 状态
 }
 
 export interface CallTelemetryFilter {
   workspace?: string;              // 目标工作区过滤
   crossWorkspace?: boolean;        // 是否允许跨工作区
-  limit?: number;                  // 返回记录上限（默认 50，最大 200）
+  limit?: number;                  // 返回记录上限
   since?: number;                  // 时间戳增量过滤
 }
 
@@ -176,7 +170,7 @@ export class CallTelemetryRingBuffer {
 }
 ```
 
-#### 4.3.2 聚合快照
+#### 快照
 
 ```typescript
 export interface CanvasTelemetrySnapshot {
@@ -194,47 +188,40 @@ export interface CanvasTelemetrySnapshot {
   };
 }
 
-/**
- * 聚合全景调用记录快照（只读无副作用）
- */
 export function getCanvasTelemetry(
   ctx: any,
   options?: { workspace?: string; crossWorkspace?: boolean; limit?: number }
 ): Promise<CanvasTelemetrySnapshot>;
 ```
 
-#### 4.3.3 路由契约
+#### 路由
 
-浏览器端看板无法直接访问宿主进程内存，调用记录快照必须经由一条宿主注册的只读 HTTP 路由暴露。该路由是看板唯一的数据入口：
+浏览器端看板无法直接访问宿主进程内存，调用记录快照经由宿主注册的只读 HTTP 路由暴露：
 
 ```javascript
 export const TELEMETRY_ROUTE_PATH = '/plugins/dsh-call-session/telemetry';
 export const WEB_SERVER_KEYS = ['webServer', 'httpServer'];
 
-/** 为原生 WebServer 包裹 Connection 认证围栏 */
 export function authenticatedWebRoutes(server: any, connection: () => any): AuthenticatedWebRoutes;
-
-/** GET-only 只读处理器；非 GET 返回 405 */
 export function createTelemetryHandler(ctx: any, deps?: { logger?: any }): (req, res) => Promise<void>;
-
-/** 懒加载挂载；无 Web 宿主时保持 tool-only 静默降级 */
 export function installTelemetryWebSurface(ctx: any, deps?: { logger?: any }): {
   tryRegister(): boolean;
   registered(): boolean;
 };
 ```
 
-路由不变式：
+路由规约：
+- 认证围栏强制：每个请求先经认证围栏校验，服务缺失返回 503，未授权返回 401，越权返回 403，校验通过前不序列化工作区状态；
+- 只读限制：仅接受 GET 请求，其余方法一律返回 405 并携带允许头部，不提供写入或清理路由；
+- 禁用缓存响应：响应头固定声明不进行缓存，避免过期拓扑被浏览器复用；
+- 懒加载与降级：通过探针获取宿主服务，缺失时保持无界面模式静默降级；
+- 生命周期自动摘除：服务注册随插件卸载自动移除；
+- 错误不泄漏：聚合异常统一降级为 500 状态，不将内部调用栈或敏感路径写入响应体。
 
-- **认证围栏强制**：原生 WebServer 路由不继承 Connection 的认证语义，因此每个请求先经 `connection.requestRejection(req)` 校验。Connection 服务缺失返回 503，未授权返回 401，越权返回 403，围栏校验通过前不序列化工作区状态；
-- **GET-only 只读**：仅接受 GET；`POST`/`PUT`/`PATCH`/`DELETE`/`HEAD`/`OPTIONS` 一律返回 405 并携带 `allow: GET`。不提供写入、清理或触发单播的路由；
-- **无缓存响应**：响应头固定 `cache-control: no-store`，避免过期拓扑被浏览器缓存复用；
-- **懒加载与降级**：通过 `ctx.get('webServer') ?? ctx.get('httpServer')` 探针获取宿主服务，缺失时直接返回并监听 `internal/service` 事件补挂载。Headless 组态下插件保持 tool-only，不阻塞启动；
-- **生命周期自动摘除**：注册经 `ctx.effect` 挂载，插件卸载时路由随之移除；
-- **错误不泄漏**：聚合异常统一降级为 500 `telemetry unavailable`，不将内部堆栈或路径写入响应体。
+#### 扩展
 
-#### 4.3.4 扩展契约
-在 Web 运行时，插件入口通过 `conversation.view` 注册看板选项卡，并从上述规范路由拉取快照：
+在网页运行时，插件入口通过会话视图插槽挂载看板选项卡并拉取快照：
+
 ```javascript
 ctx.slots.inject('conversation.view', () => ctx.slots.register({
   name: 'conversation.view',
@@ -243,51 +230,39 @@ ctx.slots.inject('conversation.view', () => ctx.slots.register({
   label: () => '看板',
   inject: (sessionId) => ({
     sessionId,
-    fetchTelemetry: (options) => fetch('/plugins/dsh-call-session/telemetry?' + query).then(res => res.json())
+    fetchTelemetry: (options) => fetch('/plugins/dsh-call-session/telemetry').then(res => res.json())
   })
 }, CanvasViewComponent));
 ```
 
 ---
 
-## 5. Consequences
+## 收益
 
-### 5.1 Positive Consequences (Benefits)
-- **只读可观测性**：呈现多 Agent 交互拓扑与黑板状态，辅助多智能体协作排障；
-- **无状态破坏风险**：纯只读透视，无反向控制渠道，避免会话或黑板数据误删；
-- **无被动唤醒**：调用记录读取依赖内存镜像，符合 ADR-0001 架构规范；
-- **不影响 Prompt KV Cache**：调用记录服务不暴露为 LLM Tool，系统提示词不变，保持首字响应性能；
-- **恒定内存消耗**：环形缓冲区大小受限（默认 200），内存占用受控，无磁盘 I/O 阻塞。
+### 收益
+- 只读可观测性：呈现多智能体交互拓扑与黑板状态，辅助多智能体协作排障；
+- 无状态破坏风险：纯只读透视，无反向控制渠道，避免会话或黑板数据误删；
+- 无被动唤醒：调用记录读取依赖内存镜像，符合架构规范；
+- 保护前缀缓存：看板数据服务不暴露为智能体工具，系统提示词不变，保持首字响应性能；
+- 恒定内存消耗：环形缓冲区大小受限，内存占用受控，无磁盘阻塞。
 
-### 5.2 Negative Consequences & Mitigations
-- **瞬态调用在宿主重启后清空**：
-  - *Mitigation*: 会话实体与黑板条目通过原有机制保留与持久化，拓扑图基于存活状态重新投影。调用连线作为瞬态观测数据流动，重启后重置。
-- **高频调用时的前端渲染负载**：
-  - *Mitigation*: 执行 RAF 批量合并调度与视口裁剪，连线粒子动效采用 GPU CSS 合成。
+### 权衡
+- 瞬态调用重启清空：会话实体与黑板条目通过原有机制持久化，拓扑图基于存活状态重新投影，调用连线作为瞬态数据流动在重启后重置；
+- 高频调用渲染开销：执行批量合并调度与视口裁剪，连线粒子动效采用硬件加速图层合成。
 
 ---
 
-## 6. Verification and Compliance Gates
+## 验证
 
-1. **RingBuffer 单元测试**：
-   - 验证边界容量约束，测试 250 次写入后容量恒定为 200，并正确 FIFO 淘汰最旧数据；
-   - 验证工作区隔离过滤正确性，验证 `crossWorkspace: false` 阻断非本工程记录。
-2. **Zero-Wakeup 验证**：
-   - 在有 3 个处于 idle 状态的会话时，连续调用 100 次 `getCanvasTelemetry()`，验证 3 个会话的被动唤醒次数为 0。
-3. **KV Cache 验证**：
-   - 检查 Agent `tools` 列表与 System Prompt，确认无新增 LLM 调用记录工具，保证提示词指纹幂等。
-4. **端到端链路验证**：
-   - 断言前端请求路径与宿主注册路径字符串完全一致，防止链路断裂；
-   - 验证认证围栏在 Connection 缺失（503）、未授权（401）、越权（403）三态下均在处理器执行前拦截；
-   - 验证非 GET 方法一律 405 拦截，响应头携带 `allow: GET`；
-   - 验证无 Web 宿主时 `installTelemetryWebSurface` 返回未注册且不抛错，插件保持 tool-only；
-   - 验证 `internal/service` 事件在服务后绑定时能够补挂载，且重复调用幂等不重复注册。
+1. 环形缓冲测试：验证容量硬约束与先进先出淘汰行为，以及工作区隔离过滤正确性；
+2. 零唤醒验证：对空闲会话连续读取看板快照，验证被动唤醒计数保持为零；
+3. 提示词缓存验证：核验智能体工具清单与系统提示词，确认未引入新增提示词工具；
+4. 端到端链路验证：核对路由路径一致性、认证围栏拦截状态码、非 GET 请求阻断及服务后绑定时的补挂载行为。
 
 ---
 
-## 7. Revision
+## 演进
 
-### 7.1 Revision 2026-10-29: 看板数据措辞
-
-1. 仅改措辞：正文中该视图数据的历史易混用词统一为「看板数据」或「调用记录」，不变式、容量、路由与标识符均未改动。
-2. 被替换的用词登记在 CONTEXT.md 的 _Avoid_ 列表，由全仓词汇门禁强制。
+### 措辞
+1. 正文中该视图数据的历史混用词汇统合为 看板数据 与 调用记录，各项不变式、容量、路由与标识符保持不变；
+2. 历史术语登记于 CONTEXT.md 规避列表，由词汇门禁统一核验。

@@ -1,3 +1,10 @@
+<!--
+ADR Writing Guidelines (writing-for-agents):
+1. Focus on architectural intent, forces, decisions, and invariants.
+2. Avoid code dumps that duplicate live code.
+3. Keep prose dense, factual, and scannable without parenthetical annotations.
+4. If writing in Chinese, ensure all subheadings are <= 4 characters.
+-->
 # ADR-0037: Host Runtime Compatibility Contract, Non-Strict Service Probing, and the Authoritative Engine Range
 
 - **Status**: Accepted
@@ -118,18 +125,3 @@ readHostService(ctx, name) -> service | undefined
 - **Fault Injection / Boundary Tests**: the throwing-proxy context simulates the Cordis trap on every property read; the isolated-host A/B reproduced the did-not-activate and 404 signals against 0.1.9 and their absence against the probed build.
 
 ### 6.2 Code Review & Maintenance Checklist
-- [ ] Every new context-proxy read is either declared in `inject` or routed through the probe seam.
-- [ ] The engine range moves only after a verified host release, in the same commit as the README compatibility rows.
-- [ ] Any `apply`-path change re-runs the real-Cordis activation suite.
-
----
-
-## 7. Status History & Related Artifacts
-
-- **2026-10-23**: Accepted.
-- **Related ADRs**:
-  - Extends: ADR-0006, widening graceful degradation from transport payload fields to host service access.
-  - Related to: ADR-0033, ADR-0036.
-- **Implementation Artifacts**:
-  - Primary source: `lib/host-services.mjs`, `lib/session-directory.mjs`, `package.json`
-  - Test suites: `tests/host-services.test.mjs`, `tests/cordis-activation.test.mjs`, `tests/plugin-manifest.test.mjs`

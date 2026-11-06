@@ -1,3 +1,10 @@
+<!--
+ADR Writing Guidelines (writing-for-agents):
+1. Focus on architectural intent, forces, decisions, and invariants.
+2. Avoid code dumps that duplicate live code.
+3. Keep prose dense, factual, and scannable without parenthetical annotations.
+4. If writing in Chinese, ensure all subheadings are <= 4 characters.
+-->
 # ADR-0003: Workspace-Scoped Isolation by Default with Cross-Workspace Opt-in
 
 - **Status**: Accepted
@@ -93,15 +100,15 @@ In naive shared-memory or single-board designs:
 4. **Session Discovery Scoping**:
    - `session_query` defaults to `cross_workspace: false`, returning only active/idle agents that share the exact normalized `cwd` (`lib/session-query.mjs` Line 107-110).
 5. **Session Creation Scoping (`session_create`)**:
-   - 遵循默认工作区隔离原则：未显式指定 `workspace` 时，自动继承调用方的 `callerWorkspace` 作为安全基准；显式指定合法已注册的目标工作区时，允许将新建会话附着至目标工程，严格遵循“默认隔离 + 显式接入（Opt-in）”契约，严禁将“默认安全”误解为“不可配置”。
-   - 准入判定位于领取并发准入租约与创建会话之前，按序短路：
-     1. 省略 `workspace` 时目标取调用方 `cwd`，不查询注册表。
-     2. `workspace` 规范化后与调用方规范化 `cwd` 相等，视为同工程直通放行，不查询注册表。此规则保证未暴露注册表的环境仍可创建同工程会话。
-     3. 其余情况必须命中宿主工作区注册表，未命中以 `[WorkspaceNotRegistered]` 拒绝。
-   - 注册表不可用时规则 3 以 `[WorkspaceRegistryUnavailable]` 失败关闭。放行等同于退回未校验状态，而该状态正是本节要消除的缺陷。
-   - 拒绝不产生会话、标题事件或配额占用。
-   - 本节为既有契约的实现缺口修复：`workspace` 参数自身即显式接入的唯一表达，不额外引入布尔开关。
-   - 路径比对沿用本 ADR 的字符串规范化，不解析符号链接，也不消解 `..`。宿主注册表存的是真实路径，因此传入符号链接或其等价写法会被判为未注册。此前跨工作区创建完全不校验，该差异不构成回归；收紧到真实路径需要引入异步解析，与本节同步判定性质不符，故记录而不扩大本次修改。
+   - Default workspace isolation applies: when `workspace` is omitted, the new session inherits `callerWorkspace` as the security baseline. When an explicitly registered target workspace is supplied, the new session attaches to the target project under the explicit opt-in contract.
+   - Admission checks run before acquiring concurrency leases or creating the session, short-circuiting in order:
+     1. When `workspace` is omitted, the target defaults to caller `cwd` without querying the registry.
+     2. When normalized `workspace` equals normalized caller `cwd`, it passes through as a same-workspace session without querying the registry.
+     3. Otherwise, the target must match an entry in the host workspace registry; unmatched targets are rejected with `[WorkspaceNotRegistered]`.
+   - If the workspace registry is unavailable, rule 3 fails closed with `[WorkspaceRegistryUnavailable]`.
+   - Rejection creates no session, title event, or quota allocation.
+   - The `workspace` parameter serves as the sole expression of explicit opt-in without introducing redundant boolean switches.
+   - Path comparisons use string normalization from this ADR without resolving symlinks or collapsing `..`.
 
 ### 4.2 System Architecture & Topology
 
@@ -135,7 +142,7 @@ In naive shared-memory or single-board designs:
   "cross_workspace": {
     "type": "boolean",
     "default": false,
-    "description": "是否跨工作区检索。默认为 false（仅列出当前会话工作区内的黑板条目），设为 true 可检索全局所有工程的挂牌。"
+    "description": "Whether to query across workspaces. Defaults to false (lists posts only within the caller workspace); set to true to search globally across all projects."
   }
 }
 ```
@@ -146,7 +153,7 @@ In naive shared-memory or single-board designs:
   "cross_workspace": {
     "type": "boolean",
     "default": false,
-    "description": "是否检索非当前工作区的会话。默认 false 仅返回同工程会话。"
+    "description": "Whether to query sessions outside the caller workspace. Defaults to false, returning only peer sessions in the same workspace."
   }
 }
 ```
@@ -194,6 +201,8 @@ In naive shared-memory or single-board designs:
 - **Related ADRs**:
   - Related to: [ADR-0001](./0001-separation-of-concerns-board-vs-call.md) (Board vs Call Separation)
   - Related to: [ADR-0005](./0005-english-metadata-and-two-state-status.md) (Normalized Two-State Protocol)
+  - Evolved by: [ADR-0027](./0027-deep-module-workspace-isolation-tools-registry-and-canvas-geometry.md) (Workspace Domain Primitive Isolation)
+  - Evolved by: [ADR-0035](./0035-durable-blackboard-storage-outside-the-plugin-package.md) (Durable Blackboard Storage Outside Plugin Package)
 - **Implementation Artifacts**:
   - `lib/board-store.mjs` (Line 18-25, 149-153, 232-234)
   - `lib/session-query.mjs` (Line 24-26, 107-110)

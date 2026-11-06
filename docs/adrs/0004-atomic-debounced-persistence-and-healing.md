@@ -1,3 +1,10 @@
+<!--
+ADR Writing Guidelines (writing-for-agents):
+1. Focus on architectural intent, forces, decisions, and invariants.
+2. Avoid code dumps that duplicate live code.
+3. Keep prose dense, factual, and scannable without parenthetical annotations.
+4. If writing in Chinese, ensure all subheadings are <= 4 characters.
+-->
 # ADR-0004: Atomic Debounced Persistence Engine with Windows Lock Retries and Backup Recovery
 
 - **Status**: Accepted
@@ -174,5 +181,6 @@ Under naive filesystem persistence strategies (e.g. synchronous `fs.writeFileSyn
 - **Related ADRs**:
   - Related to: [ADR-0001](./0001-separation-of-concerns-board-vs-call.md) (Board vs Call Separation)
   - Related to: [ADR-0002](./0002-builtin-blackboard-store.md) (Built-in Blackboard State Store)
+  - Evolved by: [ADR-0035](./0035-durable-blackboard-storage-outside-the-plugin-package.md) (Durable Blackboard Storage Outside the Plugin Package)
 - **Implementation Artifacts**:
   - Primary source: `lib/board-store.mjs` (Line 43-74, 262-342)

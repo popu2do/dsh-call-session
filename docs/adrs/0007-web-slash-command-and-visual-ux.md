@@ -1,3 +1,10 @@
+<!--
+ADR Writing Guidelines (writing-for-agents):
+1. Focus on architectural intent, forces, decisions, and invariants.
+2. Avoid code dumps that duplicate live code.
+3. Keep prose dense, factual, and scannable without parenthetical annotations.
+4. If writing in Chinese, ensure all subheadings are <= 4 characters.
+-->
 # ADR-0007: Web Slash Command Integration and Visual UX Streamline
 
 - **Status**: Superseded by ADR-0012
@@ -6,155 +13,99 @@
 - **Consulted**: Web Frontend Team, Community Users
 - **Informed**: All Plugin Consumers, DSH Web Interface Users
 
-> **Superseded & Retirement Notice**:
-> The `/dsh-call-session` slash command and `commands` Cordis service dependency have been formally retired.
-> Slash command registration and `commands` injection have been removed from `index.mjs`, `types/index.d.ts`, and `cordis.patch.yml`.
-> Inter-session interactions are handled natively via agent tools (`session_call`, `board_*`, `session_query`, `session_create`) and Web GUI actions.
+> **废弃与替代说明**：
+> `/dsh-call-session` 斜杠命令与 `commands` 服务依赖已正式退役。
+> 斜杠命令注册与注入已从入口与配置中彻底移除。
+> 会话交互统合由原生智能体工具与前端界面行为接管，历史演进由 ADR-0012 承接。
 
 ---
 
-## 1. Context and Problem Statement
+## 背景
 
-### 1.1 Background & Issues
-在既往设计中，`dsh-call-session` 试图在 npm `package.json` 中声明 `bin: { "dsh-call-session": "bin/dsh-call-session.mjs" }`，提供一个面向操作系统的外部 CLI 命令行工具。
+### 现状
+在既往设计中，插件声明外部命令行二进制入口，提供面向操作系统的外部命令行工具。
 这种设计带来了工程弊端与割裂：
-1. **外部独立进程断链**：CLI 运行于 DSH 主进程外部，无法感知或直接获取宿主内存中的 `ctx.agents` 实例列表，退化为依赖本地 HTTP 网络端口；
-2. **割裂人类交互体验**：人类用户在 DSH Web GUI 界面交互时，需要额外打开系统终端输入参数向 Agent 发送消息，增加了额外的终端操作成本；
-3. **缺少宿主级命令提示与语法补全**：外部 CLI 无法利用 DSH Web 输入框原生的 Slash Command 联想机制；
-4. **视觉侵占与格式错乱**：由于缺乏统一的 UI 展现规范，早期的跨会话交互在 Web 界面被当做普通用户输入消息，影响了界面呈现效果。
+1. 外部独立进程断链：命令行工具运行于宿主进程外部，无法直接获取宿主内存中的智能体实例列表，退化为依赖本地网络端口；
+2. 割裂交互体验：用户在网页界面交互时，需要额外打开系统终端输入参数向智能体发送消息，增加了终端操作成本；
+3. 缺少宿主级命令提示与语法补全：外部工具无法利用网页输入框原生的斜杠命令联想机制；
+4. 视觉侵占与格式错乱：由于缺乏统一展示规范，跨会话交互在前端被渲染为普通用户输入消息，影响呈现效果。
 
-### 1.2 Architectural Forces & Constraints
-- **In-Process Command Boundary**：面向用户的交互命令运行在 DSH 宿主进程内部，由 `ctx.commands` 服务直接驱动；
-- **Clean Package Topology**：Cordis 插件保持高内聚，专注于宿主能力扩展，去除独立的外部 CLI 包装；
-- **Visual Integration**：跨会话调度的轨迹展示符合 DSH Web 原生折叠通知行契约。
-
----
-
-## 2. Decision Drivers
-
-- **Driver 1 (Unified Web User Experience)**：用户在 DSH Web 输入框通过 `/dsh-call-session` 向协作会话发起调度；
-- **Driver 2 (Eliminate Bin Baggage)**：从 `package.json` 中移除 `bin` 字段与外部脚本，精简 Cordis 插件代码结构；
-- **Driver 3 (Native Slash Command Autocomplete)**：接入 DSH 的输入提示与补全机制（`ctx.commands.register`）；
-- **Driver 4 (Visual Harmony)**：配合 DSH 的 `ContextInjectionRow` 提供单行折叠通知与即时反馈。
+### 约束
+- 进程内命令边界：面向用户的交互命令运行在宿主进程内部，由命令服务直接驱动；
+- 依赖精简：插件保持高内聚并专注于宿主能力扩展，去除独立的外部命令行包装；
+- 视觉集成：跨会话调度轨迹符合网页原生折叠通知行契约。
 
 ---
 
-## 3. Considered Options
+## 动因
 
-### Option 1: Maintain Both External CLI and Web Slash Command (Rejected)
-- **Description**: 在保留 `bin` 脚本的同时增加 Web Slash Command。
-- **Pros**: 兼顾可能的外部终端脚本调用需求。
-- **Cons**: 维护两套通信链路，增加代码冗余与网络维护成本。
-
-### Option 2 (Chosen): Eliminate Standalone CLI and Unify on Native Slash Command `/dsh-call-session`
-- **Description**: 废除 `bin` 脚本，使用 DSH 原生 `ctx.commands.register` 注册全局斜杠命令，打通 Web 输入框与进程内调度。
-- **Pros**: 进程内单链路自包含执行，消除外部进程开销与网络依赖。
-- **Cons**: 外部脚本无法直接通过系统 PATH 调用 `dsh-call-session`，需通过 DSH 原生接口或工具调用。
+- 统一前端交互体验：用户在网页输入框通过斜杠命令向协作会话发起调度；
+- 移除二进制冗余：移除脚本入口与外部包装，精简插件包结构；
+- 原生输入提示补全：接入宿主输入提示与命令自动补全机制；
+- 视觉层次协调：配合上下文注入机制提供单行折叠通知与即时反馈。
 
 ---
 
-## 4. Decision Outcome
+## 方案
 
-**Chosen Option**: Option 2 — Eliminate Standalone CLI and Unify on Native Slash Command `/dsh-call-session`.
+### 方案一
+在保留外部脚本的同时增加网页斜杠命令。
+- 收益：兼顾可能的外部终端脚本调用需求。
+- 弊端：维护两套通信链路，增加代码冗余与维护成本。
 
-### 4.1 Slash Command Registration Specification
-在插件入口 `index.mjs` 中通过 `ctx.commands.register` 挂载命令：
-
-```javascript
-ctx.commands.register({
-  name: 'dsh-call-session',
-  description: '向指定目标会话发起 DSH 原生跨会话调度呼叫',
-  input: {
-    hint: '<target_session_id> <message>'
-  },
-  handler(invocation) {
-    const raw = invocation.rawInput.trim();
-    if (!raw) {
-      return {
-        kind: 'error',
-        text: '用法错误：请提供目标 Session ID 与消息内容。示例：/dsh-call-session session-xyz 请查阅 PR'
-      };
-    }
-
-    const firstSpaceIndex = raw.search(/[\t\n\r ]/u);
-    if (firstSpaceIndex === -1) {
-      return {
-        kind: 'error',
-        text: '用法错误：缺少消息内容。示例：/dsh-call-session <target_session_id> <message>'
-      };
-    }
-
-    const targetSessionId = raw.slice(0, firstSpaceIndex).trim();
-    const message = raw.slice(firstSpaceIndex).trim();
-
-    try {
-      const callerAgent = invocation.agent;
-      const result = executeSessionCall(
-        ctx,
-        {
-          target_session_id: targetSessionId,
-          message,
-          call_type: 'notice'
-        },
-        { agent: callerAgent }
-      );
-
-      return {
-        kind: 'success',
-        text: `已通过原生单播 (${result.deliveryMode}) 成功呼叫会话 [${result.targetSessionId}]`
-      };
-    } catch (error) {
-      return {
-        kind: 'error',
-        text: `跨会话呼叫失败: ${error?.message || error}`
-      };
-    }
-  }
-});
-```
-
-### 4.2 Visual Trajectory Contract (Web UI Presentation)
-目标会话接收到该消息后，DSH Web GUI 基于消息源中的 `kind: 'plugin'` 与 `form: 'notice'` 渲染为：
-- **指示行**：`dsh-call-session • [Cross-Session NOTICE] from <Caller>: <Summary>`
-- **状态属性**：`data-context-source="true"`，带折叠展开标记；
-- **展开区**：展示原始 `message` 内容，字体采用等宽代码块排版，无额外定界符包装。
+### 方案二
+废除外部脚本，使用宿主原生命令注册机制挂载全局斜杠命令，打通网页输入框与进程内调度。
+- 收益：进程内单链路自包含执行，消除外部进程开销与网络依赖。
+- 弊端：外部终端无法直接通过系统环境路径调用命令，需通过宿主原生接口或工具调用。
 
 ---
 
-## 5. Consequences
+## 决策
 
-### 5.1 Positive Consequences (Benefits)
-- **Web Slash Command 提示**：用户在 Web 输入框输入 `/` 即可检索 `/dsh-call-session` 及其参数提示；
-- **插件体积缩减**：`package.json` 不再包含 `bin` 字段，精简依赖与构建产物；
-- **视觉层级分明**：调度通知呈现为插件通知行，不占用普通对话气泡。
+采纳方案二：统一采用宿主原生斜杠命令集成。
 
-### 5.2 Negative Consequences (Tradeoffs & Mitigations)
-- **外部 Shell 无法直接调用**：
-  - *Mitigation*: 外部系统可通过宿主开放接口触发，或在会话内通过工具调度。
+### 命令规约
+在插件入口通过命令服务注册斜杠命令，声明目标会话标识与消息内容输入提示。命令解析句柄提取参数并调用内部单播执行网关，向目标会话分发通知型单播，向调用方回传执行状态，避免冗余包装。
 
----
-
-## 6. Compliance, Validation & Verification
-
-### 6.1 Automated Verification Suite
-- **Package 清理检查**：测试断言 `package.json` 中 `bin` 字段为 `undefined`；
-- **命令注册与解析测试**：模拟调用 Slash Command 注册器，传入正常与缺损参数，验证参数解析与错误提示响应；
-- **端到端执行测试**：验证 `/dsh-call-session` 触发后直接调用进程内 `executeSessionCall`。
-
-### 6.2 Review Checklist
-- [ ] 清理 `package.json` 中的 `bin` 声明；
-- [ ] 移除源码树中历史残留的 `bin/` 目录；
-- [ ] `index.mjs` 中正确挂载 `/dsh-call-session` 命令；
-- [ ] 确认注入消息在 Web 端展现为标准的插件折叠行。
+### 视觉规约
+目标会话接收到跨会话消息后，前端界面基于消息源的插件通知属性完成渲染：
+- 指示行：呈现发件人标识与消息摘要；
+- 状态属性：标记上下文数据源，提供折叠展开控件；
+- 展开区：完整呈现原始消息文本，使用等宽文本排版，不引入额外定界符包装。
 
 ---
 
-## 7. Status History & Related Artifacts
+## 收益
 
-- **2026-09-04**: Proposed & Accepted by Engineering Team
-- **2026-09-10**: Superseded by native agent tools and direct Web actions; /dsh-call-session slash command and commands injection retired
-- **Related ADRs**:
-  - Complements: ADR-0006 (Native Context Injection), ADR-0008 (Global Profile Mounting)
-- **Implementation Artifacts**:
-  - `index.mjs`
-  - `package.json`
+### 收益
+- 网页交互补全：在网页输入框输入斜杠符号即可检索命令并查看参数提示；
+- 产物体积缩减：移除独立二进制声明，精简依赖与构建产物；
+- 视觉层级清晰：调度通知呈现为专用通知行，不占用主对话气泡。
+
+### 权衡
+外部终端无法直接调用命令，统合由宿主开放接口或会话内智能体工具承接。
+
+---
+
+## 验证
+
+### 测试套件
+- 配置清理检查：断言配置文件中不再包含外部二进制声明；
+- 注册与解析测试：模拟斜杠命令注册器，传入完整与缺损参数，验证参数解析与错误提示响应；
+- 执行链路验证：验证斜杠命令触发后正确调用内部单播执行逻辑。
+
+### 检查清单
+- 确认清理配置文件中的外部脚本声明；
+- 移除历史残留的脚本文件与目录；
+- 验证命令挂载与参数解析准确性；
+- 确认注入消息在网页端展现为标准折叠通知行。
+
+---
+
+## 历史
+
+- 2026-09-04：架构团队与工程团队设计并采纳；
+- 2026-09-10：由原生智能体工具与前端看板行为替代，斜杠命令正式退役，演进脉络见 ADR-0012。
+- 演化关联：
+  - 补充说明：ADR-0006、ADR-0008
+  - 历史替代：ADR-0012

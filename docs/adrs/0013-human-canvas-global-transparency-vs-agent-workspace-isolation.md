@@ -1,3 +1,10 @@
+<!--
+ADR Writing Guidelines (writing-for-agents):
+1. Focus on architectural intent, forces, decisions, and invariants.
+2. Avoid code dumps that duplicate live code.
+3. Keep prose dense, factual, and scannable without parenthetical annotations.
+4. If writing in Chinese, ensure all subheadings are <= 4 characters.
+-->
 # ADR-0013: Human Canvas Global Transparency vs Agent Workspace Isolation
 
 - **Status**: Accepted
@@ -35,18 +42,18 @@ We explicitly decouple **Agent execution boundaries** from **human observer boun
 
 Pinning the current workspace to the leftmost column (index 0) created an interaction defect: placing the located session node at the exact geometric center (`vw / 2, vh / 2`) shifted the leftmost column to the screen center, leaving more than 40% of the left screen blank while pushing peer workspace columns off the right edge. Invoking that single-node centering on mount also stripped users of the initial global topological overview.
 
-1. **Initial & Resize Global Fit (全局自适应居中)**:
+1. **Initial and Resize Global Fit**:
    - On canvas mount and upon receiving initial canvas data, the viewport unconditionally executes global fit view, framing the aggregate bounding box of the public blackboard and all workspace columns with safety padding (48px). Initial single-node centering is strictly prohibited.
    - A genuine container size change re-executes global fit view while the user has not manually taken control of the viewport; once the user has interacted, size changes never displace their view. The ResizeObserver's initial observation on `observe()` carries the current layout size, so it is not a size change; re-framing is gated on the measured size actually differing, which also lets a real resize merged into that initial observation re-frame.
    - Toolbar framing controls set the interaction flag explicitly. "Fit View" and the background double-click hand the viewport back to automatic management, so later size changes re-frame globally. "Locate Current Session" pins the viewport to the located node, so later size changes must not discard it.
-2. **Clamped Viewport Centering for Locate (视口夹紧居中)**:
+2. **Clamped Viewport Centering for Locate**:
    - When the user clicks "定位当前会话", horizontal translation (`panX`) employs boundary clamping: if the aggregate layout width exceeds the viewport, the first column's left edge is clamped to a safety margin (48px), preventing leftward voids and maximizing visible space for peer workspaces on the right. Whenever the aggregate layout width fits inside the viewport, the layout centers as a whole instead.
    - Vertical translation (`panY`) centers on the target session node (`vh / 2`) as its baseline. Whenever the aggregate content height fits inside the viewport, `panY` is clamped so the top public blackboard (`y = 24`) and the column base both stay inside the visible area. When the column is taller than the viewport, node visibility takes precedence and the translation stays purely node-centered.
    - Zoom level preserves the user's setting, clamped to a dual-bounded safe range of `[0.8, 1.2]` (elevating sub-0.8 zoom for text readability, capping excessive zoom to preserve local topological context).
    - Translation transitions smoothly over a 320ms tween.
-3. **Macro Framing Zoom Floor (宏观取景缩放下限)**:
+3. **Macro Framing Zoom Floor**:
    - Global fit view honors a readability floor of `0.30`. Topologies whose aggregate extent would require a smaller scale than the floor overflow the viewport rather than shrinking node labels below legibility. Overflow stays symmetric because the viewport remains anchored on the aggregate content centre. This is a deliberate trade-off: the canvas guarantees readable session identity over complete containment, and the user recovers the remainder by panning, zooming, or locating a session.
-4. **Landed Pulse Feedback (落点脉冲)**:
+4. **Landed Pulse Feedback**:
    - Upon arriving at the target session node, a 1.2s dual-cycle soft breathing pulse is triggered via the scoped `.dsh-canvas-node-locating` class (`@keyframes dshLocatePulse`, two 600ms cycles starting after the 320ms translation tween). Conforming to ADR-0018, the animation changes stroke opacity only; geometric scale and translation transforms are strictly forbidden, and no glow or shadow is animated.
 5. **Silent External Session Switching**:
    - When the host-injected `sessionId` changes, the canvas silently updates the node highlight border and `[Current]` badge without displacing the user's viewport. A current session that the narrowing of §2.2.6 hides gets no badge at all.

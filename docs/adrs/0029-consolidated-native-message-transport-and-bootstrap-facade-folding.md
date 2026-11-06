@@ -1,3 +1,10 @@
+<!--
+ADR Writing Guidelines (writing-for-agents):
+1. Focus on architectural intent, forces, decisions, and invariants.
+2. Avoid code dumps that duplicate live code.
+3. Keep prose dense, factual, and scannable without parenthetical annotations.
+4. If writing in Chinese, ensure all subheadings are <= 4 characters.
+-->
 # ADR-0029: Consolidated Native Message Transport and Bootstrap Facade Folding
 
 - **Status**: Accepted
@@ -10,8 +17,8 @@
 
 ## 背景
 
-随着跨会话单播调用（`session_call`）与同级会话创建（`session_create`）的演进，系统在消息组装与通道派发上存在两份平行的传输层报头构造逻辑：
-单播调用与启动协同分别实现了 `UserMessage` 结构组装、摘要截断（120 字符）与基于状态的分发通道选择。此外，`lib/peer-bootstrap.mjs` 中定义了持有 8 个纯转发方法的浅层空心包装类 `PeerBootstrapper`，产生重复代码与维护阻抗。
+随着跨会话单播调用 `session_call` 与同级会话创建 `session_create`的演进，系统在消息组装与通道派发上存在两份平行的传输层报头构造逻辑：
+单播调用与启动协同分别实现了 `UserMessage` 结构组装、120 字符摘要截断与基于状态的分发通道选择。此外，`lib/peer-bootstrap.mjs` 中定义了持有 8 个纯转发方法的浅层空心包装类 `PeerBootstrapper`，产生重复代码与维护阻抗。
 
 ## 力量
 
@@ -52,7 +59,7 @@
 
 新增 `lib/native-message-transport.mjs`，暴露统一通信原语：
 - `generateMessageId`：生成消息唯一标识；
-- `sanitizeContextPostIds`（及别名 `sanitizePostIds`）：规范化去重黑板条目编号；
+- `sanitizeContextPostIds` 与别名 `sanitizePostIds`：规范化去重黑板条目编号；
 - `buildTransportPayload`：组装客观身份报头与 `> Context Ref: ...` 引用，正文逐字保留；
 - `buildNativeUserMessage`：原子装配标准 `UserMessage`，严格执行 120 字符摘要截断；
 - `dispatchNativeMessage`：基于目标运行态自适应执行 `steer` 或 `followup` 通道分发。
@@ -86,3 +93,13 @@ npm run verify
 # 静态类型检查
 npm run typecheck
 ```
+
+---
+
+## 历史
+
+- **2026-10-14**: 提议并采纳。
+- **演化脉络**:
+  - 承接 ADR-0001、ADR-0006 原生单播通信与消息装配基础；
+  - 经由 ADR-0032 统一首行客观报头格式与发件人标识；
+  - 经由 ADR-0042 全面升级呼叫类型为四态正交规约 notice、task_soft、task_hard 与 task_report，并引入未结任务账本。

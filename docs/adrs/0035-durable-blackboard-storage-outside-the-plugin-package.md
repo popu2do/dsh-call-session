@@ -1,3 +1,10 @@
+<!--
+ADR Writing Guidelines (writing-for-agents):
+1. Focus on architectural intent, forces, decisions, and invariants.
+2. Avoid code dumps that duplicate live code.
+3. Keep prose dense, factual, and scannable without parenthetical annotations.
+4. If writing in Chinese, ensure all subheadings are <= 4 characters.
+-->
 # ADR-0035: Durable Blackboard Storage Outside the Plugin Package
 
 - **Status**: Accepted
@@ -126,3 +133,15 @@ Migration runs only when the store uses the default location. A caller that conf
 
 - Release notes must call out the move and the one-off manual step, since the file path is user-visible and the loss window closes at this version.
 - The legacy path remains a named constant rather than a magic string, so a future removal is a single deletion.
+---
+
+## 6. Status History & Related Artifacts
+
+- **2026-10-19**: Proposed and accepted to eliminate package reinstallation data loss.
+- **Related ADRs**:
+  - Extends: [ADR-0004](./0004-atomic-debounced-persistence-and-healing.md) (Atomic debounced persistence engine)
+  - Aligns with: [ADR-0003](./0003-workspace-scoped-isolation-by-default.md) (Workspace isolation), [ADR-0008](./0008-zero-pollution-global-profile-mounting.md) (Zero-pollution global profile mounting), [ADR-0013](./0013-human-canvas-global-transparency-vs-agent-workspace-isolation.md) (Single shared board for human canvas global transparency)
+- **Primary Implementation Anchors**:
+  - `lib/board-store.mjs` (DEFAULT_STORAGE_PATH resolution, legacy migration logic)
+  - `tests/board-store-storage-path.test.mjs`
+  - `tests/board-adversarial-hygiene.test.mjs`
