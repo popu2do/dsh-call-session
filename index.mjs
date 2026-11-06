@@ -89,6 +89,8 @@ export const Config = zInstance ? zInstance.object({
   telemetryCapacity: zInstance.natural().min(10).max(2000).default(200).description('跨会话调用看板数据环形缓冲区保留上限，按 FIFO 淘汰'),
   promptSectionOrder: zInstance.natural().default(118).description('注入全局 System Prompt 的排序权重'),
   remindContextOrder: zInstance.natural().default(130).description('记名提醒注入 System Prompt Context 的排序权重'),
+  taskRemindContextOrder: zInstance.natural().default(131).description('待办任务提醒注入 System Prompt Context 的排序权重'),
+  maxReportReminders: zInstance.natural().default(3).description('硬任务阻断未回执时的最大提醒次数'),
   locale: zInstance.union(['auto', 'zh', 'en']).default('auto').description('插件交互语言偏好')
 }) : Object.freeze({
   enabled: true,
@@ -97,6 +99,8 @@ export const Config = zInstance ? zInstance.object({
   telemetryCapacity: 200,
   promptSectionOrder: 118,
   remindContextOrder: 130,
+  taskRemindContextOrder: 131,
+  maxReportReminders: 3,
   locale: 'auto'
 });
 
@@ -120,7 +124,7 @@ export const DISPATCHER_CONSTANTS = Object.freeze({
     SUMMARY_MAX_LENGTH: 120,
     MESSAGE_MAX_LENGTH: 4000
   }),
-  CALL_TYPES: Object.freeze(['task_dispatch', 'task_report', 'notice'])
+  CALL_TYPES: Object.freeze(['notice', 'task_soft', 'task_hard', 'task_report'])
 });
 
 export {
@@ -244,6 +248,45 @@ export function apply(ctx, config = {}) {
       name: 'board:remind',
       order: config.remindContextOrder ?? 130,
       text: (context) => boardToolsAdapter.getAuthorReminder(context?.agent, ctx, config)
+    });
+    ctx.systemPrompt.context({
+      name: 'task:remind',
+      order: config.taskRemindContextOrder ?? 131,
+      text: (context) => {
+        const sessionId = context?.agent?.session?.id ?? context?.agent?.sessionId ?? context?.agent?.id;
+        return callTelemetry.getPendingTaskReminder(sessionId, ctx, config);
+      }
+    });
+  }
+
+  if (typeof ctx.on === 'function') {
+    const turnReminderCounts = new Map();
+    ctx.on('agent/turn-stopping', async ({ agent }) => {
+      const sessionId = agent?.session?.id ?? agent?.sessionId ?? agent?.id;
+      if (!sessionId) return;
+      const pendingHardTasks = callTelemetry.getPendingTasksForSession(sessionId).filter(t => t.callType === 'task_hard');
+      if (pendingHardTasks.length === 0) return;
+
+      const currentCount = turnReminderCounts.get(sessionId) || 0;
+      const maxReminders = config.maxReportReminders ?? 3;
+      if (currentCount >= maxReminders) {
+        logger.warn?.(`[dsh-call-session] Session ${sessionId} exceeded maxReportReminders (${maxReminders}), allowing turn to close.`);
+        return;
+      }
+      turnReminderCounts.set(sessionId, currentCount + 1);
+
+      const callers = Array.from(new Set(pendingHardTasks.map(t => t.callerTitle || t.callerSessionId))).slice(0, 3).join('、');
+      if (typeof agent.steer === 'function') {
+        const count = pendingHardTasks.length;
+        const countStr = count > 1 ? `（共 ${count} 项）` : '';
+        const reminder = `[Task Hard Obligation] 你尚有来自 ${callers} 的强制待办任务未回执${countStr}。请调用 session_call(call_type='task_report') 汇报结果后方可结项。`;
+        await agent.steer(reminder);
+      }
+    });
+
+    ctx.on('session/dispose', ({ session }) => {
+      const sid = session?.id;
+      if (sid) turnReminderCounts.delete(sid);
     });
   }
 

@@ -803,7 +803,7 @@ test('executeSessionCreate 端到端: 新建会话初始消息严格注入传输
   assert.equal(dispatchedPayload.source.form, 'session_create');
   assert.ok(
     dispatchedPayload.content[0].text.startsWith(
-      `[From: ${caller.id} (${caller.title}) | CallType: task_dispatch]\n> Context Ref: #task-100, #spec-200\n\nPlease complete module refactoring`
+      `[From: ${caller.id} (${caller.title}) | CallType: task_soft]\n> Context Ref: #task-100, #spec-200\n\nPlease complete module refactoring`
     ),
     '正文首部必须包含规范传输层报头与 Context Ref 引用行'
   );

@@ -38,7 +38,7 @@ test('因果确权: 40毫秒内处于 running 但无步数推进时决不提前�
     args: {
       target_session_id: 'target-zero-step',
       message: 'Task step zero test',
-      call_type: 'task_dispatch',
+      call_type: 'task_soft',
       wait_ms: 120
     },
     exec: { agent: caller }
@@ -89,7 +89,7 @@ test('因果确权: 步进为零且在第85毫秒发生延迟崩溃时能够被�
     args: {
       target_session_id: 'target-delayed-crash',
       message: 'Run delayed crash',
-      call_type: 'task_dispatch',
+      call_type: 'task_soft',
       wait_ms: 300
     },
     exec: { agent: caller }
@@ -136,7 +136,7 @@ test('因果确权: 目标处于并发运行态时，未产生当前调用因果
     args: {
       target_session_id: 'target-busy-running',
       message: 'Enqueue secondary task',
-      call_type: 'task_dispatch',
+      call_type: 'task_soft',
       wait_ms: 100
     },
     exec: { agent: caller }
@@ -173,7 +173,7 @@ test('因果确权: 目标新产生步骤事件时即刻完成真确权并放行
     args: {
       target_session_id: 'target-healthy-step',
       message: 'Run normal task',
-      call_type: 'task_dispatch',
+      call_type: 'task_soft',
       wait_ms: 300
     },
     exec: { agent: caller }

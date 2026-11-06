@@ -295,7 +295,7 @@ test('ADR-0020 Invariant 3: Web Canvas Route Snapshot Aggregation (P99 <= 20ms, 
         id: `call-${i}`,
         callerSessionId: `sess-${i % 5}`,
         targetSessionId: `sess-${(i + 1) % 5}`,
-        callType: 'task_dispatch',
+        callType: 'task_soft',
         deliveryMode: 'steer',
         messageSnippet: 'Telemetry call snippet benchmark',
         messagePayload: 'Telemetry payload chunk for benchmarking'
