@@ -1,84 +1,152 @@
 # Specification: Peer Session Mention Picker
 
 ## Problem
-The host default session query issues a two-second asynchronous query when listing sessions. If the user invokes the mention picker and selects a workspace before that query finishes, the results arrive late, wipe out the current candidate list, reset the menu state, and steal cursor focus. Furthermore, native mention candidate listings include internal subagents and archived sessions, diverging from the left workspace sidebar view.
+
+The `@` composer trigger exposes a two-level drill-down: Level 1 lists workspaces, Level 2 lists the sessions inside one workspace. Both levels currently disagree with the surfaces the user compares them against.
+
+**Level 1 disagrees with the left sidebar.** The plugin derives workspaces by aggregating `cwd` across `sessions.list.getSnapshot().byId`. The host sidebar instead reads the workspace roster at `workspaces.list.getSnapshot().items` and decides membership purely by `workspace.sessionIds.includes(sessionId)`, never by `cwd`. The client session snapshot only holds sessions from the storage unit of the active window, so `cwd` aggregation can only reconstruct the workspaces whose session stores are reachable from that window. Measured on a live store, five workspaces exist with 180, 52, 14, 16 and 10 sessions respectively, but `cwd` aggregation can only reconstruct the single workspace whose session store the active window already holds.
+
+**Level 2 disagrees with the left sidebar.** The plugin's own secondary candidates are correct: measured against the live store they return exactly the `sessionIds` members that are visible, with `section` and `drill` both `undefined`. But the host reference source contributes its own session candidates to the same drill-down menu, each carrying `section: "对话"`. Those rows are not filtered by `sessionIds`, so sessions that never appear in the left sidebar appear under `对话`. The host reference source also renders a drill header whose root is `工作区` and whose tail is the drilled directory, plus directory rows carrying the `进入目录` affordance — both are file-browsing semantics leaking into a session drill-down.
+
+**The level boundary depends on an external flag.** The two-level decision trusts the host's `drilled` flag alone. Editing the path text by hand keeps that flag false, so the menu falls back to Level 1 and shows workspace rows with the `当前` badge and `进入目录` affordance under a `工作区` heading.
+
+**The README asset misrepresents the picker.** `assets/mention-demo.png` and `assets/mention-demo-zh.png` are rendered by `tests/helpers/render-mention-demo.mjs` from synthetic HTML, showing a `Workspace Root / dsh-call-session` drill header, five invented agent names, and a left column that matches neither the real Level 1 nor the real Level 2. The README prose additionally claims sessions the current conversation has called or exchanged messages with sort first, which contradicts ADR-0034's zero-collaborator-pinning decision.
 
 ## Solution
 
-Without modifying native file search, the plugin controls session candidate ranking and presentation:
-1. Native file and folder search remain functional and intact.
-2. The plugin candidate source sets its priority order to `-10`, ensuring workspace entry points and peer sessions lead the candidate list so focus is never stolen.
-3. Once a workspace is selected, the secondary session list resolves synchronously from local memory in under 5ms, avoiding slow remote queries and subsequent redraws.
-4. Internal subagents are strictly excluded by origin flag parity with the sidebar, and archived sessions are filtered out via both snapshot fields and the host workspace roster.
-5. Secondary sessions follow native update recency descending with zero collaborator pinning, bound with an 8-character canonical short ID badge for disambiguation, capped at 50 entries.
+Bring every surface onto one membership rule and stop rendering file-browsing chrome inside the session drill-down.
+
+1. **Level 1 reads the workspace roster.** Workspace entries come from `workspaces.list.getSnapshot().items`, the same source the sidebar reads. Ordering keeps the current workspace pinned first and the rest in roster order. Every roster entry is listed, including workspaces whose session stores are not reachable from the active window; drilling into one of those yields an empty Level 2, which is the accepted behaviour rather than a case to special-case.
+2. **Membership is `sessionIds` only.** A session belongs to a workspace when `workspace.sessionIds` contains it. `cwd` never decides membership at either level.
+3. **Level 2 visibility mirrors the sidebar.** A member is listed when it resolves in `sessions.byId` and passes the sidebar's own three exclusions: `origin === "subagent"` is dropped, `blank` is dropped unless it is the current session, and `archivedSessionIds` membership is dropped under the default archive filter.
+4. **The session drill-down carries no file semantics and no level heading.** While drilled, the plugin's native reference wrapper returns an empty array, so the host contributes neither `对话` session rows, nor its `工作区` drill header, nor `进入目录` directory rows. The plugin's own `header` hook returns `undefined` at both levels, so Level 2 shows the session rows and nothing above them. The workspace tier is expressed by the workspace rows in Level 1 alone; restating it as a heading over the session rows makes the menu read as if a workspace were still a category inside the drill-down, and reachable `进入目录`-shaped rows are the misleading affordance that omission avoids. There is no "back to the workspaces" entry either: returning to Level 1 is deleting text from the composer, which is the interaction the composer already has.
+5. **Drill state follows the query, not only the host flag.** A query that resolves to a known workspace is treated as Level 2 whether it arrived from a drill action or from typing, so the level boundary never collapses.
+6. **The README asset is regenerated from the real structure.** The demo renders the real Level 1 (`工作区` section, workspace rows only) and the real Level 2 (`对话` section, session rows with status and short ID, no drill header, no directory rows), and the false recency claim is removed from both READMEs.
 
 ## User Stories
 
-1. As a collaborative developer, I want typing `@` in the composer to show accessible project workspaces right at the top, so that I can pick my target workspace immediately without hunting.
-2. As a project owner, I want the current project workspace automatically pinned to the very top, so that I can enter my active working directory with a single click.
-3. As a developer searching files, I want native file and folder search to remain completely functional, so that my existing file reference habits are never broken.
-4. As an engineer entering a workspace, I want the secondary session list to strictly exclude all internal subagents by origin, so that only genuine independent root sessions appear.
-5. As an engineer inspecting a project, I want the secondary session list to completely filter out archived or finished sessions, so that dead tasks never clutter my active view.
-6. As a multi-agent collaborator, I want every peer session to appear in the same update-time order as the left sidebar with no session promoted above its recency, so that what I see in @ matches what I see on the left.
-7. As a multi-session user, I want secondary sessions with the same priority sorted strictly by latest update recency, so that sessions with newer updates appear ahead of older ones.
-8. As a developer managing parallel tasks with identical titles, I want candidate rows to display an 8-character short ID badge, so that I can tell duplicate names apart instantly.
-9. As a system observer, I want candidate rows to display real-time three-state status indicators, so that I know whether each peer session is running, idle, or in an error state.
-10. As a keyboard-first user, I want Tab or Enter on a workspace row to enter it smoothly and Escape to cancel without altering my text, so that I never have to touch the mouse.
-11. As a developer mentioning an agent, I want selecting a session to insert a pure slice reference markdown link, so that no heavy context or orchestration side effects are triggered.
-12. As an English locale user, I want all drill headers, badges, and empty states rendered in natural English, so that my internationalization experience remains seamless.
-13. As a developer working in a single-session workspace, I want secondary drill-down to show a clean empty state rather than breaking, so that the interaction is always predictable.
-14. As an infrastructure engineer, I want all candidate parsing and filtering bounded under 5ms, so that composer typing never stutters or drops frames.
+1. As a collaborative developer, I want the `@` workspace list to contain exactly the workspaces the left sidebar shows, so that the two surfaces never disagree about which projects exist.
+2. As a developer with several registered workspaces, I want every workspace to be listed even when its sessions live in a storage unit this window cannot read, so that the picker does not silently hide projects.
+3. As a developer entering an unreachable workspace, I want an empty Level 2 rather than an error or a hidden entry, so that the interaction stays predictable.
+4. As an engineer entering a workspace, I want the session list to contain exactly the members of that workspace, so that sessions belonging to another workspace never appear.
+5. As a multi-session user, I want Level 2 to match the left sidebar row for row, so that what I see in `@` is what I see on the left.
+6. As an engineer in the session drill-down, I want no drill header at all, no `进入目录` affordance, and no directory rows, so that the two-level structure reads as workspace then session and nothing else.
+7. As a developer typing a workspace path by hand, I want the menu to stay in Level 2, so that my path edit never throws me back to the workspace list.
+8. As an engineer inspecting a project, I want archived and subagent sessions excluded exactly as the sidebar excludes them, so that dead tasks and internal children never clutter the list.
+9. As a developer managing parallel tasks with identical titles, I want an 8-character short ID badge, so that duplicate names are distinguishable.
+10. As a system observer, I want a three-state running indicator on each session row, so that I know whether a peer session is running, idle, or failed.
+11. As a keyboard-first user, I want Tab or Enter to enter a workspace and Escape to cancel without altering my text, so that I never have to touch the mouse.
+12. As an English locale user, I want every heading, badge, and empty state localized, so that the picker reads naturally in both locales.
+13. As a documentation reader, I want the README screenshot to show what the picker actually renders, so that I can recognize the real UI when I open it.
+14. As a documentation reader, I want the README prose to describe the real ordering rule, so that I am not told to expect collaborator pinning that does not exist.
+15. As an infrastructure engineer, I want Level 1 and Level 2 resolution to stay inside the existing latency budget, so that composer typing never stutters.
 
 ## Implementation Decisions
 
-### Priority Override
+### Source Contract
 
-The capability integrates via the client input trigger contract under source name `peer-session` with trigger character `@`.
-The plugin sets source `order: -10` so workspace entry points and peer sessions consistently lead merged candidate lists, maintaining stable keyboard focus against asynchronous remote insertions.
+The capability registers a client input trigger source named `peer-session` on the `@` character with `order: -10` and `showGroupTitle: false`. Level 1 supplies `section: t('section.workspaces')` on every workspace row, so `工作区` renders as a section title above the roster.
 
-### Native Coexistence
+Level 2 supplies `section: t('section.sessions')` on every session row, so `对话` renders as a section title over the members of the drilled workspace. Each level names its own tier once, and the section titles are what carry that naming; the host's own `对话` row set is suppressed and contributes no title of its own.
 
-Strictly adhere to non-destructive coexistence with host primitives:
-Native file and folder search remain functional and intact without host file modifications.
-The host reference candidate source is locally filtered in-scope per ADR-0041: only the source's candidate generator is intercepted to drop subagents and align recency ordering. Trigger character, name, section title, and slot registrations remain unchanged, and the wrapper detaches cleanly upon disposal.
+### Level 1: Roster As Truth
 
-### In-Memory Resolution
+`candidates` reads the workspace roster once per invocation from `ctx.get('workspaces').list.getSnapshot().items`. This is the same service the plugin already consults for `archivedSessionIds`, so no new service dependency is introduced.
 
-Upon workspace drill-down, the secondary session list is extracted synchronously from the local memory snapshot:
-Zero remote session queries are dispatched over the network. Synchronous iteration and ranking complete in under 1ms, preventing deferred UI repaints.
+Each roster entry becomes one candidate carrying `section: t('section.workspaces')`, `icon: 'folder'`, and `drill: true`. The current workspace, identified by comparing the entry's `path` against the current session's `cwd`, receives the `当前` description; every other entry leaves `description` undefined.
 
-### Session Sanitization
+Ordering is the current workspace pinned first followed by roster order. The previous alphabetical sort over aggregated `cwd` values is dropped, because roster order is what the sidebar renders and matching it is the point of the change.
 
-Candidate sessions undergo multi-dimensional filtering:
-- Exclude subagents: Parity with sidebar logic reading `origin === 'subagent'` exclusively, regardless of parentage metadata. Current session own children are excluded alike, removing artificial subagent section pollution.
-- Exclude archived sessions: Any session marked `archived` or in status `archived`, `dismissed`, or `deleted` is excluded.
-- Exclude rostered archived sessions: When the host `workspaces` service provides an `archivedSessionIds` roster in its snapshot, matching sessions are excluded from Level 2 expansion and Level 1 workspace convergence.
-- Degradation contract: When the `workspaces` service is absent, lacks the roster field, or throws on read, the roster is treated as empty, degrading gracefully to snapshot-field filtering.
-- Workspace convergence: Workspaces left with only rostered archived sessions do not appear at Level 1. Workspaces with live sessions remain visible, and the current workspace remains pinned.
+Query filtering at Level 1 matches an entry when the lowercased query is contained in either the entry's `title` or its `path`. This preserves the ability to type a path fragment and narrow the workspace list.
 
-### Deterministic Ranking
+### Level 2: Membership And Visibility
 
-Level 2 candidates follow single-tier ordering:
-- Ordering: Sorted strictly by native update timestamp descending, matching the workspace sidebar. Entries with matching timestamps maintain arrival sequence.
-- Window cap: Clamped to 50 items to sustain 60fps rendering performance.
+Drill state is resolved by `parseWorkspacePathQuery` against the current query. The parser returns a `targetWs` when the query matches a known workspace path exactly, or when the normalized query begins with a known workspace path followed by `/` or a space. Level 2 is entered when either the host reports `req.drilled === true` or the parser yields a non-empty `targetWs`. Binding the level to the parsed query rather than to the host flag alone is what keeps a hand-typed path inside Level 2.
+
+Known workspaces for parsing are the roster paths, not aggregated `cwd` values. The current session's `cwd` remains available as a fallback target when the query names no workspace.
+
+Member selection iterates `workspace.sessionIds` for the target workspace. A member is skipped when it does not resolve in `sessions.byId`, which is the ordinary case for workspaces whose session stores are unreachable from this window and requires no separate branch.
+
+Visibility among resolved members applies the sidebar's three exclusions in the sidebar's order:
+- `origin === 'subagent'` is dropped, matched on the session summary's `origin` field with a header-level fallback.
+- `blank === true` is dropped unless the session is the current one.
+- Membership in the `archivedSessionIds` roster is dropped.
+
+The roster read degrades to an empty list when the service is missing, the field is absent, or the read throws, which keeps snapshot-field filtering as the fallback.
+
+The current session is excluded from its own Level 2 list.
+
+Ordering is a single tier by `updatedAt` descending with zero collaborator pinning and no cross-tier promotion. Arrival order breaks ties. The list clamps at 50 entries.
+
+Level 1 does not clamp. ADR-0034 Invariant 8 sizes the cap to keep the secondary list bounded on a keystroke path; the roster is small and fixed by what the user registered, and hiding workspace number 51 is not a latency problem but a missing workspace. The two levels are therefore deliberately asymmetric, and this asymmetry is the resolution of the conflict between Invariant 8 and "Level 1 candidate count equals `workspaces.items.length`": the count rule wins on Level 1, the clamp wins on Level 2.
+
+Every Level 2 candidate carries `section: t('section.sessions')` and no `drill` field.
+
+### Drill-Down Suppresses Native Reference Candidates
+
+`wrapNativeCandidateSource` currently forwards every request to the host implementation and post-processes the result for sidebar parity. It gains an early return: when the request is drilled, it resolves to an empty array without calling the host implementation.
+
+Drilled means `request.drilled === true` **or** the query names a roster workspace path — the same predicate the plugin's own candidates use. Typing a path by hand puts the menu in Level 2 just as pressing a workspace row does, so the two entry points must produce the same menu; if only the flag counted, a hand-typed path would show the host's `对话`, `工作区` and `进入目录` rows above the plugin's session rows, which is the reported defect restored through the other entrance. The consequence is deliberate: while a typed path is in the query, the host's file and folder candidates are suppressed along with its session rows. That is the cost of one predicate instead of two, and it is the state in which the user has already committed to a workspace rather than to a file.
+
+This removes the host's `对话` session rows, the host's `工作区` drill header, and the `进入目录` directory rows from the drilled menu in one place. The plugin meanwhile contributes no header of its own: its `header` hook returns `undefined` unconditionally, so the drilled menu opens directly on session rows. An earlier revision of this spec had the hook render a two-row heading (`header.root` over the drilled workspace name) to replace the host's; that was withdrawn because it restored, under a different author, exactly the chrome the wrapper suppresses, and because it costs a workspace-roster snapshot read on every keystroke for a heading that duplicates what the workspace row already said. It stays within ADR-0041 Invariant 1, which permits replacing the reference source's candidate generator and nothing else: the trigger character, source name, slot registrations, and the restore path are untouched, and the wrapper still restores the original `candidates` on disposal.
+
+ADR-0041 Invariant 4 requires a visible degradation when the wrapper cannot do its job. An empty array under `drilled` is a deliberate narrowing rather than a degradation, and is recorded as such so it is not mistaken for the fallback path.
+
+### Session Row Presentation
+
+Each row shows the session title, falling back to `Agent <shortId>` when untitled, the 8-character short ID badge, and a status dot reflecting `running`, `idle`, or the error state. Selecting a row inserts a pure slice reference `dsh-session:<id>` with `appearance: 'session'`, carrying no context and triggering no orchestration.
+
+### Placement And Latency
+
+Level 1 and Level 2 both resolve from in-memory snapshots with no remote query. Level 2 remains inside the 5ms budget; Level 1 remains inside 2ms.
 
 ## Testing Decisions
 
-### Verification Invariants
+### Failure-First Requirement
 
-Tests execute in an isolated Node VM sandbox verifying real user-facing behavior:
-- Level 1 displays only workspace entries with plain text section `Workspaces` (`工作区`), current workspace pinned at top.
-- Level 2 excludes subagents and archived sessions, exposing only active peer root sessions.
-- Level 2 orders sessions by update recency descending with zero collaborator pinning.
-- Canonical 8-character short ID badges are aligned.
-- Collaboration canvas edge count remains strictly 0.
+Every new test must fail against the current implementation. The existing assertion `assert.equal(level1.length, 3, 'Level 1 must deduplicate workspaces and contain exactly 3 workspaces')` at `tests/peer-session-reference.test.mjs:177` encodes the `cwd`-aggregation defect as expected behaviour and is replaced.
+
+### Fixtures
+
+Fixtures must model the real data shape rather than a convenient one: `workspaces.list.getSnapshot()` returns `items` with `sessionIds`, and `sessions.list.getSnapshot()` returns `byId` together with `ids`. The previous mock returned only `byId` and defaulted the workspaces service to `{}`, which is why the defect went unnoticed.
+
+Required fixture cases:
+- Five roster items while `byId` resolves sessions for only one of them.
+- A session listed in `sessionIds` whose `cwd` is absent.
+- A session whose `cwd` points at workspace A while `sessionIds` places it in workspace B.
+- A session in no roster, which must not appear at either level.
+- A blank session that is not the current session.
+- Archived sessions declared both by snapshot field and by roster id.
+- A drilled workspace whose `sessionIds` are entirely unreachable, producing an empty Level 2.
+
+### Invariants
+
+- Level 1 candidate count equals `workspaces.items.length`.
+- Level 1 contains every roster path exactly once.
+- Level 1 section is `工作区` and every entry carries `drill: true`.
+- The current workspace sorts first.
+- Level 2 membership equals `sessionIds` intersect `byId` intersect sidebar visibility.
+- Every Level 2 candidate carries `section: t('section.sessions')` and no `drill` field.
+- Level 2 never contains a subagent, an archived session, a non-current blank session, the current session itself, or a non-member.
+- A hand-typed workspace path enters Level 2, producing no `工作区` heading and no `进入目录` affordance.
+- `header` returns `undefined` at Level 1, at Level 2, and for a hand-typed path, and the headerless hook reads no workspace snapshot.
+- With `drilled === true`, the wrapped native reference source resolves to an empty array without invoking the host generator.
+- A hand-typed roster path with `drilled` absent takes the same branch, so both entrances produce one menu.
+- The canvas edge count stays strictly zero.
+
+### Asset Assertions
+
+`tests/mention-demo-asset.test.mjs` keeps pinning the demo geometry, the manifest pairing, the README bindings, and the short-ID shape. It gains assertions that the rendered demo contains the Level 1 `工作区` heading with workspace rows only, the Level 2 `对话` heading with session rows only, and no drill header, `进入目录` label, or directory row anywhere.
 
 ### Test Location
 
-Automated tests are maintained in `tests/peer-session-reference.test.mjs` (user interaction sandbox test) and `tests/host-candidate-contract.test.mjs` (host contract drift verification).
+Interactive behaviour lives in `tests/peer-session-reference.test.mjs`. Host contract drift lives in `tests/host-candidate-contract.test.mjs`. The demo asset contract stays in `tests/mention-demo-asset.test.mjs`.
 
 ## Out of Scope
 
-- Remote session query replacement across the entire DSH system.
-- File system indexing or file reference modifications.
-- Modifications to the host shell or native reference picker code outside plugin boundaries.
+- Replacing remote session queries anywhere in DSH.
+- File system indexing or changes to file reference behaviour outside the drilled state.
+- Modifying host shell or native reference picker source outside plugin boundaries.
+- Introducing collaborator pinning or any ordering rule beyond single-tier recency.
+- Changing the two-level structure itself: Level 1 lists workspaces, Level 2 lists the sessions inside one workspace.
+- Cross-store writes or reads performed specifically to populate an unreachable workspace's Level 2.
