@@ -7,7 +7,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, '..');
 
 import { loadClientBundle, loadClientInSandbox, readClientSource } from './helpers/canvas-harness.mjs';
-import { rosterScenarios, sessionsSnapshot, workspacesSnapshot } from './helpers/mock-host.mjs';
+import { rosterScenarios, sessionsSnapshot, workspaceItem, workspacesSnapshot } from './helpers/mock-host.mjs';
 
 const CURRENT_WS = '/repos/TSPR/dsh-call-session';
 const CLUSTER_WS = '/repos/infra/dsh-agent-cluster';
@@ -276,12 +276,26 @@ test('Peer Session Reference: Harness declares roster items, archived roster ids
   });
   const src = getRegisteredSource();
 
-  // 名册可声明但本窗口解不出会话：下钻直接空列表，不依赖 byId 里的 cwd 聚合
+  // 名册可声明但本窗口解不出会话：一级照常列出，下钻直接空列表，不依赖 byId 里的 cwd 聚合
+  const rosterLevel1 = await src.candidates(
+    { sessionId: 'session-curr' },
+    { query: '', drilled: false }
+  );
+  assert.deepEqual(
+    Array.from(rosterLevel1, (item) => JSON.parse(item.value).path),
+    [scenarios.currentWs, scenarios.unreachableWs, scenarios.crossCwdWs, scenarios.spacedWs, scenarios.retiredWs],
+    'Level 1 must list every roster entry, current workspace first and the rest in roster order'
+  );
+
   const unreachable = await src.candidates(
     { sessionId: 'session-curr' },
     { query: scenarios.unreachableWs, drilled: true }
   );
-  assert.ok(Array.isArray(unreachable), 'Roster items must be reachable without a matching byId entry');
+  // 二级成员归属（sessionIds 还是 cwd）属 #37；这里只钉住本窗口解不出的名册 id 不会凭空造行
+  assert.ok(
+    Array.from(unreachable, (item) => JSON.parse(item.value).sessionId).every((id) => id !== 'session-unrostered'),
+    'A session outside every roster must not appear when drilling an unreachable workspace'
+  );
 
   // 名册 id 声明归档的会话不进二级列表（快照字段本可放过它），其余成员照常展开
   const current = await src.candidates(
@@ -403,6 +417,15 @@ test('Peer Session Reference: Input trigger source registration and codec contra
 test('Peer Session Reference: Level 1 workspace discovery, drill contract, and current workspace pinning', async () => {
   const { plugin } = loadClientInSandbox();
 
+  const scenarios = rosterScenarios();
+
+  // 名册把当前工作区刻意排在第二位，置顶行为无法靠名册顺序巧合通过
+  const rosterItems = [
+    workspaceItem({ workspaceId: 'ws-cluster', path: CLUSTER_WS, sessionIds: ['session-cl-1', 'session-cl-2'] }),
+    workspaceItem({ workspaceId: 'ws-current', path: CURRENT_WS, sessionIds: ['session-curr', 'session-local-1', 'session-local-2'] }),
+    workspaceItem({ workspaceId: 'ws-gateway', path: GATEWAY_WS, sessionIds: ['session-gw-1'] })
+  ];
+
   const sessionsById = {
     'session-curr': { id: 'session-curr', title: '主控协调任务', cwd: CURRENT_WS, status: 'running', updatedAt: 1000 },
     'session-local-1': { id: 'session-local-1', title: '架构重构', cwd: CURRENT_WS, status: 'idle', updatedAt: 2000 },
@@ -412,7 +435,10 @@ test('Peer Session Reference: Level 1 workspace discovery, drill contract, and c
     'session-gw-1': { id: 'session-gw-1', title: '网关路由', cwd: GATEWAY_WS, status: 'idle', updatedAt: 2500 }
   };
 
-  const { getRegisteredSource } = setupMockContext(plugin, { sessionsById });
+  // 名册之外的会话：旧的 cwd 汇聚会把它的工作区带进一级，名册读取必须无视它
+  sessionsById['session-unrostered'] = { id: 'session-unrostered', title: '名册外会话', cwd: scenarios.retiredWs, status: 'idle', updatedAt: 2600 };
+
+  const { getRegisteredSource } = setupMockContext(plugin, { sessionsById, workspacesItems: rosterItems });
   const src = getRegisteredSource();
 
   const level1 = await src.candidates(
@@ -420,25 +446,32 @@ test('Peer Session Reference: Level 1 workspace discovery, drill contract, and c
     { query: '', quoted: false, drilled: false, signal: new AbortController().signal }
   );
 
-  // 验证一级菜单仅包含工作区，会话全部被折叠，且多会话同一工作区去重
-  assert.equal(level1.length, 3, 'Level 1 must deduplicate workspaces and contain exactly 3 workspaces');
+  // 一级候选逐条对应名册项：长度等于名册长度，路径逐个出现且只出现一次
+  assert.equal(level1.length, rosterItems.length, 'Level 1 must list one candidate per roster item');
+  assert.deepEqual(
+    Array.from(level1, (item) => JSON.parse(item.value).path).sort(),
+    rosterItems.map((item) => item.path).sort(),
+    'Level 1 must contain every roster path exactly once and no path outside the roster'
+  );
   assert.ok(level1.every(item => item.drill === true), 'All Level 1 items must declare drill: true');
   assert.ok(level1.every(item => item.icon === 'folder'), 'All Level 1 items must use folder icon');
   assert.ok(level1.every(item => item.section === '工作区'), 'All Level 1 items must carry the plugin-owned 工作区 section');
   assert.ok(level1.every(item => item.icon !== 'session'), 'Zero session entities may be exposed at Level 1');
 
-  // 当前工作区置顶
-  assert.equal(level1[0].name, 'dsh-call-session', 'First workspace must be current workspace');
+  // 当前工作区置顶，其余保持名册顺序
+  assert.equal(level1[0].name, 'dsh-call-session', 'Current workspace must be pinned first');
   assert.equal(level1[0].description, '当前', 'Current workspace must be marked with 当前 description');
   const val0 = JSON.parse(level1[0].value);
   assert.equal(val0.isCurrent, true, 'First workspace value must have isCurrent: true');
-  assert.equal(val0.path, CURRENT_WS);
+  assert.equal(val0.path, CURRENT_WS, 'The pinned candidate must be the current workspace');
 
-  // 非当前工作区按路径字母序排序
-  assert.equal(level1[1].name, 'dsh-agent-cluster');
-  assert.equal(level1[1].description, undefined);
-  assert.equal(level1[2].name, 'dsh-gateway');
-  assert.equal(level1[2].description, undefined);
+  assert.deepEqual(
+    Array.from(level1.slice(1), (item) => item.name),
+    ['dsh-agent-cluster', 'dsh-gateway'],
+    'Remaining workspaces must keep roster order'
+  );
+  assert.ok(level1.slice(1).every(item => item.description === undefined), 'Only the current workspace may carry a description');
+  assert.ok(level1.slice(1).every(item => JSON.parse(item.value).isCurrent === false), 'Non-current roster entries must stay unflagged');
 
   // 一级状态下顶栏下钻标题恒为 undefined
   const header = src.header({ sessionId: 'session-curr' }, { query: '', drilled: false });
@@ -448,6 +481,13 @@ test('Peer Session Reference: Level 1 workspace discovery, drill contract, and c
 test('Peer Session Reference: Level 1 query filtering and workspace selection formatting', async () => {
   const { plugin } = loadClientInSandbox();
 
+  const rosterItems = [
+    workspaceItem({ workspaceId: 'ws-current', path: CURRENT_WS, sessionIds: ['session-curr'] }),
+    workspaceItem({ workspaceId: 'ws-cluster', path: CLUSTER_WS, title: 'Cluster Hub', sessionIds: ['session-cl'] }),
+    workspaceItem({ workspaceId: 'ws-gateway', path: GATEWAY_WS, sessionIds: ['session-gw'] }),
+    workspaceItem({ workspaceId: 'ws-spaced', path: SPACE_WS, sessionIds: ['session-sp'] })
+  ];
+
   const sessionsById = {
     'session-curr': { id: 'session-curr', cwd: CURRENT_WS, status: 'running', updatedAt: 1000 },
     'session-cl': { id: 'session-cl', cwd: CLUSTER_WS, status: 'idle', updatedAt: 2000 },
@@ -455,7 +495,7 @@ test('Peer Session Reference: Level 1 query filtering and workspace selection fo
     'session-sp': { id: 'session-sp', cwd: SPACE_WS, status: 'idle', updatedAt: 4000 }
   };
 
-  const { getRegisteredSource } = setupMockContext(plugin, { sessionsById });
+  const { getRegisteredSource } = setupMockContext(plugin, { sessionsById, workspacesItems: rosterItems });
   const src = getRegisteredSource();
 
   // 关键词过滤
@@ -466,13 +506,32 @@ test('Peer Session Reference: Level 1 query filtering and workspace selection fo
   assert.equal(matchGateway.length, 1);
   assert.equal(matchGateway[0].name, 'dsh-gateway');
 
-  // 大小写不敏感过滤
+  // 大小写不敏感过滤，命中名册项 title
   const matchCluster = await src.candidates(
     { sessionId: 'session-curr' },
-    { query: 'CLUSTER', drilled: false }
+    { query: 'cluster', drilled: false }
   );
   assert.equal(matchCluster.length, 1);
-  assert.equal(matchCluster[0].name, 'dsh-agent-cluster');
+  assert.equal(matchCluster[0].name, 'Cluster Hub');
+
+  // 路径片段过滤，命中名册项 path
+  const matchClusterPath = await src.candidates(
+    { sessionId: 'session-curr' },
+    { query: 'dsh-agent', drilled: false }
+  );
+  assert.equal(matchClusterPath.length, 1, 'A path fragment must narrow Level 1 to the roster entry it names');
+  assert.equal(matchClusterPath[0].name, 'Cluster Hub');
+
+  // 过滤不改变置顶与名册顺序
+  const matchInfra = await src.candidates(
+    { sessionId: 'session-curr' },
+    { query: '/repos/infra', drilled: false }
+  );
+  assert.deepEqual(
+    Array.from(matchInfra, (item) => item.name),
+    ['Cluster Hub', 'dsh-gateway'],
+    'Filtered Level 1 must keep roster order'
+  );
 
   // 无匹配项返回空数组
   const matchNone = await src.candidates(
@@ -769,13 +828,17 @@ test('Peer Session Reference: Zero cross-boundary and zero board orchestration i
     'session-target': { id: 'session-target', title: '接收方', cwd: CURRENT_WS, status: 'idle', updatedAt: 4000 }
   };
 
-  const { getRegisteredSource, mockCtx, recordedCalls, recordedPosts } = setupMockContext(plugin, { sessionsById });
+  const rosterItems = [
+    workspaceItem({ workspaceId: 'ws-current', path: CURRENT_WS, sessionIds: ['session-curr', 'session-target'] })
+  ];
+
+  const { getRegisteredSource, mockCtx, recordedCalls, recordedPosts } = setupMockContext(plugin, { sessionsById, workspacesItems: rosterItems });
   const src = getRegisteredSource();
 
   // 模拟全流程用户交互：一级发现 -> 下钻 -> 检索 -> 选定 -> 返回
   // 1. 一级工作区发现
   const l1 = await src.candidates({ sessionId: 'session-curr' }, { query: '', drilled: false });
-  assert.equal(l1.length, 1);
+  assert.equal(l1.length, rosterItems.length);
 
   // 2. 选择工作区下钻
   const drillPick = src.onPick({ action: 'drill', candidate: l1[0] });
@@ -827,7 +890,11 @@ test('Peer Session Reference: English locale end-to-end symmetry across discover
     'session-err': { id: 'session-err', title: 'Failed Job', cwd: CURRENT_WS, status: 'error', updatedAt: 2000 }
   };
 
-  const { getRegisteredSource } = setupMockContext(plugin, { sessionsById, locale: 'en' });
+  const rosterItems = [
+    workspaceItem({ workspaceId: 'ws-current', path: CURRENT_WS, sessionIds: ['session-curr', 'session-sub', 'session-idle', 'session-err'] })
+  ];
+
+  const { getRegisteredSource } = setupMockContext(plugin, { sessionsById, workspacesItems: rosterItems, locale: 'en' });
   const src = getRegisteredSource();
 
   // 一级菜单英文词条断言
@@ -867,22 +934,24 @@ test('Peer Session Reference: Node VM sandbox resilience and boundary condition 
   const c3 = await srcEmpty.candidates({ sessionId: 's1' }, { drilled: false });
   assert.equal(c3.length, 0);
 
-  // 4. 畸变会话对象容错
+  // 4. 畸变会话对象与反斜杠名册路径容错
   const malformedSessions = {
     'valid-curr': { id: 'valid-curr', cwd: CURRENT_WS, updatedAt: 1000 },
     'null-session': null,
     'missing-fields': { id: 'missing-fields' },
-    'negative-time': { id: 'negative-time', title: '异常时间', cwd: CURRENT_WS, updatedAt: -100 },
-    'win-path': { id: 'win-path', title: 'Windows 会话', cwd: 'C:\\Users\\dev\\workspace', status: 'idle', updatedAt: 200 }
+    'negative-time': { id: 'negative-time', title: '异常时间', cwd: CURRENT_WS, updatedAt: -100 }
   };
+  const windowsPath = 'C:\\Users\\dev\\workspace';
 
-  const { getRegisteredSource: getMalformedSource } = setupMockContext(plugin, { sessionsById: malformedSessions });
+  const { getRegisteredSource: getMalformedSource } = setupMockContext(plugin, {
+    sessionsById: malformedSessions,
+    workspacesItems: [workspaceItem({ workspaceId: 'ws-win', path: windowsPath, sessionIds: ['win-path'] })]
+  });
   const srcMalformed = getMalformedSource();
 
   const l1Malformed = await srcMalformed.candidates({ sessionId: 'valid-curr' }, { drilled: false });
-  assert.ok(l1Malformed.length >= 2);
-  const winWs = l1Malformed.find(w => w.name === 'workspace');
-  assert.ok(winWs, 'Windows backslash path must extract workspace name correctly');
+  assert.equal(l1Malformed.length, 1, 'A malformed session snapshot must not disturb the roster-derived Level 1');
+  assert.equal(l1Malformed[0].name, 'workspace', 'Windows backslash path must extract the workspace name');
 
   const l2Malformed = await srcMalformed.candidates({ sessionId: 'valid-curr' }, { query: CURRENT_WS, drilled: true });
   assert.ok(l2Malformed.length >= 1);
@@ -994,12 +1063,12 @@ test('Peer Session Reference: archived roster read degrades to snapshot-field fi
   assert.equal(level2.length, 1, 'Missing workspaces service must not block Level 2 candidates');
   assert.equal(level2[0].label, '存活任务', 'Snapshot-field archived exclusion must keep working without the service');
 
+  // 名册缺失退化为空名册：一级为空数组且不抛错，不再回落到 cwd 汇聚
   const level1 = await src.candidates(
     { sessionId: 'session-curr' },
     { query: '', drilled: false }
   );
-  assert.equal(level1.length, 1, 'Missing workspaces service must not block Level 1 candidates');
-  assert.equal(level1[0].name, 'dsh-call-session');
+  assert.deepEqual(Array.from(level1), [], 'A missing workspaces service must degrade Level 1 to an empty list');
 });
 
 test('Peer Session Reference: archived roster read failure keeps candidates flowing (ADR-0034 archived exclusion)', async () => {
@@ -1029,7 +1098,7 @@ test('Peer Session Reference: archived roster read failure keeps candidates flow
     { sessionId: 'session-curr' },
     { query: '', drilled: false }
   );
-  assert.equal(level1.length, 1, 'Throwing workspaces list snapshot must not block Level 1 candidates');
+  assert.deepEqual(Array.from(level1), [], 'A throwing workspaces snapshot must degrade Level 1 to an empty list');
 });
 
 test('Peer Session Reference: snapshot without archivedSessionIds degrades to baseline identical to missing service (ADR-0034 archived exclusion)', async () => {
@@ -1082,7 +1151,7 @@ test('Peer Session Reference: snapshot without archivedSessionIds degrades to ba
     baselineLevel1.map((item) => [item.label, item.name]),
     'Snapshot without the roster field must produce Level 1 candidates identical to the missing-service baseline'
   );
-  assert.equal(degradedLevel1[0].name, 'dsh-call-session');
+  assert.deepEqual(Array.from(degradedLevel1), [], 'A snapshot without the roster field must degrade Level 1 to an empty list');
 });
 
 test('Peer Session Reference: level 2 excludes rostered sessions even without snapshot archived markers (ADR-0034 archived exclusion)', async () => {
@@ -1095,10 +1164,14 @@ test('Peer Session Reference: level 2 excludes rostered sessions even without sn
     'session-rostered': { id: 'session-rostered', title: '名单归档任务', cwd: CURRENT_WS, status: 'idle', updatedAt: 6000 }
   };
 
+  const rosterItems = [
+    workspaceItem({ workspaceId: 'ws-current', path: CURRENT_WS, sessionIds: ['session-curr', 'session-live', 'session-rostered'] })
+  ];
+
   const { getRegisteredSource } = setupMockContext(plugin, {
     sessionsById,
-    hasWorkspacesService: true,
-    workspacesList: { items: [], pinnedSessionIds: [], archivedSessionIds: ['session-rostered'] }
+    workspacesItems: rosterItems,
+    archivedSessionIds: ['session-rostered']
   });
   const src = getRegisteredSource();
 
@@ -1109,12 +1182,16 @@ test('Peer Session Reference: level 2 excludes rostered sessions even without sn
   assert.equal(level2.length, 1, 'Level 2 must exclude the rostered session from candidates');
   assert.equal(level2[0].label, '存活任务');
 
-  // 名单过滤同时约束一级汇聚：工作区在仍有存活会话时照常输出 (ADR-0034 工作区收敛不变量)
+  // 名册读取与归档名单共用同一次读取，名单过滤不影响一级候选本身
   const level1 = await src.candidates(
     { sessionId: 'session-curr' },
     { query: '', drilled: false }
   );
-  assert.equal(level1.length, 1, 'Level 1 keeps the workspace while it still has live sessions');
+  assert.deepEqual(
+    Array.from(level1, (item) => JSON.parse(item.value).path),
+    [CURRENT_WS],
+    'Level 1 must keep listing the rostered workspace'
+  );
 });
 
 test('Peer Session Reference: level 2 excludes both rostered and snapshot-flagged archived sessions (ADR-0034 archived exclusion)', async () => {
@@ -1164,7 +1241,7 @@ test('Peer Session Reference: level 2 without workspaces service keeps rostered 
   assert.ok(level2.some(item => item.label === '存活任务'));
 });
 
-test('Peer Session Reference: level 1 drops workspaces whose sessions are all rostered archived (ADR-0034 workspace convergence)', async () => {
+test('Peer Session Reference: level 1 lists every roster entry including workspaces with no visible session (ADR-0034 workspace convergence)', async () => {
   const { plugin } = loadClientInSandbox();
 
   const DEAD_WS = '/repos/infra/dsh-dead';
@@ -1175,10 +1252,16 @@ test('Peer Session Reference: level 1 drops workspaces whose sessions are all ro
     'session-dead-2': { id: 'session-dead-2', title: '死区任务二', cwd: DEAD_WS, status: 'idle', updatedAt: 6500 }
   };
 
+  const rosterItems = [
+    workspaceItem({ workspaceId: 'ws-current', path: CURRENT_WS, sessionIds: ['session-curr'] }),
+    workspaceItem({ workspaceId: 'ws-cluster', path: CLUSTER_WS, sessionIds: ['session-cl-live'] }),
+    workspaceItem({ workspaceId: 'ws-dead', path: DEAD_WS, sessionIds: ['session-dead-1', 'session-dead-2'] })
+  ];
+
   const { getRegisteredSource } = setupMockContext(plugin, {
     sessionsById,
-    hasWorkspacesService: true,
-    workspacesList: { items: [], pinnedSessionIds: [], archivedSessionIds: ['session-dead-1', 'session-dead-2'] }
+    workspacesItems: rosterItems,
+    archivedSessionIds: ['session-dead-1', 'session-dead-2']
   });
   const src = getRegisteredSource();
 
@@ -1186,8 +1269,13 @@ test('Peer Session Reference: level 1 drops workspaces whose sessions are all ro
     { sessionId: 'session-curr' },
     { query: '', drilled: false }
   );
-  assert.equal(level1.length, 2, 'Level 1 must keep only workspaces with unarchived sessions');
-  assert.ok(!level1.some(item => item.name === 'dsh-dead'), 'Workspace left with only rostered archived sessions must not appear at Level 1');
+  assert.equal(level1.length, rosterItems.length, 'Level 1 candidate count must equal the roster length');
+  assert.deepEqual(
+    Array.from(level1, (item) => JSON.parse(item.value).path),
+    [CURRENT_WS, CLUSTER_WS, DEAD_WS],
+    'Current workspace pinned first, the remaining roster entries in roster order'
+  );
+  assert.ok(level1.some(item => item.name === 'dsh-dead'), 'A roster workspace whose sessions are all archived must still be listed');
 
   const deadLevel2 = await src.candidates(
     { sessionId: 'session-curr' },
@@ -1207,10 +1295,17 @@ test('Peer Session Reference: level 1 keeps workspaces with live sessions and pr
     'session-mixed-dead': { id: 'session-mixed-dead', title: '混合区名单任务', cwd: MIXED_WS, status: 'idle', updatedAt: 4500 }
   };
 
+  // 名册顺序刻意不是当前工作区在前，也不是路径字母序
+  const rosterItems = [
+    workspaceItem({ workspaceId: 'ws-mixed', path: MIXED_WS, sessionIds: ['session-mixed-live', 'session-mixed-dead'] }),
+    workspaceItem({ workspaceId: 'ws-cluster', path: CLUSTER_WS, sessionIds: ['session-cl-live'] }),
+    workspaceItem({ workspaceId: 'ws-current', path: CURRENT_WS, sessionIds: ['session-curr'] })
+  ];
+
   const { getRegisteredSource } = setupMockContext(plugin, {
     sessionsById,
-    hasWorkspacesService: true,
-    workspacesList: { items: [], pinnedSessionIds: [], archivedSessionIds: ['session-mixed-dead'] }
+    workspacesItems: rosterItems,
+    archivedSessionIds: ['session-mixed-dead']
   });
   const src = getRegisteredSource();
 
@@ -1218,13 +1313,16 @@ test('Peer Session Reference: level 1 keeps workspaces with live sessions and pr
     { sessionId: 'session-curr' },
     { query: '', drilled: false }
   );
-  assert.equal(level1.length, 3, 'Workspaces still owning unarchived sessions must keep appearing at Level 1');
 
-  // 当前工作区置顶与既有路径字母序排序不受名单影响
-  assert.equal(level1[0].name, 'dsh-call-session', 'Current workspace must stay pinned first');
-  assert.equal(level1[1].name, 'dsh-agent-cluster', 'Path-alphabetical ordering must be preserved');
-  assert.equal(level1[2].name, 'dsh-mixed', 'Mixed workspace stays visible through its live session');
-  assert.equal(JSON.parse(level1[2].value).isCurrent, false, 'Non-current workspaces must stay unflagged');
+  // 当前工作区置顶，其余保持名册顺序，不按路径字母序重排
+  assert.deepEqual(
+    Array.from(level1, (item) => item.name),
+    ['dsh-call-session', 'dsh-mixed', 'dsh-agent-cluster'],
+    'Level 1 must pin the current workspace first and keep the rest in roster order'
+  );
+  assert.equal(level1[0].description, '当前', 'Current workspace must stay marked with 当前');
+  assert.equal(JSON.parse(level1[1].value).isCurrent, false, 'Non-current workspaces must stay unflagged');
+  assert.equal(level1[1].description, undefined, 'Non-current roster entries must not carry a description');
 });
 
 test('Peer Session Reference: section copy is plain and bilingual symmetric (ADR-0034 bilingual localization)', async () => {
@@ -1241,7 +1339,10 @@ test('Peer Session Reference: section copy is plain and bilingual symmetric (ADR
   const sessionsById = {
     'session-curr': { id: 'session-curr', title: '当前会话', cwd: CURRENT_WS, status: 'running', updatedAt: 9000 }
   };
-  const { getRegisteredSource } = setupMockContext(plugin, { sessionsById });
+  const { getRegisteredSource } = setupMockContext(plugin, {
+    sessionsById,
+    workspacesItems: [workspaceItem({ workspaceId: 'ws-current', path: CURRENT_WS, sessionIds: ['session-curr'] })]
+  });
   const src = getRegisteredSource();
   const level1 = await src.candidates({ sessionId: 'session-curr' }, { query: '', drilled: false });
   assert.equal(level1[0].section, '工作区');
