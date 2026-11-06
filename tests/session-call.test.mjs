@@ -3,13 +3,18 @@ import assert from 'node:assert/strict';
 import {
   executeSessionCall,
   dispatchNativeMessage,
-  CALL_TYPE_INTENTS,
   buildTransportPayload,
   sanitizePostIds
 } from '../lib/session-call.mjs';
-import { createMockAgent, silentLogger } from './helpers/mock-agent.mjs';
+import { CALL_TYPES } from '../lib/native-message-transport.mjs';
+import { assertNativeUserMessage, createMockAgent, silentLogger } from './helpers/mock-agent.mjs';
 
-const HEADER_REGEX = /^\[From: .+? \(.+?\) \| CallType: (task_dispatch|task_report|notice)\](\n> Context Ref: .+?)?\n\n/;
+/** A minimal but well-formed UserMessage: the host rejects anything else on steer/followup. */
+function nativeProbeMessage(id) {
+  return { id, role: 'user', content: [{ type: 'text', text: 'probe' }] };
+}
+
+const HEADER_REGEX = /^\[From: .+? \(.+?\) \| CallType: (notice|task_soft|task_hard|task_report)\](\n> Context Ref: .+?)?\n\n/;
 
 function createMockCtx({ agentsList = [], archivedIds = [], logger = silentLogger } = {}) {
   const archivedSet = new Set(archivedIds);
@@ -40,25 +45,25 @@ function createMockCtx({ agentsList = [], archivedIds = [], logger = silentLogge
   };
 }
 
-test('单播调用类型意图枚举与协议映射契约 (ADR-0006)', () => {
-  const supportedIntents = ['task_dispatch', 'task_report', 'notice'];
-  for (const intent of supportedIntents) {
-    assert.ok(typeof CALL_TYPE_INTENTS[intent] === 'string' && CALL_TYPE_INTENTS[intent].length > 0);
-  }
-  assert.equal(CALL_TYPE_INTENTS['unknown_intent'], undefined);
-  assert.ok(Object.isFrozen(CALL_TYPE_INTENTS));
+test('呼叫类型对外只暴露数组，意图映射留在模块内部 (ADR-0006)', () => {
+  assert.deepEqual([...CALL_TYPES], ['notice', 'task_soft', 'task_hard', 'task_report']);
+  assert.ok(Object.isFrozen(CALL_TYPES), 'the enum must not be mutable at runtime');
+  // 曾经把 {notice: 'NOTICE', …} 这份映射当公开导出抛出去，调用方误当数组用 .join() 会直接抛 TypeError
+  assert.equal(typeof CALL_TYPES.join, 'function');
+  assert.equal(CALL_TYPES.includes('unknown_intent'), false);
 });
 
 test('单播原生通信分发：按目标会话运行状态自适应选择 steer 或 followup 通道', () => {
   // 1. target 为 running 态且具有 steer 方法 -> steer
   const runningAgent = createMockAgent('agent-running', { status: 'running' });
-  const mode1 = dispatchNativeMessage(runningAgent, { role: 'user', content: [] });
+  const mode1 = dispatchNativeMessage(runningAgent, nativeProbeMessage('probe-running'));
   assert.equal(mode1, 'steer');
   assert.equal(runningAgent.received[0].type, 'steer');
 
   // 2. target 为 idle 态且具有 followup 方法 -> followup
   const idleAgent = createMockAgent('agent-idle', { status: 'idle' });
-  const mode2 = dispatchNativeMessage(idleAgent, { role: 'user', content: [] });
+  const mode2 = dispatchNativeMessage(idleAgent, nativeProbeMessage('probe-idle'));
+  assert.doesNotThrow(() => assertNativeUserMessage(idleAgent.received[0].msg), 'followup also carries a UserMessage');
   assert.equal(mode2, 'followup');
   assert.equal(idleAgent.received[0].type, 'followup');
 
@@ -229,7 +234,7 @@ test('executeSessionCall: 消息投递、Context Post 关联与两态分发', as
     args: {
       target_session_id: 'target-idle-agent-67890',
       message: 'Please review task #42',
-      call_type: 'task_dispatch',
+      call_type: 'task_soft',
       context_post_ids: ['post-998', '#post-999']
     },
     exec
@@ -238,7 +243,7 @@ test('executeSessionCall: 消息投递、Context Post 关联与两态分发', as
   assert.equal(resIdle.success, true);
   assert.equal(resIdle.deliveryMode, 'followup');
   assert.equal(resIdle.targetStatus, 'idle');
-  assert.equal(resIdle.callType, 'task_dispatch');
+  assert.equal(resIdle.callType, 'task_soft');
   assert.deepEqual(resIdle.contextPostIds, ['post-998', '#post-999']);
 
   // 检验接收到的 UserMessage 结构 (包含传输层客观报头与无损正文)
@@ -246,14 +251,14 @@ test('executeSessionCall: 消息投递、Context Post 关联与两态分发', as
   assert.equal(dispatchedToIdle.role, 'user');
   assert.equal(
     dispatchedToIdle.content[0].text,
-    '[From: caller-agent-12345 (Captain Agent) | CallType: task_dispatch]\n> Context Ref: #post-998, #post-999\n\nPlease review task #42'
+    '[From: caller-agent-12345 (Captain Agent) | CallType: task_soft]\n> Context Ref: #post-998, #post-999\n\nPlease review task #42'
   );
   assert.ok(dispatchedToIdle.content[0].text.includes('> Context Ref: #post-998, #post-999'));
   assert.ok(dispatchedToIdle.content[0].text.includes('Please review task #42'));
   assert.equal(dispatchedToIdle.source.kind, 'plugin:dsh-call-session');
   assert.notEqual(dispatchedToIdle.source.kind, 'plugin');
   assert.equal(dispatchedToIdle.source.plugin, undefined);
-  assert.ok(dispatchedToIdle.source.summary.includes('[Cross-Session TASK_DISPATCH]'));
+  assert.ok(dispatchedToIdle.source.summary.includes('[Cross-Session TASK_SOFT]'));
 
   // 2. 呼叫 running 会话 -> 触发 steer
   const resRunning = await executeSessionCall({
@@ -335,13 +340,13 @@ test('executeSessionCall: 接入 ctx.logger("dsh-call-session") 并记录 debug 
 
 test('buildTransportPayload: 标准参数生成标准客观报头与双换行正文', () => {
 
-  // 1. task_dispatch 场景
+  // 1. task_soft 场景
   const payload1 = buildTransportPayload('Dispatch task #1', {
     callerSessionId: 'session-alpha-12345678',
     callerTitle: 'Coordinator',
-    callType: 'task_dispatch'
+    callType: 'task_soft'
   });
-  assert.equal(payload1, '[From: session-alpha-12345678 (Coordinator) | CallType: task_dispatch]\n\nDispatch task #1');
+  assert.equal(payload1, '[From: session-alpha-12345678 (Coordinator) | CallType: task_soft]\n\nDispatch task #1');
   assert.match(payload1, HEADER_REGEX);
 
   // 2. task_report 场景
@@ -369,40 +374,50 @@ test('buildTransportPayload: 带 Context Ref 时换行追加引用且格式化 #
   const payload = buildTransportPayload('Please review findings', {
     callerSessionId: 'caller-session-99999999',
     callerTitle: 'Lead Architect',
-    callType: 'task_dispatch',
+    callType: 'task_soft',
     cleanPostIds: ['post-101', '#post-102', '  post-103  ']
   });
 
-  const expected = '[From: caller-session-99999999 (Lead Architect) | CallType: task_dispatch]\n> Context Ref: #post-101, #post-102, #post-103\n\nPlease review findings';
+  const expected = '[From: caller-session-99999999 (Lead Architect) | CallType: task_soft]\n> Context Ref: #post-101, #post-102, #post-103\n\nPlease review findings';
   assert.equal(payload, expected);
   assert.match(payload, HEADER_REGEX);
 });
 
-test('buildTransportPayload: 回退机制 (参数缺省、空串、非法类型)', () => {
-  // 1. 无第二个参数或空对象
-  const p1 = buildTransportPayload('Hello fallback');
-  assert.equal(p1, '[From: unknown-caller (Session) | CallType: task_dispatch]\n\nHello fallback');
+test('buildTransportPayload: 发件人缺省回退，呼叫类别非法即抛错', () => {
+  // 1. 发件人字段缺省或空白时回退到客观占位，呼叫类别必须显式给出
+  const p1 = buildTransportPayload('Hello fallback', { callType: 'task_soft' });
+  assert.equal(p1, '[From: unknown-caller (Session) | CallType: task_soft]\n\nHello fallback');
 
-  const p2 = buildTransportPayload('Hello fallback', {});
-  assert.equal(p2, '[From: unknown-caller (Session) | CallType: task_dispatch]\n\nHello fallback');
-
-  // 2. 空白字符串与非法 callType 回退
-  const p3 = buildTransportPayload('Fallback with spaces', {
+  const p2 = buildTransportPayload('Fallback with spaces', {
     callerSessionId: '   ',
     callerTitle: '',
-    callType: 'unsupported_call_type',
+    callType: 'task_soft',
     cleanPostIds: []
   });
-  assert.equal(p3, '[From: unknown-caller (Session) | CallType: task_dispatch]\n\nFallback with spaces');
+  assert.equal(p2, '[From: unknown-caller (Session) | CallType: task_soft]\n\nFallback with spaces');
 
-  // 3. null / undefined 字段容错
-  const p4 = buildTransportPayload('Fallback with nulls', {
+  const p3 = buildTransportPayload('Fallback with nulls', {
     callerSessionId: null,
     callerTitle: null,
-    callType: null,
+    callType: 'task_soft',
     cleanPostIds: null
   });
-  assert.equal(p4, '[From: unknown-caller (Session) | CallType: task_dispatch]\n\nFallback with nulls');
+  assert.equal(p3, '[From: unknown-caller (Session) | CallType: task_soft]\n\nFallback with nulls');
+
+  // 2. 未给出呼叫类别时沿用默认的 task_soft（spec 0020：session_create 与工具入口同源）
+  assert.equal(
+    buildTransportPayload('Default type', { callerSessionId: 'caller-session-99999999' }),
+    '[From: caller-session-99999999 (Session) | CallType: task_soft]\n\nDefault type'
+  );
+
+  // 3. 枚举外或空白的呼叫类别是参数错误，绝不静默替换成另一种义务等级
+  for (const bad of ['unsupported_call_type', 42, '']) {
+    assert.throws(
+      () => buildTransportPayload('x', { callType: bad }),
+      /\[InvalidParameter\].*invalid call_type/,
+      `call_type ${JSON.stringify(bad)} must be rejected`
+    );
+  }
 });
 
 test('buildTransportPayload: 原始正文 100% 逐字无损与禁止指令污染 (Zero-Envelope & Zero-Preach)', () => {
@@ -435,13 +450,13 @@ test('executeSessionCall: 端到端消息格式断言测试 (三大 call_type、
     agentsList: [caller, targetIdle, targetRunning]
   });
 
-  // 1. task_dispatch 端到端调用
+  // 1. task_soft 端到端调用
   const dispatchRes = await executeSessionCall({
     ctx,
     args: {
       target_session_id: 'target-e2e-idle-11111111',
       message: 'Dispatch task #100',
-      call_type: 'task_dispatch',
+      call_type: 'task_soft',
       context_post_ids: ['post-abc']
     },
     exec: { agent: caller }
@@ -452,18 +467,18 @@ test('executeSessionCall: 端到端消息格式断言测试 (三大 call_type、
   assert.equal(dispatchRes.targetTitle, 'Target Worker');
   assert.equal(dispatchRes.targetStatus, 'idle');
   assert.equal(dispatchRes.deliveryMode, 'followup');
-  assert.equal(dispatchRes.callType, 'task_dispatch');
+  assert.equal(dispatchRes.callType, 'task_soft');
   assert.equal(dispatchRes.callerSessionId, 'caller-e2e-12345678');
   assert.deepEqual(dispatchRes.contextPostIds, ['post-abc']);
-  assert.ok(dispatchRes.message.includes('task_dispatch'));
+  assert.ok(dispatchRes.message.includes('task_soft') || dispatchRes.message.includes('已派发任务'));
 
   const msg1 = targetIdle.received[targetIdle.received.length - 1].msg;
   assert.match(msg1.content[0].text, HEADER_REGEX);
   assert.equal(
     msg1.content[0].text,
-    '[From: caller-e2e-12345678 (Captain Master) | CallType: task_dispatch]\n> Context Ref: #post-abc\n\nDispatch task #100'
+    '[From: caller-e2e-12345678 (Captain Master) | CallType: task_soft]\n> Context Ref: #post-abc\n\nDispatch task #100'
   );
-  assert.ok(msg1.source.summary.includes('[Cross-Session TASK_DISPATCH]'));
+  assert.ok(msg1.source.summary.includes('[Cross-Session TASK_SOFT]'));
 
   // 2. task_report 端到端调用
   const reportRes = await executeSessionCall({
@@ -499,11 +514,11 @@ test('executeSessionCall: 端到端消息格式断言测试 (三大 call_type、
 
   assert.equal(fallbackRes.success, true);
   assert.equal(fallbackRes.callerSessionId, 'unknown-caller');
-  assert.equal(fallbackRes.callType, 'task_dispatch');
+  assert.equal(fallbackRes.callType, 'task_soft');
   const msg3 = targetIdle.received[targetIdle.received.length - 1].msg;
   assert.equal(
     msg3.content[0].text,
-    '[From: unknown-caller (Session) | CallType: task_dispatch]\n\nAnonymous call message'
+    '[From: unknown-caller (Session) | CallType: task_soft]\n\nAnonymous call message'
   );
 });
 test('executeSessionCall: 端到端全链路正文 100% 逐字无损保留 (带代码缩进与空白)', async () => {
@@ -517,14 +532,14 @@ test('executeSessionCall: 端到端全链路正文 100% 逐字无损保留 (带�
     args: {
       target_session_id: 'target-verbatim-2222',
       message: rawWithIndentation,
-      call_type: 'task_dispatch'
+      call_type: 'task_soft'
     },
     exec: { agent: caller }
   });
 
   assert.equal(res.success, true);
   const dispatched = target.received[0].msg;
-  const expectedHeader = '[From: caller-verbatim-1111 (Test Agent) | CallType: task_dispatch]';
+  const expectedHeader = '[From: caller-verbatim-1111 (Test Agent) | CallType: task_soft]';
   assert.equal(dispatched.content[0].text, `${expectedHeader}\n\n${rawWithIndentation}`);
   assert.ok(dispatched.content[0].text.endsWith(rawWithIndentation), '正文尾随空格与换行 100% 逐字保留');
   assert.ok(dispatched.content[0].text.includes('\n\n' + rawWithIndentation), '报头与正文严格以双换行隔离');
@@ -566,7 +581,7 @@ test('sanitizePostIds: 关联黑板 ID 清洗、去重与边界容错', () => {
   assert.deepEqual(sanitizePostIds(['#post-a', '#post-b', '#post-a']), ['#post-a', '#post-b']);
 });
 
-test('executeSessionCall: task_dispatch 启动首帧秒崩即时阻断与报错回传 (ADR-0031)', async () => {
+test('executeSessionCall: task_soft 启动首帧秒崩即时阻断与报错回传 (ADR-0031)', async () => {
   const caller = createMockAgent('caller-handshake-1');
   const targetCrash = {
     id: 'target-crash-agent',
@@ -604,7 +619,7 @@ test('executeSessionCall: task_dispatch 启动首帧秒崩即时阻断与报错�
     args: {
       target_session_id: 'target-crash-agent',
       message: 'Do critical refactor',
-      call_type: 'task_dispatch',
+      call_type: 'task_soft',
       wait_ms: 100
     },
     exec: { agent: caller }
@@ -618,7 +633,7 @@ test('executeSessionCall: task_dispatch 启动首帧秒崩即时阻断与报错�
   assert.ok(res.message.includes('目标会话启动首帧发生崩溃'));
 });
 
-test('executeSessionCall: task_dispatch 正常拉起物理运行确权 (ADR-0031)', async () => {
+test('executeSessionCall: task_soft 正常拉起物理运行确权 (ADR-0031)', async () => {
   const caller = createMockAgent('caller-handshake-2');
   const targetHealthy = {
     id: 'target-healthy-agent',
@@ -643,7 +658,7 @@ test('executeSessionCall: task_dispatch 正常拉起物理运行确权 (ADR-0031
     args: {
       target_session_id: 'target-healthy-agent',
       message: 'Run healthy task',
-      call_type: 'task_dispatch',
+      call_type: 'task_soft',
       wait_ms: 100
     },
     exec: { agent: caller }
@@ -703,7 +718,7 @@ test('executeSessionCall: 超时未进入运行态优雅降级为 enqueued 与 p
     args: {
       target_session_id: 'target-delayed-agent',
       message: 'Queue task',
-      call_type: 'task_dispatch',
+      call_type: 'task_soft',
       wait_ms: 50
     },
     exec: { agent: caller }
@@ -720,10 +735,10 @@ test('executeSessionCall 出参元信息: 三种呼叫类别均携带客观收�
   const target = createMockAgent('target-convergence', { status: 'running' });
   const ctx = createMockCtx({ agentsList: [caller, target] });
 
-  // 1. task_dispatch (zh & en)
+  // 1. task_soft (zh & en)
   const resDispatchZh = await executeSessionCall({
     ctx,
-    args: { target_session_id: 'target-convergence', message: 'Do work', call_type: 'task_dispatch' },
+    args: { target_session_id: 'target-convergence', message: 'Do work', call_type: 'task_soft' },
     exec: { agent: caller },
     options: { config: { locale: 'zh' } }
   });
@@ -732,7 +747,7 @@ test('executeSessionCall 出参元信息: 三种呼叫类别均携带客观收�
 
   const resDispatchEn = await executeSessionCall({
     ctx,
-    args: { target_session_id: 'target-convergence', message: 'Do work', call_type: 'task_dispatch' },
+    args: { target_session_id: 'target-convergence', message: 'Do work', call_type: 'task_soft' },
     exec: { agent: caller },
     options: { config: { locale: 'en' } }
   });
@@ -748,7 +763,7 @@ test('executeSessionCall 出参元信息: 三种呼叫类别均携带客观收�
     options: { config: { locale: 'zh' } }
   });
   assert.equal(resReportZh.success, true);
-  assert.ok(resReportZh.message.includes('已完成收口汇报，无需回复'));
+  assert.ok(resReportZh.message.includes('已完成任务汇报，无需回复'));
 
   const resReportEn = await executeSessionCall({
     ctx,
@@ -804,13 +819,13 @@ test('executeSessionCall: 目标处于错误态时阻断 dispatch 并转存 repo
 
   const ctx = createMockCtx({ agentsList: [caller, targetCrashed] });
 
-  // 1. task_dispatch 前置阻断
+  // 1. task_soft 前置阻断
   const resDispatch = await executeSessionCall({
     ctx,
-    args: { target_session_id: 'target-crashed-preflight', message: 'Do work', call_type: 'task_dispatch' },
+    args: { target_session_id: 'target-crashed-preflight', message: 'Do work', call_type: 'task_soft' },
     exec: { agent: caller }
   });
-  assert.equal(resDispatch.success, false, '目标处于 error 时 task_dispatch 必须前置阻断');
+  assert.equal(resDispatch.success, false, '目标处于 error 时 task_soft 必须前置阻断');
   assert.equal(resDispatch.deliveryState, 'failed');
   assert.equal(resDispatch.executionState, 'crashed');
   assert.equal(resDispatch.error.code, 'PREFLIGHT_TARGET_IN_ERROR');
@@ -857,7 +872,7 @@ test('session_call 冷恢复经组合根注入解析器带上调用方有效模�
 
   const res = await executeSessionCall({
     ctx,
-    args: { target_session_id: 'session-cold-target-0001', message: 'wake up', call_type: 'task_dispatch' },
+    args: { target_session_id: 'session-cold-target-0001', message: 'wake up', call_type: 'task_soft' },
     exec: { agent: caller }
   });
 

@@ -39,7 +39,6 @@ import {
 } from './workspace.js';
 
 import {
-  CALL_TYPE_INTENTS,
   dispatchNativeMessage,
   executeSessionCall,
   buildTransportPayload,
@@ -51,6 +50,8 @@ import {
   type NativeUserMessage,
   type TransportPayloadOptions
 } from './session-call.js';
+
+import type { CallTypeName } from '../lib/native-message-transport.js';
 
 import {
   getArchivedSessionIds,
@@ -118,6 +119,12 @@ export declare const inject: readonly ['agents', 'tools', 'systemPrompt'];
 /** 声明式提供服务清单 */
 export declare const provide: readonly ['callTelemetry', 'boardStore'];
 
+/** 现役呼叫类型清单（唯一对外枚举；报头意图映射不导出） */
+export declare const CALL_TYPES: readonly CallTypeName[];
+
+/** 缺省呼叫类型，所有入口缺省时使用 */
+export declare const DEFAULT_CALL_TYPE: CallTypeName;
+
 /** 跨会话调度相关常量集合 */
 export declare const DISPATCHER_CONSTANTS: Readonly<{
   TARGET_WILDCARDS: ReadonlySet<string>;
@@ -126,7 +133,7 @@ export declare const DISPATCHER_CONSTANTS: Readonly<{
     SUMMARY_MAX_LENGTH: number;
     MESSAGE_MAX_LENGTH: number;
   }>;
-  CALL_TYPES: readonly ['task_dispatch', 'task_report', 'notice'];
+  CALL_TYPES: readonly ['notice', 'task_soft', 'task_hard', 'task_report'];
 }>;
 
 /**
@@ -171,6 +178,31 @@ export declare function usageSectionText(ctx?: any, config?: any): string;
  */
 export declare function apply(ctx: Context, config?: CallSessionConfig): void;
 
+/**
+ * 重启自检快照：当前进程真正加载的类型枚举与守卫注册状态
+ */
+export interface RuntimeSelfCheckSnapshot {
+  callTypes: readonly string[];
+  defaultCallType: string;
+  guard: {
+    registered: boolean;
+    listening: boolean | null;
+    maxRemindersPerTurn: number | null;
+  };
+  ledger: { attached: boolean };
+}
+
+/** 在同一宿主进程内查询插件真实加载状态 */
+export declare function runtimeSelfCheck(ctx: any, callTelemetry: any, guard: any): RuntimeSelfCheckSnapshot;
+
+/** 把守卫催办文案构造成原生 UserMessage */
+export declare function buildTurnReminderMessage(
+  rawMessage: string,
+  agent?: Record<string, unknown>,
+  ctx?: any,
+  pendingTasks?: Array<{ callerSessionId?: string; callerTitle?: string }>
+): NativeUserMessage;
+
 declare const _default: {
   name: typeof name;
   inject: typeof inject;
@@ -197,7 +229,6 @@ export {
   executeSessionQuery,
   executeSessionCall,
   dispatchNativeMessage,
-  CALL_TYPE_INTENTS,
   buildTransportPayload,
   PeerSessionFactory,
   executeSessionCreate,

@@ -13,9 +13,10 @@ import {
   PEER_SESSION_CONSTANTS
 } from '../lib/session-create.mjs';
 import { createMockAgent } from './helpers/mock-agent.mjs';
+import { CallTelemetryRingBuffer } from '../lib/call-telemetry.mjs';
 
 
-const HEADER_REGEX = /^\[From: .+? \(.+?\) \| CallType: (task_dispatch|task_report|notice)\](\n> Context Ref: .+?)?\n\n/;
+const HEADER_REGEX = /^\[From: .+? \(.+?\) \| CallType: (notice|task_soft|task_hard|task_report)\](\n> Context Ref: .+?)?\n\n/;
 
 function createMockCtx({
   agentsList = [],
@@ -27,7 +28,8 @@ function createMockCtx({
   sessionController = null,
   sessionTitle = null,
   registeredWorkspaces = ['c:/workspace/project-alpha', 'c:/workspace/project-beta'],
-  mutateStatusOnDispatch = true
+  mutateStatusOnDispatch = true,
+  callTelemetry = null
 } = {}) {
   const archivedSet = new Set(archivedIds);
   const createdAgents = [];
@@ -103,6 +105,7 @@ function createMockCtx({
       sessionController
     },
     boardStore,
+    callTelemetry,
     _createdAgents: createdAgents,
     _createPayloads: createPayloads
   };
@@ -1677,7 +1680,7 @@ test('executeSessionCreate: 首帧消息规范注入传输层报头且出参携�
   assert.match(receivedMsg.content[0].text, HEADER_REGEX, '新会话接收的首帧消息必须严格匹配标准客观报头正则');
   assert.ok(
     receivedMsg.content[0].text.startsWith(
-      `[From: ${caller.id} (${caller.title}) | CallType: task_dispatch]\n> Context Ref: #post-init\n\nStart architecture review`
+      `[From: ${caller.id} (${caller.title}) | CallType: task_soft]\n> Context Ref: #post-init\n\nStart architecture review`
     ),
     '新会话接收的首帧消息必须规范注入传输层客观报头'
   );
@@ -1896,5 +1899,49 @@ test('executeSessionCreate: ADR-0031 §4.2 握手超时或无因果推进时严�
   assert.equal(res.deliveryState, 'enqueued', '未在时限内确权时应为 enqueued');
   assert.equal(res.executionState, 'pending', '未在时限内因果推进时应为 pending');
   assert.equal(res.status, 'idle', '会话状态应保持当前实际相态 idle');
+});
+
+
+test('executeSessionCreate: 初始消息与 session_call 记进同一本账，义务落在收件方身上 (Issue #20 故事 9)', async () => {
+  resetRateLimits();
+  const caller = createMockAgent('caller-alpha', { cwd: 'c:/workspace/project-alpha' });
+  const telemetry = new CallTelemetryRingBuffer(50);
+  const ctx = createMockCtx({ agentsList: [caller], callTelemetry: telemetry });
+  const exec = { agent: caller };
+
+  const hard = await executeSessionCreate({
+    ctx,
+    args: { title: 'Hard Worker', workspace: 'c:/workspace/project-alpha', initial_message: '回执给我', call_type: 'task_hard' },
+    exec
+  });
+
+  assert.equal(hard.success, true);
+  const owed = telemetry.getPendingTasksForSession(hard.sessionId);
+  assert.equal(owed.length, 1, '初始消息投递成功即入账');
+  assert.equal(owed[0].callType, 'task_hard');
+  assert.equal(owed[0].callerSessionId, 'caller-alpha', '发起方是创建者会话');
+  assert.equal(telemetry.getPendingTasksForSession('caller-alpha').length, 0, '发起方只是在等结果，不欠回执');
+
+  // 回执照常结项，两种入口共用一套先进先出语义
+  telemetry.record({ callerSessionId: hard.sessionId, targetSessionId: 'caller-alpha', callType: 'task_report' });
+  assert.equal(telemetry.getPendingTasksForSession(hard.sessionId).length, 0);
+
+  // 不给初始消息的创建不产生任何义务
+  const bare = await executeSessionCreate({
+    ctx,
+    args: { title: 'Bare Worker', workspace: 'c:/workspace/project-alpha' },
+    exec
+  });
+  assert.equal(telemetry.getPendingTasksForSession(bare.sessionId).length, 0, '没有初始消息就没有义务');
+
+  // 缺省类型就是文档里的 task_soft，不是空账也不是别的类型
+  const soft = await executeSessionCreate({
+    ctx,
+    args: { title: 'Soft Worker', workspace: 'c:/workspace/project-alpha', initial_message: '做事' },
+    exec
+  });
+  const softOwed = telemetry.getPendingTasksForSession(soft.sessionId);
+  assert.equal(softOwed.length, 1);
+  assert.equal(softOwed[0].callType, 'task_soft');
 });
 

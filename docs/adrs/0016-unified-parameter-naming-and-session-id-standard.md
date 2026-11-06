@@ -143,6 +143,9 @@
 ---
 
 #### 2. `session_call`
+
+> **Amend**：`task_dispatch` 已废弃，现役取值为 `notice | task_soft | task_hard | task_report`，见 ADR-0042；本段保留为历史记录。
+
 | 类别 | 规范参数名 | 数据类型 | 必须 | 默认值 | 语义说明与废除别名 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | **入参** | `target_session_id` | `string` | **是** | - | 目标会话 ID 或 >=8 位唯一前缀。**禁止 `target_id` / `sessionId`** |

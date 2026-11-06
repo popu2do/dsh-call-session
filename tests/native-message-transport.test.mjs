@@ -11,7 +11,7 @@ import {
   checkCausalRunningFinal,
   waitForCausalExecution,
   dispatchAndVerifyNativeMessage,
-  CALL_TYPE_INTENTS
+  CALL_TYPES
 } from '../lib/native-message-transport.mjs';
 
 test('NativeMessageTransport - 消息标识生成与意图常量导出', () => {
@@ -21,9 +21,10 @@ test('NativeMessageTransport - 消息标识生成与意图常量导出', () => {
   assert.ok(typeof id2 === 'string' && id2.length > 0);
   assert.notEqual(id1, id2);
 
-  assert.equal(CALL_TYPE_INTENTS.task_dispatch, 'TASK_DISPATCH');
-  assert.equal(CALL_TYPE_INTENTS.task_report, 'TASK_REPORT');
-  assert.equal(CALL_TYPE_INTENTS.notice, 'NOTICE');
+  // 意图常量是模块私有的实现细节，从消息上观察它的效果
+  const summary = buildNativeUserMessage({ rawMessage: 'intent probe', callType: 'task_hard', callerSessionId: 'session-x', callerTitle: 'X' });
+  assert.match(summary.source.summary, /^\[Cross-Session TASK_HARD\] from X/);
+  assert.deepEqual([...CALL_TYPES], ['notice', 'task_soft', 'task_hard', 'task_report']);
 });
 
 test('NativeMessageTransport - 上下文黑板条目引用清洗与去重 (sanitizeContextPostIds)', () => {
@@ -48,17 +49,22 @@ test('NativeMessageTransport - 客观传输报头装配与零正文篡改 (build
   const payload = buildTransportPayload(rawMsg, {
     callerSessionId: 'session-alpha',
     callerTitle: 'Coordinator',
-    callType: 'task_dispatch',
+    callType: 'task_soft',
     contextPostIds: ['post-abc', 'post-def']
   });
 
-  const expectedHeader = '[From: session-alpha (Coordinator) | CallType: task_dispatch]\n> Context Ref: #post-abc, #post-def';
+  const expectedHeader = '[From: session-alpha (Coordinator) | CallType: task_soft]\n> Context Ref: #post-abc, #post-def';
   assert.ok(payload.startsWith(expectedHeader));
   assert.ok(payload.endsWith(`\n\n${rawMsg}`));
 
-  // 回退边界处理
-  const fallbackPayload = buildTransportPayload('Hello fallback');
-  assert.ok(fallbackPayload.startsWith('[From: unknown-caller (Session) | CallType: task_dispatch]\n\nHello fallback'));
+  // 发件人缺省回退；呼叫类别缺省沿用默认的 task_soft（spec 0020）
+  const fallbackPayload = buildTransportPayload('Hello fallback', { callType: 'task_soft' });
+  assert.ok(fallbackPayload.startsWith('[From: unknown-caller (Session) | CallType: task_soft]\n\nHello fallback'));
+  assert.ok(
+    buildTransportPayload('Hello fallback').startsWith('[From: unknown-caller (Session) | CallType: task_soft]'),
+    'a missing call_type falls back to the documented default instead of failing'
+  );
+  assert.throws(() => buildTransportPayload('Hello fallback', { callType: 'task_dispatch' }), /\[InvalidParameter\]/);
 });
 
 test('NativeMessageTransport - 标准 DSH UserMessage 原子装配与摘要截断 (buildNativeUserMessage)', () => {
@@ -68,7 +74,7 @@ test('NativeMessageTransport - 标准 DSH UserMessage 原子装配与摘要截�
     form: 'notice',
     callerSessionId: 'session-master',
     callerTitle: 'Leader',
-    callType: 'task_dispatch',
+    callType: 'task_soft',
     contextPostIds: ['#post-1']
   });
 
@@ -78,7 +84,7 @@ test('NativeMessageTransport - 标准 DSH UserMessage 原子装配与摘要截�
   assert.equal(noticeMsg.content[0].type, 'text');
   assert.equal(noticeMsg.source.kind, 'plugin:dsh-call-session');
   assert.equal(noticeMsg.source.form, 'notice');
-  assert.equal(noticeMsg.source.summary, '[Cross-Session TASK_DISPATCH] from Leader: Execute step A immediately');
+  assert.equal(noticeMsg.source.summary, '[Cross-Session TASK_SOFT] from Leader: Execute step A immediately');
 
   // 2. form: 'session_create' 同级会话初始消息
   const bootstrapMsg = buildNativeUserMessage({
@@ -92,7 +98,7 @@ test('NativeMessageTransport - 标准 DSH UserMessage 原子装配与摘要截�
   assert.equal(bootstrapMsg.source.summary, '[Peer Session Bootstrap] from Creator: Hello new peer worker');
   assert.equal(
     bootstrapMsg.content[0].text,
-    '[From: session-creator-999 (Creator) | CallType: task_dispatch]\n> Context Ref: #post-root\n\nHello new peer worker'
+    '[From: session-creator-999 (Creator) | CallType: task_soft]\n> Context Ref: #post-root\n\nHello new peer worker'
   );
 
   // 2.1 针对空白发件人容错回退至 root-session (Spec 011)
@@ -104,7 +110,7 @@ test('NativeMessageTransport - 标准 DSH UserMessage 原子装配与摘要截�
   });
   assert.equal(
     bootstrapBlankCaller.content[0].text,
-    '[From: root-session (Session) | CallType: task_dispatch]\n\nHello fallback'
+    '[From: root-session (Session) | CallType: task_soft]\n\nHello fallback'
   );
 
   // 3. 超长正文摘要截断至 120 字符
@@ -112,7 +118,8 @@ test('NativeMessageTransport - 标准 DSH UserMessage 原子装配与摘要截�
   const truncatedMsg = buildNativeUserMessage({
     rawMessage: longText,
     form: 'notice',
-    callerTitle: 'Caller'
+    callerTitle: 'Caller',
+    callType: 'notice'
   });
   assert.ok(truncatedMsg.source.summary.length <= 120);
   assert.ok(truncatedMsg.source.summary.endsWith('...'));
@@ -341,7 +348,7 @@ test('NativeMessageTransport - 复合派发：原生通道与因果确权联动 
   const result = await dispatchAndVerifyNativeMessage({
     targetAgent: agent,
     userMessage,
-    callType: 'task_dispatch',
+    callType: 'task_soft',
     waitMs: 500,
     resolveStatus: resolveFromAgent,
     pollIntervalMs: 5
@@ -395,7 +402,7 @@ test('NativeMessageTransport - 复合派发：waitMs=0 返回 delivered 与 unve
   const result = await dispatchAndVerifyNativeMessage({
     targetAgent: agent,
     userMessage,
-    callType: 'task_dispatch',
+    callType: 'task_soft',
     waitMs: 0,
     resolveStatus: resolveFromAgent
   });

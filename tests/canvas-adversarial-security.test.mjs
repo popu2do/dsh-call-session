@@ -103,7 +103,7 @@ test('详情抽屉（CanvasDrawer）只读性与无写入 API', () => {
     {
       kind: 'call',
       id: 'call-adv-02',
-      callType: 'task_dispatch',
+      callType: 'task_soft',
       deliveryMode: 'steer',
       durationMs: 25,
       timestamp: Date.now(),

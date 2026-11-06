@@ -3,8 +3,8 @@
  * 进程内会话单播通信契约与分发逻辑
  */
 
-/** 单播呼叫意图类型：任务派发、任务汇报、状态同步通知 */
-export type CallType = 'task_dispatch' | 'task_report' | 'notice';
+/** 单播呼叫意图类型：单向通知、通知任务、履约任务、任务汇报，取自运行时枚举单一来源 */
+export type CallType = (typeof import('../lib/native-message-transport.mjs').CALL_TYPES)[number];
 
 /** 两态分发模式：运行态 steer 引导，空闲态 followup 唤醒 */
 export type DeliveryMode = 'steer' | 'followup';
@@ -19,15 +19,6 @@ export type DeliveryState = 'delivered' | 'enqueued' | 'failed';
 export type ExecutionState = 'running' | 'pending' | 'crashed' | 'unverified';
 
 /**
- * 呼叫意图类型映射语义常量
- */
-export declare const CALL_TYPE_INTENTS: Readonly<{
-  readonly task_dispatch: 'TASK_DISPATCH';
-  readonly task_report: 'TASK_REPORT';
-  readonly notice: 'NOTICE';
-}>;
-
-/**
  * session_call 工具调用入参
  */
 export interface SessionCallArgs {
@@ -35,7 +26,7 @@ export interface SessionCallArgs {
   target_session_id: string;
   /** 任务指令、汇报或通知内容，最大 4000 字符 */
   message: string;
-  /** 呼叫意图分类：'task_dispatch' | 'task_report' | 'notice'，默认为 'task_dispatch' */
+  /** 呼叫意图分类：'notice' | 'task_soft' | 'task_hard' | 'task_report'，默认为 'task_soft' */
   call_type?: CallType;
   /** 引用的公共黑板条目 ID 列表 */
   context_post_ids?: string[];

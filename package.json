@@ -41,7 +41,8 @@
     "prepare": "node scripts/install-hooks.mjs",
     "prepack": "npm run verify",
     "prepublishOnly": "npm run verify",
-    "build:canvas-geometry": "node scripts/embed-canvas-geometry.mjs"
+    "build:canvas-geometry": "node scripts/embed-canvas-geometry.mjs",
+    "build:canvas-locale": "node scripts/embed-canvas-geometry.mjs"
   },
   "keywords": [
     "dsh",

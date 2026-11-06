@@ -132,12 +132,14 @@
 
 ### 4.4 意图收敛
 
+> **Amend**：`task_dispatch` 已废弃，现役取值为 `notice | task_soft | task_hard | task_report`，见 ADR-0042；本段保留为历史记录。
+
 在系统提示词与工具契约中明确三类调用意图的结束规则：
 
 | 呼叫意图 (`call_type`) | 语义定位 | 交互结束规则 (Convergence Rule) |
 |---|---|---|
 | `task_dispatch` | 任务派发、行动建议或前置请求 | 接收方处理后，仅在需要回传产物或结论时以单次 `task_report` 答复；无需返回结果则不回复。 |
-| `task_report` | 任务结果汇报、产物交付或答复 | 表示当前协作单元已收口。发起方接收后归档，无需回复。 |
+| `task_report` | 任务汇报、产物交付或答复 | 表示当前协作单元已收口。发起方接收后归档，无需回复。 |
 | `notice` | 单向状态通报或客观知悉 | 纯通知属性，阅后即止，接收方不调用 `session_call` 发起回复。 |
 
 ---
@@ -164,6 +166,9 @@
 
 ### 6.1 Automated Verification Suite
 - **网络零调用检查**：单元测试断言 `session_call` 执行过程无 `fetch` 或网络 I/O；
+
+> **Amend**：`task_dispatch` 已废弃，现役取值为 `notice | task_soft | task_hard | task_report`，见 ADR-0042；本段保留为历史记录。
+
 - **报头技术格式检查**：断言目标接收到的首行严格匹配 `^\[From: .+? \(.+?\) \| CallType: (task_dispatch|task_report|notice)\]` 正则；
 - **上下文引用语法检查**：若携带 `context_post_ids`，断言换行追加 `> Context Ref: #...` 引用行；
 - **原始正文无损检查**：断言报头双换行后紧接的内容与入参 `message` 逐字完全相等；

@@ -55,6 +55,9 @@ This design caused severe failures during runtime instability and plugin develop
 **Chosen Option**: Option 3 — Classified Lightweight Handshake + Native 3-State Protocol.
 
 ### 4.1 Core Architectural Principles & Invariants
+
+> **Amend**：`task_dispatch` 已废弃，现役取值为 `notice | task_soft | task_hard | task_report`，见 ADR-0042；本段保留为历史记录。
+
 1. **Classified Wait Contract**: `session_create` and `session_call(task_dispatch)` wait up to 300ms for physical execution confirmation; `task_report` and `notice` return immediately with zero wait.
 2. **Native 3-State Status**: Status resolves to `running`, `idle`, or `error`. When idle, the latest `turn/end` event in `session.events` determines if an error occurred.
 3. **Natural Event-Stream Healing**: If an errored session later completes a normal turn, the new normal event naturally supersedes the error without manual cleanup.

@@ -132,10 +132,11 @@ export function rosterScenarios() {
       sessionIds: currentRosterIds
     }),
     // 下钻工作区：sessionIds 全部不可解析，二级必然为空
+    // 标题刻意不同于路径末段：一级候选只认名册 title 时这条才能把"改回按路径取名"的变异测红
     workspaceItem({
       workspaceId: 'ws-unreachable',
       path: reachablePath,
-      title: 'dsh-agent-cluster',
+      title: '集群工作区',
       sessionIds: ['session-unresolvable-1', 'session-unresolvable-2']
     }),
     // cwd 指向 reachablePath，名册把它放在这里

@@ -4,13 +4,22 @@
  */
 
 export interface CallTypeIntents {
-  readonly task_dispatch: string;
-  readonly task_report: string;
   readonly notice: string;
+  readonly task_soft: string;
+  readonly task_hard: string;
+  readonly task_report: string;
 }
 
-export declare const CALL_TYPE_INTENTS: Readonly<CallTypeIntents>;
+export type CallTypeName = keyof CallTypeIntents;
+
+/** 现役呼叫类型清单；报头意图标记映射是模块内部实现，不对外导出 */
+export declare const CALL_TYPES: readonly CallTypeName[];
+/** 缺省呼叫类型：所有入口（含 session_create）缺省时都用它 */
+export declare const DEFAULT_CALL_TYPE: CallTypeName;
 export declare const DEFAULT_BOOTSTRAP_CALLER_ID: string;
+
+/** 校验呼叫类型；枚举外取值抛 [InvalidParameter]，缺省由调用方补齐 */
+export declare function resolveCallType(callType?: string, context?: string): CallTypeName;
 
 export declare function generateMessageId(): string;
 
@@ -161,7 +170,7 @@ export interface DispatchAndVerifyOptions {
   targetAgent?: any;
   userMessage?: NativeUserMessage;
   message?: NativeUserMessage;
-  callType?: 'task_dispatch' | 'task_report' | 'notice' | string;
+  callType?: 'notice' | 'task_soft' | 'task_hard' | 'task_report' | string;
   waitMs?: number;
   resolveStatus?: (agent: any) => { status: string; error?: unknown };
   pollIntervalMs?: number;

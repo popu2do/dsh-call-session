@@ -13,6 +13,42 @@ export const silentLogger = Object.freeze({
 });
 
 /**
+ * Reproduces the host's acceptance rule for anything handed to `steer` / `followup`.
+ *
+ * The live host splices the payload into the inbox and only later reads
+ * `message.kind`; a bare string or a hand-rolled object therefore survives a
+ * permissive mock and crashes the turn with `Cannot read properties of undefined
+ * (reading 'kind')` (docs/agents/evidence/0020-turn-stopping.md). The real
+ * observable outcome is "the turn keeps going", so this stands in for that
+ * outcome: if it throws, the live turn would have died.
+ *
+ * @param {unknown} message
+ * @returns {unknown}
+ */
+export function assertNativeUserMessage(message) {
+  if (message === null || typeof message !== 'object' || Array.isArray(message)) {
+    throw new TypeError(
+      `native dispatch requires a UserMessage, received ${Array.isArray(message) ? 'array' : typeof message}: ${String(message)}`
+    );
+  }
+  if (typeof message.id !== 'string' || !message.id) {
+    throw new TypeError('native dispatch requires a UserMessage with a non-empty string id');
+  }
+  if (message.role !== 'user') {
+    throw new TypeError(`native dispatch requires role "user", received ${JSON.stringify(message.role)}`);
+  }
+  if (!Array.isArray(message.content) || message.content.length === 0) {
+    throw new TypeError('native dispatch requires a UserMessage with a non-empty content array');
+  }
+  for (const part of message.content) {
+    if (!part || typeof part !== 'object' || part.type !== 'text' || typeof part.text !== 'string') {
+      throw new TypeError('native dispatch requires text content parts');
+    }
+  }
+  return message;
+}
+
+/**
  * Creates a standardized Mock Agent double for testing.
  * Supports both signatures:
  * - createMockAgent(id, options)
@@ -83,12 +119,14 @@ export function createMockAgent(idOrOptions, maybeOptions = {}) {
       return this.session;
     },
     steer: steerFn || ((msg) => {
+      assertNativeUserMessage(msg);
       if (shouldFail) throw new Error('steer dispatch failed');
       if (mutateStatusOnDispatch) agent.status = 'running';
       received.push({ method: 'steer', type: 'steer', msg });
       return Promise.resolve();
     }),
     followup: followupFn || ((msg) => {
+      assertNativeUserMessage(msg);
       if (shouldFail) throw new Error('followup dispatch failed');
       if (mutateStatusOnDispatch) agent.status = 'running';
       received.push({ method: 'followup', type: 'followup', msg });

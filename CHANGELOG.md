@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Summary
+呼叫类型契约与回执义务闭环：四态枚举（ADR-0042）取代旧的 `task_dispatch`，未结任务账本与轮次结束守卫落地。
+
+### Added
+- **呼叫类型四态枚举 (ADR-0042)**：`notice`、`task_soft`、`task_hard`、`task_report` 成为唯一合法取值，工具 JSON Schema 的枚举与运行时 `CALL_TYPES` 数组取自同一来源；报头意图标记映射改为模块私有，对外只暴露该数组。
+- **未结任务账本**：`session_call` 投递 `task_soft` 或 `task_hard` 后，在接收方会话上登记一笔未结项；`task_report` 先把范围收窄到「由本次回执的接收方派发」的条目，再按先进先出结算其中最早的一笔，向 A 回执不会抵掉 B 的账。`session_create` 的初始消息同样入账。看板连线在结算前保持流动脉冲。
+- **轮次结束守卫**：会话回合即将结束时若仍有未结的 `task_hard`，经 `agent.steer` 投递原生 UserMessage 催办；每个回合最多催办三次，`signal.aborted` 的回合直接放行。
+
+### Changed
+- 系统提示词在每步执行前注入未结任务提示，无未结任务时不注入。
+- 呼叫类型在界面与提示词中统一称为 `task_soft` 通知任务（Notify Task）、`task_hard` 履约任务（Obliged Task），取代此前混用的「弹性任务 / 强制任务 / 调度任务」。
+
+### Removed
+- **BREAKING**：`session_call` 不再接受 `task_dispatch`，传入即抛 `[InvalidParameter]`，且不提供别名映射；升级后旧插件与脚本会直接收到参数错误，需迁移到 `task_soft`（建议回执，不拦截轮次）或 `task_hard`（必须回执，未回执时轮次收尾被守卫拦截）。
+
 ## [0.1.11] - 2026-11-03
 
 ### Summary

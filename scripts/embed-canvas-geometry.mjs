@@ -1,10 +1,17 @@
 #!/usr/bin/env node
 /**
  * scripts/embed-canvas-geometry.mjs
- * Deterministically embeds the generated region from lib/canvas-geometry.mjs into lib/client.js
- * Supports:
- *   node scripts/embed-canvas-geometry.mjs           (performs embedding)
- *   node scripts/embed-canvas-geometry.mjs --check   (verifies no drift, exit code 1 if drifted)
+ * 把 lib/client.js 里的两块生成区从源文件落地。
+ *
+ *   1. 几何区：lib/canvas-geometry.mjs -> lib/client.js，标记为「<BEGIN> 生成区」/「<END>」
+ *   2. 本地语区：lib/locales/table.mjs 的呼叫类别段 -> lib/client.js
+ *
+ * 为什么需要第二块：画布是浏览器里的经典脚本，没有模块解析，共享词条只能以源码搬运的
+ * 方式进产物。上一版在产物里留了只有测试沙箱才替换的占位符，真机加载直接
+ * ReferenceError，整个插件注册失败。
+ *
+ *   node scripts/embed-canvas-geometry.mjs          执行搬运
+ *   node scripts/embed-canvas-geometry.mjs --check  只做漂移检查（漂移时退出码 1）
  */
 
 import fs from 'node:fs';
@@ -15,136 +22,155 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const projectRoot = path.resolve(__dirname, '..');
 
-const sourcePath = path.join(projectRoot, 'lib/canvas-geometry.mjs');
 const targetPath = path.join(projectRoot, 'lib/client.js');
 
-const startMarker = '// <BEGIN> lib/canvas-geometry.mjs 生成区，禁止手改';
-const endMarker = '// <END>';
+const regions = [
+  {
+    name: 'Canvas geometry',
+    sourcePath: path.join(projectRoot, 'lib/canvas-geometry.mjs'),
+    buildScript: 'npm run build:canvas-geometry',
+    startMarker: '// <BEGIN> lib/canvas-geometry.mjs 生成区，禁止手改',
+    endMarker: '// <END>',
+    stripExport: false,
+    indent: ''
+  },
+  {
+    name: 'Canvas locale',
+    sourcePath: path.join(projectRoot, 'lib/locales/table.mjs'),
+    buildScript: 'npm run build:canvas-locale',
+    startMarker: '// <BEGIN> lib/locales/table.mjs region, do not edit by hand',
+    // 结束标记用闭合斜杠形态，避免与几何区那行裸 END 混淆。
+    endMarker: '// </BEGIN> lib/locales/table.mjs region',
+    stripExport: true,
+    // 区域嵌在 IIFE 内，整块（含两行标记）统一缩进两格。
+    indent: '  '
+  }
+];
 
 const isCheck = process.argv.includes('--check');
+
+function countOccurrences(content, substring) {
+  return content.split(substring).length - 1;
+}
+
+function locateRegion(content, spec) {
+  const startCount = countOccurrences(content, spec.startMarker);
+  if (startCount !== 1) {
+    throw new Error(`${spec.name}: start marker "${spec.startMarker}" must appear exactly once (found ${startCount})`);
+  }
+  const endCount = countOccurrences(content, spec.endMarker);
+  if (endCount !== 1) {
+    throw new Error(`${spec.name}: end marker "${spec.endMarker}" must appear exactly once (found ${endCount})`);
+  }
+
+  const startIndex = content.indexOf(spec.startMarker);
+  const endIndex = content.indexOf(spec.endMarker);
+  if (startIndex >= endIndex) {
+    throw new Error(`${spec.name}: start marker is after end marker`);
+  }
+
+  // 区域从标记所在行的行首算起，两边都按整行整块搬运。
+  const lineStart = content.lastIndexOf('\n', startIndex) + 1;
+  return {
+    prefix: content.slice(0, lineStart),
+    region: content.slice(lineStart, endIndex + spec.endMarker.length),
+    suffix: content.slice(endIndex + spec.endMarker.length)
+  };
+}
+
+/** 源文件区域的正文行：去标记行、去 export、按产物缩进。 */
+function expectedRegionBody(spec) {
+  const source = fs.readFileSync(spec.sourcePath, 'utf8');
+  const parts = locateRegion(source, spec);
+  const body = parts.region.slice(spec.startMarker.length, parts.region.length - spec.endMarker.length);
+  const lines = body.split('\n');
+  while (lines.length && lines[0].trim() === '') lines.shift();
+  while (lines.length && lines[lines.length - 1].trim() === '') lines.pop();
+  return lines.map(line => (spec.stripExport ? line.replace(/^export\s+/, '') : line));
+}
+
+function expectedRegion(spec) {
+  return [spec.startMarker, ...expectedRegionBody(spec), spec.endMarker]
+    .map(line => (line.length === 0 ? line : spec.indent + line))
+    .join('\n');
+}
 
 function computeUnifiedDiff(actual, expected, fromFile, toFile) {
   const actualLines = actual.split('\n');
   const expectedLines = expected.split('\n');
-  const diffHunks = [];
-  diffHunks.push('--- ' + fromFile);
-  diffHunks.push('+++ ' + toFile);
-
+  const hunks = ['--- ' + fromFile, '+++ ' + toFile];
   let i = 0;
   let j = 0;
   while (i < actualLines.length || j < expectedLines.length) {
     if (i < actualLines.length && j < expectedLines.length && actualLines[i] === expectedLines[j]) {
       i++;
       j++;
-    } else {
-      const startI = Math.max(0, i - 2);
-      const startJ = Math.max(0, j - 2);
-      let diffActual = [];
-      let diffExpected = [];
-      while ((i < actualLines.length || j < expectedLines.length) && (diffActual.length < 20 || diffExpected.length < 20)) {
-        if (i < actualLines.length && j < expectedLines.length && actualLines[i] === expectedLines[j]) {
-          break;
-        }
-        if (i < actualLines.length) {
-          diffActual.push(actualLines[i]);
-          i++;
-        }
-        if (j < expectedLines.length) {
-          diffExpected.push(expectedLines[j]);
-          j++;
-        }
-      }
-      diffHunks.push('@@ -' + (startI + 1) + ',' + diffActual.length + ' +' + (startJ + 1) + ',' + diffExpected.length + ' @@');
-      for (const line of diffActual) diffHunks.push('-' + line);
-      for (const line of diffExpected) diffHunks.push('+' + line);
-      break;
+      continue;
     }
+    const startI = i;
+    const startJ = j;
+    const removed = [];
+    const added = [];
+    while ((i < actualLines.length || j < expectedLines.length) && removed.length < 20 && added.length < 20) {
+      if (i < actualLines.length && j < expectedLines.length && actualLines[i] === expectedLines[j]) break;
+      if (i < actualLines.length) removed.push(actualLines[i++]);
+      if (j < expectedLines.length) added.push(expectedLines[j++]);
+    }
+    hunks.push(`@@ -${startI + 1},${removed.length} +${startJ + 1},${added.length} @@`);
+    for (const line of removed) hunks.push('-' + line);
+    for (const line of added) hunks.push('+' + line);
   }
-  return diffHunks.join('\n');
-}
-
-function countOccurrences(content, substring) {
-  let count = 0;
-  let pos = 0;
-  while ((pos = content.indexOf(substring, pos)) !== -1) {
-    count++;
-    pos += substring.length;
-  }
-  return count;
-}
-
-function extractGeneratedRegion(content, filePath) {
-  const startCount = countOccurrences(content, startMarker);
-  const endCount = countOccurrences(content, endMarker);
-
-  if (startCount === 0) {
-    throw new Error(`Start marker "${startMarker}" not found in ${filePath}`);
-  }
-  if (startCount > 1) {
-    throw new Error(`Duplicate start marker "${startMarker}" (${startCount} occurrences) in ${filePath}`);
-  }
-  if (endCount === 0) {
-    throw new Error(`End marker "${endMarker}" not found in ${filePath}`);
-  }
-  if (endCount > 1) {
-    throw new Error(`Duplicate end marker "${endMarker}" (${endCount} occurrences) in ${filePath}`);
-  }
-
-  const startIndex = content.indexOf(startMarker);
-  const endIndex = content.indexOf(endMarker);
-
-  if (startIndex >= endIndex) {
-    throw new Error(`Invalid markers order in ${filePath}: start marker at ${startIndex} is after end marker at ${endIndex}`);
-  }
-
-  // Extract from startMarker line to endMarker line inclusive
-  const region = content.slice(startIndex, endIndex + endMarker.length);
-  return {
-    prefix: content.slice(0, startIndex),
-    region: region,
-    suffix: content.slice(endIndex + endMarker.length)
-  };
+  return hunks.join('\n');
 }
 
 function run() {
-  if (!fs.existsSync(sourcePath)) {
-    console.error(`Source file not found: ${sourcePath}`);
-    process.exit(1);
+  for (const spec of regions) {
+    if (!fs.existsSync(spec.sourcePath)) {
+      console.error(`Source file not found: ${spec.sourcePath}`);
+      process.exit(1);
+    }
   }
   if (!fs.existsSync(targetPath)) {
     console.error(`Target file not found: ${targetPath}`);
     process.exit(1);
   }
 
-  const sourceContent = fs.readFileSync(sourcePath, 'utf8');
-  const targetContent = fs.readFileSync(targetPath, 'utf8');
+  const original = fs.readFileSync(targetPath, 'utf8');
+  let expectedTargetContent = original;
+  const drifted = [];
 
-  const sourceParts = extractGeneratedRegion(sourceContent, sourcePath);
-  const targetParts = extractGeneratedRegion(targetContent, targetPath);
-
-  const expectedTargetContent = targetParts.prefix + sourceParts.region + targetParts.suffix;
+  for (const spec of regions) {
+    const parts = locateRegion(expectedTargetContent, spec);
+    const expected = expectedRegion(spec);
+    if (parts.region !== expected) {
+      drifted.push({ spec, actual: parts.region, expected });
+      expectedTargetContent = parts.prefix + expected + parts.suffix;
+    }
+  }
 
   if (isCheck) {
-    if (targetParts.region !== sourceParts.region) {
-      console.error('ERROR: Canvas geometry drift detected between lib/canvas-geometry.mjs and lib/client.js!');
-      console.error('Unified diff:');
-      console.error(computeUnifiedDiff(targetParts.region, sourceParts.region, 'lib/client.js', 'lib/canvas-geometry.mjs'));
-      console.error('\nRun "npm run build:canvas-geometry" to sync lib/client.js with lib/canvas-geometry.mjs.');
-      process.exit(1);
-    }
-    console.log('✓ Canvas geometry embed check passed (no drift detected)');
-    process.exit(0);
-  } else {
-    if (targetContent === expectedTargetContent) {
-      console.log('lib/client.js already up-to-date with lib/canvas-geometry.mjs');
+    if (drifted.length === 0) {
+      console.log('✓ Canvas embed check passed (geometry and locale, no drift detected)');
       process.exit(0);
     }
-    const tempPath = targetPath + '.tmp';
-    fs.writeFileSync(tempPath, expectedTargetContent, 'utf8');
-    fs.renameSync(tempPath, targetPath);
-    console.log('Successfully embedded canvas-geometry into lib/client.js (atomic write)');
+    for (const { spec, actual, expected } of drifted) {
+      console.error(`ERROR: ${spec.name} drift detected between ${path.relative(projectRoot, spec.sourcePath)} and lib/client.js!`);
+      console.error('Unified diff:');
+      console.error(computeUnifiedDiff(actual, expected, 'lib/client.js', path.relative(projectRoot, spec.sourcePath)));
+      console.error(`\nRun "${spec.buildScript}" to sync lib/client.js with ${path.relative(projectRoot, spec.sourcePath)}.\n`);
+    }
+    process.exit(1);
+  }
+
+  if (expectedTargetContent === original) {
+    console.log('lib/client.js already up-to-date with generated regions');
     process.exit(0);
   }
+  const tempPath = targetPath + '.tmp';
+  fs.writeFileSync(tempPath, expectedTargetContent, 'utf8');
+  fs.renameSync(tempPath, targetPath);
+  console.log(`Successfully embedded ${drifted.map(d => d.spec.name).join(' and ')} into lib/client.js (atomic write)`);
+  process.exit(0);
 }
 
 try {

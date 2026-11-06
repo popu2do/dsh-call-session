@@ -58,7 +58,7 @@ test('真机账本回放: 真实物理崩溃事件流推导为 error 且分类�
   assert.ok(statusRes.error.message.includes('prompt variable "{{model}}"'), '错误信息必须包含缺失变量名');
 });
 
-test('真机账本回放: 向真实崩溃会话发起 task_dispatch 触发前置健康阻断', async () => {
+test('真机账本回放: 向真实崩溃会话发起 task_soft 触发前置健康阻断', async () => {
   const events = loadRealOrFallbackEvents();
   const caller = createMockAgent('caller-replay');
 
@@ -91,7 +91,7 @@ test('真机账本回放: 向真实崩溃会话发起 task_dispatch 触发前置
     args: {
       target_session_id: realAgentMock.id,
       message: '测试向真实故障会话发指令',
-      call_type: 'task_dispatch',
+      call_type: 'task_soft',
       wait_ms: 500
     },
     exec: { agent: caller }

@@ -8,6 +8,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, '..');
 
 import { loadClientBundle, loadClientInSandbox, readClientSource, findVNodes, findNodeById, createCanvasRuntime, createStatelessMockReact, standardCanvasTelemetry, wideCanvasTelemetry } from './helpers/canvas-harness.mjs';
+import { CALL_TYPES } from '../lib/native-message-transport.mjs';
+import { CALL_TYPE_I18N_KEYS, CALL_TYPE_UNKNOWN_KEY } from '../lib/locales/table.mjs';
 
 test('Client Package Configuration: package.json exports and dsh.client specification', () => {
   const pkgPath = path.join(rootDir, 'package.json');
@@ -289,7 +291,7 @@ test('L3 Read-Only Inspector Drawer: Read-only integrity', () => {
     entity: {
       kind: 'call',
       id: 'call-999',
-      callType: 'task_dispatch',
+      callType: 'task_soft',
       deliveryMode: 'followup',
       durationMs: 38,
       timestamp: Date.now(),
@@ -419,7 +421,7 @@ test('Drawer Mutation Resistance: Element Traversal and Mutation Action Check', 
     {
       kind: 'call',
       id: 'call-001',
-      callType: 'task_dispatch',
+      callType: 'task_soft',
       deliveryMode: 'steer',
       durationMs: 42,
       timestamp: Date.now(),
@@ -767,7 +769,7 @@ test('Three Relationship Edge Classes: Edge generation and boundary tolerance (m
         id: 'call-valid-with-ctx',
         callerSessionId: 's1',
         targetSessionId: 's2',
-        callType: 'task_dispatch',
+        callType: 'task_soft',
         contextPostIds: ['post-valid'],
         timestamp: Date.now() - 5000,
         status: 'active'
@@ -796,7 +798,7 @@ test('Three Relationship Edge Classes: Edge generation and boundary tolerance (m
         id: 'call-orphan-caller',
         callerSessionId: 'session-ghost-caller',
         targetSessionId: 's2',
-        callType: 'task_dispatch',
+        callType: 'task_soft',
         contextPostIds: ['post-valid'],
         timestamp: Date.now() - 5000,
         status: 'active'
@@ -805,7 +807,7 @@ test('Three Relationship Edge Classes: Edge generation and boundary tolerance (m
         id: 'call-orphan-target',
         callerSessionId: 's1',
         targetSessionId: 'session-ghost-target',
-        callType: 'task_dispatch',
+        callType: 'task_soft',
         contextPostIds: ['post-valid'],
         timestamp: Date.now() - 5000,
         status: 'active'
@@ -876,7 +878,7 @@ test('Three Relationship Edge Classes: Edge generation and boundary tolerance (m
   const callG = validCallNodes[0];
   const strokePath = callG.children[1];
   assert.ok(strokePath.props.d.startsWith('M '), '调用边必须包含路径点');
-  assert.equal(strokePath.props.markerEnd, 'url(#dsh-arrow-dispatch)');
+  assert.equal(strokePath.props.markerEnd, 'url(#dsh-arrow-soft)');
 });
 
 test('Text Truncation by Rendered Width: Chinese, English, and mixed inputs (PRD 5.4)', () => {
@@ -1446,7 +1448,7 @@ test('协作看板缺陷回归验证：session.offline 端到端消费、抽屉�
       targetSessionId: 'session-c2-87654321',
       callerOffline: true,
       targetOffline: false,
-      callType: 'task_dispatch',
+      callType: 'task_soft',
       deliveryMode: 'steer',
       durationMs: 120
     },
@@ -1984,7 +1986,7 @@ test('Topology Relationship Edges Contrast & WCAG 2.1 Compliance (PRD §3.1, §4
         id: 'call-1',
         callerSessionId: 'session-call-src',
         targetSessionId: 'session-call-dst',
-        callType: 'task_dispatch',
+        callType: 'task_soft',
         deliveryMode: 'steer',
         durationMs: 120,
         timestamp: Date.now(),
@@ -2837,7 +2839,7 @@ test('ADR-0019 常态按需显影与历史调用连线抑制测试', () => {
     posts: [],
     calls: [
       // 状态 active 的新鲜调用 (5s 内)：常态下必须渲染
-      { id: 'call-fresh', callerSessionId: 's1', targetSessionId: 's2', callType: 'task_dispatch', timestamp: now - 5000, status: 'active' },
+      { id: 'call-fresh', callerSessionId: 's1', targetSessionId: 's2', callType: 'task_soft', timestamp: now - 5000, status: 'active' },
       // 已结算调用：常态下返回 null，避免连线冗余
       { id: 'call-settled', callerSessionId: 's1', targetSessionId: 's2', callType: 'task_report', timestamp: now - 3000, status: 'settled' },
       // 历史过期调用 (>15s)：常态下必须完全抑制（返回 null）
@@ -2883,7 +2885,7 @@ test('ADR-0019 & Task t5 反向调用链路与动效不变式全量验收: 目�
     posts: [],
     calls: [
       // 活跃新鲜调用 (<= 15s)
-      { id: 'call-fresh', callerSessionId: 's1', targetSessionId: 's2', callType: 'task_dispatch', timestamp: now - 3000, status: 'active' },
+      { id: 'call-fresh', callerSessionId: 's1', targetSessionId: 's2', callType: 'task_soft', timestamp: now - 3000, status: 'active' },
       // 已结算调用 (settled)
       { id: 'call-settled', callerSessionId: 's1', targetSessionId: 's2', callType: 'task_report', timestamp: now - 5000, status: 'settled' },
       // 历史过期调用 (> 15s)
@@ -3473,7 +3475,7 @@ test('ADR-0026 顶栏精简、紧凑指标与双态连线模式切换验证', ()
         id: 'call-settled-1',
         callerSessionId: 'session-s1',
         targetSessionId: 'session-s2',
-        callType: 'task_dispatch',
+        callType: 'task_soft',
         status: 'settled',
         timestamp: Date.now() - 30000
       }
@@ -3663,4 +3665,113 @@ test('Zero-Dead-Code: Canvas dictionaries must have zero unused i18n keys and sy
 
 
 
+
+
+test('11. Canvas labels never leak a raw call type enum to the user', () => {
+  // A historical record may carry a type this build does not know (an old session
+  // replayed from disk). Its label must be a localised string — never the raw enum,
+  // and never the soft-task label, which would invent an obligation.
+  const plugin = loadClientBundle();
+  for (const locale of ['zh', 'en']) {
+    const t = (key) => plugin[locale][key];
+    for (const type of CALL_TYPES) {
+      const label = plugin.callTypeLabel(type, t);
+      assert.notEqual(label, type, `${locale}: ${type} must not render as its raw enum`);
+    }
+    const unknown = plugin.callTypeLabel('task_dispatch', t);
+    assert.equal(unknown, plugin[locale]['call.unknown']);
+    assert.notEqual(unknown, plugin[locale]['call.soft'], `${locale}: an unknown type must not read as a soft task`);
+    assert.notEqual(unknown, 'task_dispatch');
+  }
+});
+
+test('12. A mixed fixture keeps unsettled obligations flowing and decays settled ones', () => {
+  // 同一个看板里同时放四类调用：硬性任务未结、软任务未结、已结项、只是一条通知。
+  // 未结的义务必须在画布上保持满不透明与流动虚线，结项后按历史连线淡化。
+  const now = Date.now();
+  const base = {
+    callerSessionId: 's1',
+    targetSessionId: 's2',
+    callerTitle: 'Session 1',
+    targetTitle: 'Session 2',
+    timestamp: now - 1000
+  };
+  const telemetry = {
+    currentWorkspace: '/ws/main',
+    workspaces: [{ id: '/ws/main', name: 'main', isCurrent: true, sessionIds: ['s1', 's2'] }],
+    sessions: [
+      { id: 's1', workspace: '/ws/main', status: 'running', title: 'Session 1' },
+      { id: 's2', workspace: '/ws/main', status: 'idle', title: 'Session 2' }
+    ],
+    posts: [],
+    calls: [
+      { ...base, id: 'call-hard-open', callType: 'task_hard', status: 'active' },
+      { ...base, id: 'call-soft-open', callType: 'task_soft', status: 'active' },
+      { ...base, id: 'call-hard-settled', callType: 'task_hard', status: 'settled' },
+      { ...base, id: 'call-notice', callType: 'notice', status: 'active' }
+    ]
+  };
+
+  // minimal 常态会抑制已结项连线，用 full 模式把四类同时摆出来比较
+  const { view } = createTestCanvasHarness(telemetry, null, 'full');
+  const edges = findNodeById(view, 'dsh-canvas-call-edges').children.filter(Boolean);
+  const edgeOf = (id) => {
+    const group = edges.find((e) => e.props && e.props.key === id);
+    assert.ok(group, `edge ${id} must be rendered`);
+    return group.children.filter(Boolean).find((n) => n && n.props && n.props.markerEnd);
+  };
+
+  // 1. 未结的履约任务：满不透明、流动虚线、琥珀色箭头
+  const hardOpen = edgeOf('call-hard-open').props;
+  assert.equal(hardOpen.opacity, 1.0, 'an unsettled hard task keeps full opacity');
+  assert.equal(hardOpen.strokeDasharray, '6 4', 'an unsettled obligation keeps the flowing dash');
+  assert.equal(hardOpen.markerEnd, 'url(#dsh-arrow-hard)', 'task_hard has its own arrow marker');
+  assert.notEqual(hardOpen.stroke, edgeOf('call-soft-open').props.stroke, 'task_hard is coloured apart from task_soft');
+
+  // 2. 未结的软任务与硬任务同样保留
+  const softOpen = edgeOf('call-soft-open').props;
+  assert.equal(softOpen.opacity, 1.0, 'an unsettled soft task keeps full opacity');
+  assert.equal(softOpen.markerEnd, 'url(#dsh-arrow-soft)');
+
+  // 3. 结项后按历史连线淡化
+  const hardSettled = edgeOf('call-hard-settled').props;
+  assert.equal(hardSettled.opacity, 0.3, 'a settled obligation decays like a historical call');
+  assert.equal(hardSettled.strokeDasharray, '4 4', 'a settled obligation stops flowing');
+
+  // 4. 通知保留自己的箭头，颜色与三类任务都不相同
+  const notice = edgeOf('call-notice').props;
+  assert.equal(notice.markerEnd, 'url(#dsh-arrow-notice)');
+  assert.ok(new Set([hardOpen.stroke, softOpen.stroke, notice.stroke]).size >= 2);
+
+  // 5. 四类在抽屉里都有本地化标签，且都不等于裸枚举
+  const plugin = loadClientBundle();
+  for (const type of ['task_soft', 'task_hard', 'task_report', 'notice']) {
+    for (const locale of ['zh', 'en']) {
+      const label = plugin.callTypeLabel(type, (k) => plugin[locale][k]);
+      assert.ok(label && label !== type, `${locale} must label ${type}`);
+    }
+  }
+});
+
+test('13. Every backend call type has a localised label in both client dictionaries', () => {
+  // 词条键有唯一来源：枚举新增一种类别时，只要它没进共享表，这条断言先红。
+  const backendTypes = CALL_TYPES;
+  assert.deepEqual(
+    Object.keys(CALL_TYPE_I18N_KEYS).sort(),
+    [...backendTypes].sort(),
+    'the shared locale table must cover exactly the backend call types'
+  );
+
+  const plugin = loadClientBundle();
+  for (const locale of ['zh', 'en']) {
+    for (const type of backendTypes) {
+      const label = plugin.callTypeLabel(type, (key) => plugin[locale][key]);
+      assert.ok(label, `${locale} must label ${type}`);
+      assert.notEqual(label, type, `${locale}: ${type} must not fall back to the raw enum`);
+    }
+    // 回放来的旧记录也要有词条，且不能借用某一类既定义务的文案。
+    assert.ok(plugin[locale]['call.' + CALL_TYPE_UNKNOWN_KEY], `${locale} must label the unknown call type`);
+    assert.notEqual(plugin[locale]['call.' + CALL_TYPE_UNKNOWN_KEY], plugin[locale]['call.soft']);
+  }
+});
 

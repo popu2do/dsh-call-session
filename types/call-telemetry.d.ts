@@ -4,7 +4,16 @@
  */
 
 /** 单播呼叫意图分类 */
-export type CanvasCallType = 'task_dispatch' | 'task_report' | 'notice';
+export type CanvasCallType = 'notice' | 'task_soft' | 'task_hard' | 'task_report';
+
+export interface PendingTaskRecord {
+  callId: string;
+  callerSessionId: string;
+  callerTitle: string;
+  targetSessionId: string;
+  callType: 'task_soft' | 'task_hard';
+  timestamp: number;
+}
 
 /** 原生交付模式 */
 export type CanvasDeliveryMode = 'steer' | 'followup';
@@ -102,6 +111,12 @@ export declare class CallTelemetryRingBuffer {
   }): CallTelemetryRecord;
   /** 查询调用连线记录 */
   query(filter?: CallTelemetryFilter): CallTelemetryRecord[];
+  /**
+   * 查询落在指定会话身上的未结履约任务（义务由收件方承担）
+   * @param sessionId 会话 ID，不区分大小写
+   */
+  getPendingTasksForSession(sessionId: string): PendingTaskRecord[];
+
   /** 级联落定指定会话的调用连线 */
   settleSession(sessionId: string): number;
   /** 会话注销级联清理 */

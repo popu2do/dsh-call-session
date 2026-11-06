@@ -118,7 +118,7 @@ test('CallTelemetryRingBuffer: 记录元数据清洗与摘要截断 (<= 120 字�
 
   assert.ok(rec.id.startsWith('call-'));
   assert.equal(rec.status, 'active');
-  assert.equal(rec.callType, 'task_dispatch');
+  assert.equal(rec.callType, 'task_soft');
   assert.equal(rec.deliveryMode, 'followup');
   assert.ok(rec.messageSnippet.length <= 120);
   assert.ok(rec.messageSnippet.endsWith('...'));
@@ -219,7 +219,7 @@ test('session_call 端到端集成：执行单播时自动记录调用轨迹快�
     args: {
       target_session_id: 'target-node-202',
       message: 'Deploy microservice v2',
-      call_type: 'task_dispatch',
+      call_type: 'task_soft',
       context_post_ids: ['post-100', 'post-101']
     },
     exec
@@ -235,7 +235,7 @@ test('session_call 端到端集成：执行单播时自动记录调用轨迹快�
   assert.equal(record.targetSessionId, 'target-node-202');
   assert.equal(record.callerTitle, 'Captain');
   assert.equal(record.targetTitle, 'Worker');
-  assert.equal(record.callType, 'task_dispatch');
+  assert.equal(record.callType, 'task_soft');
   assert.equal(record.deliveryMode, 'steer');
   assert.deepEqual(record.contextPostIds, ['post-100', 'post-101']);
   assert.equal(record.messagePayload, 'Deploy microservice v2');
@@ -256,7 +256,7 @@ test('session_call 记录调用时按顶层判据落存端点来源 (ADR-0013 §
 
   await executeSessionCall({
     ctx,
-    args: { target_session_id: 'target-worker', message: 'ping', call_type: 'task_dispatch' },
+    args: { target_session_id: 'target-worker', message: 'ping', call_type: 'task_soft' },
     exec: { agent: caller }
   });
 
@@ -429,7 +429,7 @@ test('CallTelemetryRingBuffer: 异常参数处理与 query 过滤组合', () => 
   const emptyRec = buffer.record({});
   assert.equal(emptyRec.callerSessionId, 'unknown-caller');
   assert.equal(emptyRec.targetSessionId, 'unknown-target');
-  assert.equal(emptyRec.callType, 'task_dispatch');
+  assert.equal(emptyRec.callType, 'task_soft');
   assert.equal(emptyRec.deliveryMode, 'followup');
   assert.equal(emptyRec.messageSnippet, '');
   assert.equal(emptyRec.messagePayload, '');
@@ -514,7 +514,7 @@ test('session_call: 调用连线写入异常隔离', async () => {
     args: {
       target_session_id: 'target-node-safe',
       message: 'Critical production instruction',
-      call_type: 'task_dispatch'
+      call_type: 'task_soft'
     },
     exec
   });

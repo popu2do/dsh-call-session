@@ -21,6 +21,9 @@ import {
   en
 } from '../lib/locales/index.mjs';
 import { formatAuthorReminderText } from '../lib/board-store.mjs';
+import { CALL_TYPES } from '../lib/native-message-transport.mjs';
+import { CALL_TYPE_I18N_KEYS, CALL_TYPE_UNKNOWN_KEY } from '../lib/locales/table.mjs';
+import { loadClientBundle } from './helpers/canvas-harness.mjs';
 
 function createMockHarness(initialSettings = null) {
   const tools = new Map();
@@ -88,6 +91,36 @@ test('ADR-0023: Catalog 拓扑完全对称与中英文键对齐验证', () => {
     const enParams = Object.keys(enTool.parameters || {}).sort();
     assert.deepEqual(zhParams, enParams, `${toolName} 入参描述字段中英文必须完全一致`);
   }
+});
+
+test('ADR-0042: 四类呼叫意图在双端词典里都有本地化标签且不泄露裸枚举', () => {
+  // 后端枚举是唯一真源：前端词条缺任何一个类别，这里先红。
+  const backendTypes = [...CALL_TYPES].sort();
+  assert.deepEqual(Object.keys(CALL_TYPE_I18N_KEYS).sort(), backendTypes, '呼叫类别词条表必须与后端枚举完全一致');
+
+  // 画布侧词典来自插件客户端的 zh/en 两份，键集必须与后端枚举一一对应
+  const canvasPlugin = loadClientBundle();
+
+  for (const callType of backendTypes) {
+    const labelKey = CALL_TYPE_I18N_KEYS[callType];
+    for (const locale of ['zh', 'en']) {
+      const label = canvasPlugin[locale]['call.' + labelKey];
+      assert.ok(label, `${locale} 必须为 ${callType} 提供词条 call.${labelKey}`);
+      assert.notEqual(label, callType, `${locale}: ${callType} 不得直接显示裸枚举`);
+    }
+    assert.notEqual(
+      canvasPlugin.zh['call.' + labelKey],
+      canvasPlugin.en['call.' + labelKey],
+      `${callType} 的中英文案必须各自本地化`
+    );
+  }
+
+  // 旧记录里回放出来的未知类别要有兜底文案，且不能借用任务类别的措辞
+  assert.ok(
+    canvasPlugin.zh['call.' + CALL_TYPE_UNKNOWN_KEY] && canvasPlugin.en['call.' + CALL_TYPE_UNKNOWN_KEY],
+    '未知类别必须中英都有兜底文案'
+  );
+  assert.notEqual(canvasPlugin.zh['call.' + CALL_TYPE_UNKNOWN_KEY], canvasPlugin.zh['call.soft']);
 });
 
 test('ADR-0023: session_call 目标 ID 入参描述声明规范形态与裸 uuid 等价', () => {
@@ -322,19 +355,19 @@ test('ADR-0023: 原生工具执行摘要与双层渲染中英双语输出验证'
   const enMessages = en.messages;
 
   // sessionCallSuccess
-  const callZhDispatch = zhMessages.sessionCallSuccess('s2', 'followup', 'task_dispatch', 'running', 'delivered');
+  const callZhDispatch = zhMessages.sessionCallSuccess('s2', 'followup', 'task_soft', 'running', 'delivered');
   assert.ok(callZhDispatch.includes('已派发任务等待目标回传，无需重复轮询'));
-  const callZhPending = zhMessages.sessionCallSuccess('s2', 'followup', 'task_dispatch', 'pending', 'enqueued');
+  const callZhPending = zhMessages.sessionCallSuccess('s2', 'followup', 'task_soft', 'pending', 'enqueued');
   assert.ok(callZhPending.includes('已入信箱等待调度'));
   const callZhReport = zhMessages.sessionCallSuccess('s2', 'followup', 'task_report', 'running', 'delivered');
-  assert.ok(callZhReport.includes('已完成收口汇报，无需回复'));
+  assert.ok(callZhReport.includes('已完成任务汇报，无需回复'));
   const callZhNotice = zhMessages.sessionCallSuccess('s2', 'followup', 'notice', 'running', 'delivered');
   assert.ok(callZhNotice.includes('单向通报阅后即止，无需回复'));
 
-  const callEnDispatch = enMessages.sessionCallSuccess('s2', 'followup', 'task_dispatch', 'running', 'delivered');
+  const callEnDispatch = enMessages.sessionCallSuccess('s2', 'followup', 'task_soft', 'running', 'delivered');
   assert.ok(callEnDispatch.includes('task dispatched, await target task_report, no polling needed'));
   assert.ok(!/[\u4e00-\u9fa5]/.test(callEnDispatch));
-  const callEnPending = enMessages.sessionCallSuccess('s2', 'followup', 'task_dispatch', 'pending', 'enqueued');
+  const callEnPending = enMessages.sessionCallSuccess('s2', 'followup', 'task_soft', 'pending', 'enqueued');
   assert.ok(callEnPending.includes('task enqueued awaiting execution'));
   assert.ok(!/[\u4e00-\u9fa5]/.test(callEnPending));
   const callEnReport = enMessages.sessionCallSuccess('s2', 'followup', 'task_report', 'running', 'delivered');
