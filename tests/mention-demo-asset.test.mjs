@@ -147,6 +147,7 @@ test('mention figure structure: Level 1 is a workspace section and Level 2 is a 
 
     // 一级：section 名为 工作区 / Workspaces，只装工作区条目，每条带 drill 箭头。
     // 两个菜单在同一个文档里，行数按各自的 section 块切分来数。
+    // 两个菜单在同一个文档里，行数按各自的 section 块切分来数。
     const level1Html = html.split('level-head">')[1] || '';
     const level2Html = html.split('level-head">')[2] || '';
 
@@ -175,7 +176,7 @@ test('mention figure structure: Level 1 is a workspace section and Level 2 is a 
       figure.locale + ' figure Level 1 must never carry a session row (contract: level-1 rows)'
     );
 
-    // 二级：section 名为 对话 / Sessions，只装会话条目
+    // 二级：section 名为「对话」时的面板标题，只装会话条目
     assert.equal(
       model.level2.section,
       figure.locale === 'zh' ? '对话' : 'Sessions',
