@@ -112,7 +112,7 @@ export declare class CallTelemetryRingBuffer {
   /** 查询调用连线记录 */
   query(filter?: CallTelemetryFilter): CallTelemetryRecord[];
   /**
-   * 查询落在指定会话身上的未结强制任务（义务由收件方承担，发起方也持同一项）
+   * 查询落在指定会话身上的未结履约任务（义务由收件方承担）
    * @param sessionId 会话 ID，不区分大小写
    */
   getPendingTasksForSession(sessionId: string): PendingTaskRecord[];

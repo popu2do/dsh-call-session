@@ -1,6 +1,6 @@
 /**
  * @module dsh-call-session/turn-stopping-guard
- * 轮次收尾守卫：会话带着未结强制任务即将转 idle 时，投递一条原生催办消息把回合顶回去
+ * 轮次收尾守卫：会话带着未结履约任务即将转 idle 时，投递一条原生催办消息把回合顶回去
  */
 
 export declare const MAX_REPORT_REMINDERS: number;

@@ -33,7 +33,7 @@ ADR Writing Guidelines (writing-for-agents):
 
 ## 驱动
 
-- **类型语义正交**：彻底分离单向知悉、弹性任务、强制任务与结果闭环，杜绝歧义。
+- **类型语义正交**：彻底分离单向知悉、通知任务、履约任务与结果闭环，杜绝歧义。
 - **确定性闭环契约**：单任务单汇报（1:1 FIFO），以最小心智负担保障职责清晰与账本自愈。
 - **零侵入上下文提醒**：复用原生 `systemPrompt.context`（如 `task:remind`），在每步推理前让智能体保持义务上下文，杜绝提示词硬编码。
 - **强屏障防丢单**：对 `task_hard` 施加轮次停机拦截，未履约前强制追问，并在预算耗尽后优雅兜底。
@@ -64,8 +64,8 @@ ADR Writing Guidelines (writing-for-agents):
 
 `session_call` 入参 `call_type` 严格限定为四态：
 - `notice`：单向状态通报，纯通知属性，无汇报义务，接收方无需回复。
-- `task_soft`：弹性任务。派发建议、前置准备或轻量任务，接收方通过单次 `task_report` 结算；每步前获得上下文提示，但不强制拦截停机。
-- `task_hard`：强制任务。派发具有明确汇报义务的硬性任务，接收方若在未交付 `task_report` 的情况下尝试结束轮次，将被停机守卫拦截。
+- `task_soft`：通知任务。派发建议、前置准备或轻量任务，接收方应通过单次 `task_report` 结算；每步前获得上下文提示，但轮次结束不被拦截。
+- `task_hard`：履约任务。派发必须回执的任务，接收方若在未交付 `task_report` 的情况下尝试结束轮次，将被停机守卫拦截。
 - `task_report`：任务成果汇报。严格按 FIFO 闭环未结任务队列中的首个匹配项，接收方归档，无需回复。
 
 任何传入 `task_dispatch` 的调用均被参数校验拦截，抛出 `[InvalidParameter] session_call: task_dispatch is deprecated. Use notice, task_soft, task_hard, or task_report.`
@@ -75,8 +75,8 @@ ADR Writing Guidelines (writing-for-agents):
 ### 账本
 
 调用内存环形缓冲区（CallTelemetryRingBuffer）维护会话维度的内存未结任务账本 `_pendingTasks`：
-1. **入队记录**：当单播调用类型为 `task_soft` 或 `task_hard` 且投递成功时（`session_create` 携带初始消息并成功投递也按同一规则入队，两种入口共用一本账），记录包含 `taskId`、`callerSessionId`、`targetSessionId`、`callType`、`contentSnippet`、`timestamp` 与 `isHard` 的任务项。
-2. **先进先出结算**：当接收方调用 `session_call` 且类型为 `task_report` 时，从该会话作为目标的所有未结任务中查找最先派发的一项（严格全局 FIFO，不按发件人分桶，早到的软任务不会被后来的硬任务插队饿死），将其标记为 `settled` 并记入结算时间与汇报编号；找不到匹配项时不报错，只在账本上留下一条未匹配记录。
+1. **入队记录**：当单播调用类型为 `task_soft` 或 `task_hard` 且投递成功时（`session_create` 携带初始消息并成功投递也按同一规则入队，两种入口共用一本账），任务项只记录定位与判别所需的最小字段：呼叫编号 `callId`、发件方 `callerSessionId` 与其显示标题 `callerTitle`、接收方 `targetSessionId`、`callType` 与入队时刻 `timestamp`。是否硬任务由 `callType` 判定，正文留在环形缓冲区的原始呼叫记录里，不复制进账本。
+2. **先进先出结算**：当接收方调用 `session_call` 且类型为 `task_report` 时，先按「发件方 = 本次回执的接收方」筛出该回执有权结清的未结任务，再从这批里取最先派发的一项，并把环形缓冲区里对应呼叫的状态标记为 `settled`（结算时间与汇报编号不单独落盘，回执本身就是那条呼叫记录）。结项在同一发件方范围内严格先进先出，早到的软任务不会被后来的硬任务插队饿死；跨发件方互不抵消，向 A 回执不结 B 的账。找不到匹配项时不报错，只在账本上留下一条未匹配记录。
 3. **义务归属**：义务只落在接收方身上，只有接收方会被要求回执；发件方只是在等结果，不会因为没有收到回执而被拦下。
 4. **会话级联清理**：当会话归档或销毁时，自动从账本中移除以该会话为发件人或接收人的未结项，杜绝内存泄漏。
 
