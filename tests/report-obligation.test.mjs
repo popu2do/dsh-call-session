@@ -8,7 +8,7 @@ import {
   CallTelemetryRingBuffer,
   formatPendingTaskReminderText
 } from '../lib/call-telemetry.mjs';
-import { CALL_TYPE_INTENTS, CALL_TYPES, buildNativeUserMessage, buildTransportPayload } from '../lib/native-message-transport.mjs';
+import { CALL_TYPES, buildNativeUserMessage, buildTransportPayload } from '../lib/native-message-transport.mjs';
 import { executeSessionCall } from '../lib/session-call.mjs';
 import { buildToolDefinitions } from '../lib/tools-registry.mjs';
 import { apply, runtimeSelfCheck } from '../index.mjs';
@@ -63,9 +63,9 @@ function createMockContext() {
 }
 
 test('1. Transport & Schema: call_type accepts notice, task_soft, task_hard, task_report; rejects task_dispatch', async () => {
-  // CALL_TYPE_INTENTS check
-  assert.deepEqual(Object.keys(CALL_TYPE_INTENTS).sort(), ['notice', 'task_hard', 'task_report', 'task_soft'].sort());
-  assert.equal(CALL_TYPE_INTENTS.task_dispatch, undefined, 'task_dispatch must be removed');
+  // 枚举单一来源，且已退役的 task_dispatch 不在其中
+  assert.deepEqual([...CALL_TYPES].sort(), ['notice', 'task_hard', 'task_report', 'task_soft'].sort());
+  assert.ok(!CALL_TYPES.includes('task_dispatch'), 'task_dispatch must be removed');
 
   // 缺省沿用 task_soft（spec 0020 默认值）；枚举外的取值一律参数错误，绝不静默降级
   assert.match(
@@ -87,8 +87,8 @@ test('1. Transport & Schema: call_type accepts notice, task_soft, task_hard, tas
   // 工具 Schema 的枚举直接取自运行时单一来源，新增类型不会只落一半
   assert.deepEqual(
     [...callTypeSchema.enum].sort(),
-    [...Object.keys(CALL_TYPE_INTENTS)].sort(),
-    'the tool schema enum must be derived from CALL_TYPE_INTENTS'
+    [...CALL_TYPES].sort(),
+    'the tool schema enum must be derived from CALL_TYPES'
   );
 
   // executeSessionCall rejects task_dispatch

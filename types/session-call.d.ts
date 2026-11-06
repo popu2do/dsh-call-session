@@ -19,16 +19,6 @@ export type DeliveryState = 'delivered' | 'enqueued' | 'failed';
 export type ExecutionState = 'running' | 'pending' | 'crashed' | 'unverified';
 
 /**
- * 呼叫意图类型映射语义常量
- */
-export declare const CALL_TYPE_INTENTS: Readonly<{
-  readonly notice: 'NOTICE';
-  readonly task_soft: 'TASK_SOFT';
-  readonly task_hard: 'TASK_HARD';
-  readonly task_report: 'TASK_REPORT';
-}>;
-
-/**
  * session_call 工具调用入参
  */
 export interface SessionCallArgs {

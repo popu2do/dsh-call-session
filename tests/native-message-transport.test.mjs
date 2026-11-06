@@ -11,7 +11,7 @@ import {
   checkCausalRunningFinal,
   waitForCausalExecution,
   dispatchAndVerifyNativeMessage,
-  CALL_TYPE_INTENTS
+  CALL_TYPES
 } from '../lib/native-message-transport.mjs';
 
 test('NativeMessageTransport - 消息标识生成与意图常量导出', () => {
@@ -21,10 +21,10 @@ test('NativeMessageTransport - 消息标识生成与意图常量导出', () => {
   assert.ok(typeof id2 === 'string' && id2.length > 0);
   assert.notEqual(id1, id2);
 
-  assert.equal(CALL_TYPE_INTENTS.task_soft, 'TASK_SOFT');
-  assert.equal(CALL_TYPE_INTENTS.task_hard, 'TASK_HARD');
-  assert.equal(CALL_TYPE_INTENTS.task_report, 'TASK_REPORT');
-  assert.equal(CALL_TYPE_INTENTS.notice, 'NOTICE');
+  // 意图常量是模块私有的实现细节，从消息上观察它的效果
+  const summary = buildNativeUserMessage({ rawMessage: 'intent probe', callType: 'task_hard', callerSessionId: 'session-x', callerTitle: 'X' });
+  assert.match(summary.source.summary, /^\[Cross-Session TASK_HARD\] from X/);
+  assert.deepEqual([...CALL_TYPES], ['notice', 'task_soft', 'task_hard', 'task_report']);
 });
 
 test('NativeMessageTransport - 上下文黑板条目引用清洗与去重 (sanitizeContextPostIds)', () => {

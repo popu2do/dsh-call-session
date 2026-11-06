@@ -39,7 +39,6 @@ import {
 } from './workspace.js';
 
 import {
-  CALL_TYPE_INTENTS,
   dispatchNativeMessage,
   executeSessionCall,
   buildTransportPayload,
@@ -120,7 +119,7 @@ export declare const inject: readonly ['agents', 'tools', 'systemPrompt'];
 /** 声明式提供服务清单 */
 export declare const provide: readonly ['callTelemetry', 'boardStore'];
 
-/** 现役呼叫类型清单，与 CALL_TYPE_INTENTS 同源 */
+/** 现役呼叫类型清单（唯一对外枚举；报头意图映射不导出） */
 export declare const CALL_TYPES: readonly CallTypeName[];
 
 /** 缺省呼叫类型，所有入口缺省时使用 */
@@ -230,7 +229,6 @@ export {
   executeSessionQuery,
   executeSessionCall,
   dispatchNativeMessage,
-  CALL_TYPE_INTENTS,
   buildTransportPayload,
   PeerSessionFactory,
   executeSessionCreate,

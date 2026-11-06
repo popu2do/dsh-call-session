@@ -143,11 +143,11 @@ test('Parity: Byte-level generated region identity between canvas-geometry and c
   const endMarker = '// <END>';
 
   const geomStart = geomSource.indexOf(startMarker);
-  const geomEnd = geomSource.indexOf(endMarker);
+  const geomEnd = geomSource.indexOf(endMarker, geomStart);
   const geomRegion = geomSource.slice(geomStart, geomEnd + endMarker.length);
 
   const clientStart = clientSource.indexOf(startMarker);
-  const clientEnd = clientSource.indexOf(endMarker);
+  const clientEnd = clientSource.indexOf(endMarker, clientStart);
   const clientRegion = clientSource.slice(clientStart, clientEnd + endMarker.length);
 
   assert.equal(geomRegion, clientRegion, 'Generated region must be byte-for-byte identical');

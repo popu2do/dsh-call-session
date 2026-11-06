@@ -3,10 +3,10 @@ import assert from 'node:assert/strict';
 import {
   executeSessionCall,
   dispatchNativeMessage,
-  CALL_TYPE_INTENTS,
   buildTransportPayload,
   sanitizePostIds
 } from '../lib/session-call.mjs';
+import { CALL_TYPES } from '../lib/native-message-transport.mjs';
 import { assertNativeUserMessage, createMockAgent, silentLogger } from './helpers/mock-agent.mjs';
 
 /** A minimal but well-formed UserMessage: the host rejects anything else on steer/followup. */
@@ -45,13 +45,12 @@ function createMockCtx({ agentsList = [], archivedIds = [], logger = silentLogge
   };
 }
 
-test('单播调用类型意图枚举与协议映射契约 (ADR-0006)', () => {
-  const supportedIntents = ['notice', 'task_soft', 'task_hard', 'task_report'];
-  for (const intent of supportedIntents) {
-    assert.ok(typeof CALL_TYPE_INTENTS[intent] === 'string' && CALL_TYPE_INTENTS[intent].length > 0);
-  }
-  assert.equal(CALL_TYPE_INTENTS['unknown_intent'], undefined);
-  assert.ok(Object.isFrozen(CALL_TYPE_INTENTS));
+test('呼叫类型对外只暴露数组，意图映射留在模块内部 (ADR-0006)', () => {
+  assert.deepEqual([...CALL_TYPES], ['notice', 'task_soft', 'task_hard', 'task_report']);
+  assert.ok(Object.isFrozen(CALL_TYPES), 'the enum must not be mutable at runtime');
+  // 曾经把 {notice: 'NOTICE', …} 这份映射当公开导出抛出去，调用方误当数组用 .join() 会直接抛 TypeError
+  assert.equal(typeof CALL_TYPES.join, 'function');
+  assert.equal(CALL_TYPES.includes('unknown_intent'), false);
 });
 
 test('单播原生通信分发：按目标会话运行状态自适应选择 steer 或 followup 通道', () => {

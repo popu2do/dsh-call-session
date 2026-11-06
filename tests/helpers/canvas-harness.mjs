@@ -4,8 +4,6 @@ import path from 'node:path';
 import vm from 'node:vm';
 import { fileURLToPath } from 'node:url';
 
-import * as localeTable from '../../lib/locales/table.mjs';
-
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, '..', '..');
 
@@ -36,8 +34,9 @@ export function readClientSource() {
  * `navigator` and the four timer functions replace their defaults outright.
  */
 export function loadClientInSandbox(overrides = {}, requireFn = () => null) {
-  const code = fs.readFileSync(path.join(rootDir, 'lib', 'client.js'), 'utf8')
-    .replaceAll('__MIRROR__', '__localeMirror__');
+  // 产物必须是真机看到的那份字节：这里不做任何占位符替换，
+  // 否则再次出现"测试全绿、浏览器加载即崩"的漏洞。
+  const code = fs.readFileSync(path.join(rootDir, 'lib', 'client.js'), 'utf8');
 
   let registration = null;
   const windowOverrides = overrides.window || {};
@@ -46,7 +45,6 @@ export function loadClientInSandbox(overrides = {}, requireFn = () => null) {
   });
 
   const sandbox = Object.assign({
-    __localeMirror__: localeTable,
     document: overrides.document,
     ResizeObserver: overrides.ResizeObserver,
     navigator: overrides.navigator,

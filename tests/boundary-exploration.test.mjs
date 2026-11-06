@@ -13,6 +13,17 @@ import { createMockAgent, silentLogger } from './helpers/mock-agent.mjs';
 // The guard assertions here encode what a live host accepts; the crash that motivated
 // them is recorded in docs/agents/evidence/0020-turn-stopping.md.
 
+function callCtx(agents, telemetry = new CallTelemetryRingBuffer(20)) {
+  const agentsService = {
+    list: () => agents,
+    get: (id) => agents.find((a) => a.id === id) || null
+  };
+  return {
+    get: (k) => (k === 'agents' ? agentsService : k === 'callTelemetry' ? telemetry : null),
+    logger: () => silentLogger
+  };
+}
+
 test('Boundary Exploration: 1. call_type input validation & edge cases', async () => {
   // 1.1 Canonical types are strictly these four; the array order is not part of the contract
   assert.deepEqual([...CALL_TYPES].sort(), ['notice', 'task_hard', 'task_report', 'task_soft']);
@@ -53,16 +64,8 @@ test('Boundary Exploration: 1. call_type input validation & edge cases', async (
 test('Boundary Exploration: 2. Message length and content boundaries', async () => {
   const caller = createMockAgent({ id: 'session-caller-0001', status: 'idle' });
   const target = createMockAgent({ id: 'session-target-0002', status: 'idle' });
-  const agentsService = {
-    list: () => [caller, target],
-    get: (id) => (id === target.id ? target : id === caller.id ? caller : null)
-  };
-  const ctx = {
-    get: (k) => (k === 'agents' ? agentsService : null),
-    logger: () => silentLogger
-  };
   const ledger = new CallTelemetryRingBuffer(20);
-  ctx.get = (k) => (k === 'agents' ? agentsService : k === 'callTelemetry' ? ledger : null);
+  const ctx = callCtx([caller, target], ledger);
 
   // 2.1 Empty and whitespace-only message rejection
   for (const emptyMsg of ['', '   ', '\t\n\r  ']) {
@@ -93,6 +96,27 @@ test('Boundary Exploration: 2. Message length and content boundaries', async () 
   assert.equal(hardResult.success, true);
   assert.equal(ledger.getPendingTasksForSession(target.id).length, 1, 'a delivered task_hard enqueues exactly one obligation');
 
+  // 2.2c A dispatch that blows up enqueues nothing: the obligation is written by the
+  // onDispatched callback, so a throw before delivery must leave the ledger untouched
+  const flaky = createMockAgent({
+    id: 'session-target-flaky',
+    status: 'idle',
+    followupFn: () => { throw new Error('dispatch exploded'); }
+  });
+  const flakyCtx = callCtx([caller, flaky], ledger);
+  const before = ledger.getPendingTasksForSession(flaky.id).length;
+  const flakyResult = await executeSessionCall(
+    flakyCtx,
+    { target_session_id: flaky.id, message: 'never lands', call_type: 'task_hard' },
+    { agent: caller }
+  );
+  assert.equal(flakyResult.success, false, 'a failed dispatch is reported as a failure');
+  assert.equal(
+    ledger.getPendingTasksForSession(flaky.id).length,
+    before,
+    'a failed dispatch must not enqueue an obligation'
+  );
+
   // 2.3 4001 characters must be rejected
   const overflow4001 = 'a'.repeat(4001);
   await assert.rejects(
@@ -105,14 +129,7 @@ test('Boundary Exploration: 3. Target session identification & forbidden targets
   const caller = createMockAgent({ id: 'session-caller-0001', status: 'idle' });
   const targetA = createMockAgent({ id: 'session-target-aaaa-1111', status: 'idle' });
   const targetB = createMockAgent({ id: 'session-target-aaaa-2222', status: 'idle' });
-  const agentsService = {
-    list: () => [caller, targetA, targetB],
-    get: (id) => [caller, targetA, targetB].find((a) => a.id === id) || null
-  };
-  const ctx = {
-    get: (k) => (k === 'agents' ? agentsService : null),
-    logger: () => silentLogger
-  };
+  const ctx = callCtx([caller, targetA, targetB]);
 
   // 3.1 Self-call forbidden (exact and prefix)
   await assert.rejects(
@@ -167,19 +184,29 @@ test('Boundary Exploration: 5. Ledger FIFO settlement underflow & cross-session 
   const callerA = 'session-caller-A';
   const callerB = 'session-caller-B';
 
-  // 5.1 Underflow safety: reporting when no tasks are pending does not crash, and records unmatched留痕
+  // 5.1 Underflow safety: a report with nothing owed does not crash, leaves a trace,
+  // and must not touch an obligation that belongs to somebody else (T-D 3)
   assert.equal(buffer.getPendingTasksForSession(targetId).length, 0);
+  buffer.record({
+    callerSessionId: callerB,
+    targetSessionId: targetId,
+    callType: 'task_hard',
+    messagePayload: 'Unrelated work'
+  });
   buffer.record({
     callerSessionId: targetId,
     targetSessionId: callerA,
     callType: 'task_report',
     messagePayload: 'Unmatched report'
   });
-  assert.equal(buffer.getPendingTasksForSession(targetId).length, 0);
+  const survivor = buffer.getPendingTasksForSession(targetId);
+  assert.equal(survivor.length, 1, 'an unmatched report damages no other entry');
+  assert.equal(survivor[0].callerSessionId, callerB);
   assert.equal(buffer.lastUnmatchedReport.callerSessionId, targetId);
   assert.equal(buffer.lastUnmatchedReport.targetSessionId, callerA);
 
   // 5.2 Cross-session isolation: Caller A and Caller B both dispatch tasks to Worker
+  buffer.cleanupSession(targetId, 'purge');
   buffer.record({
     callerSessionId: callerA,
     targetSessionId: targetId,
@@ -295,15 +322,15 @@ test('Boundary Exploration: 6. Turn-stopping guard budget, turn reset & abort si
   }
 
   // 载荷必须与宿主接收的形状一致：原生 UserMessage，报头标 notice 而不是任务类型，
-  // 否则守卫会给自己造出新的强制待办（自激循环）
+  // 否则守卫会给自己造出新的履约任务（自激循环）
   const samplePayload = steered()[0].msg;
   assert.equal(samplePayload.role, 'user');
   assert.equal(samplePayload.source.kind, 'plugin:dsh-call-session');
-  assert.match(samplePayload.content[0].text, /CallType: notice/);
+  // 报头既要点名发件方，也必须是 notice 而不是任务类型
   assert.match(
     samplePayload.content[0].text,
-    /\[From: session-caller-guard \(Guard Caller\) \| CallType: notice\]/,
-    '报头点名发件方，不能是被催会话自己'
+    /^\[From: session-caller-guard \(Guard Caller\) \| CallType: notice\]/,
+    '报头点名发件方，不能是被催会话自己；类型是 notice 才不会自激'
   );
 
   // 4th chaser in turn 1 must be skipped (exhausted budget = 3)

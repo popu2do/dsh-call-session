@@ -21,7 +21,7 @@ import {
   en
 } from '../lib/locales/index.mjs';
 import { formatAuthorReminderText } from '../lib/board-store.mjs';
-import { CALL_TYPE_INTENTS } from '../lib/native-message-transport.mjs';
+import { CALL_TYPES } from '../lib/native-message-transport.mjs';
 import { CALL_TYPE_I18N_KEYS, CALL_TYPE_UNKNOWN_KEY } from '../lib/locales/table.mjs';
 import { loadClientBundle } from './helpers/canvas-harness.mjs';
 
@@ -95,7 +95,7 @@ test('ADR-0023: Catalog 拓扑完全对称与中英文键对齐验证', () => {
 
 test('ADR-0042: 四类呼叫意图在双端词典里都有本地化标签且不泄露裸枚举', () => {
   // 后端枚举是唯一真源：前端词条缺任何一个类别，这里先红。
-  const backendTypes = Object.keys(CALL_TYPE_INTENTS).sort();
+  const backendTypes = [...CALL_TYPES].sort();
   assert.deepEqual(Object.keys(CALL_TYPE_I18N_KEYS).sort(), backendTypes, '呼叫类别词条表必须与后端枚举完全一致');
 
   // 画布侧词典来自插件客户端的 zh/en 两份，键集必须与后端枚举一一对应
