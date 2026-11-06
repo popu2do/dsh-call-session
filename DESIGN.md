@@ -70,7 +70,7 @@ The collaboration canvas adapts dynamically to host container viewports:
 | Breakpoint | Viewport Width | Layout Behavior |
 |---|---|---|
 | **Compact** | `< 768px` | Single-column collapsed workspace, toolbar wraps to compact icons, drawer occupies 100vw full width. |
-| **Standard** | `>= 768px` | Multi-column workspace group columns (工作区分组列) horizontally laid out, side drawer fixed at 420px (max 90vw). |
+| **Standard** | `>= 768px` | Multi-column workspace group columns horizontally laid out, side drawer fixed at 420px (max 90vw). |
 
 ## Theme Tokens & Dual-Theme Architecture
 
@@ -79,8 +79,8 @@ The canvas supports native dark mode (default) and light mode (`.dsh-canvas-ligh
 | Token Role | Base / Light (`.dsh-canvas-light`) | Dark (Default) | Notes |
 |---|---|---|---|
 | `canvas-bg` | `#f8fafc` | `#0b0f19` | Viewport infinite surface |
-| `workspace-surface` | `#ffffff` | `#111827` | Workspace group column (工作区分组列) surface |
-| `workspace-border` | `#e2e8f0` | `#1f2937` | Workspace group column (工作区分组列) boundary |
+| `workspace-surface` | `#ffffff` | `#111827` | Workspace group column surface |
+| `workspace-border` | `#e2e8f0` | `#1f2937` | Workspace group column boundary |
 | `node-surface` | `#ffffff` | `#1e293b` | Agent session card surface |
 | `node-border` | `#cbd5e1` | `#334155` | Agent session card boundary |
 | `node-text-primary` | `#0f172a` (`gray-1000`) | `#f8fafc` | Contrast ratio `> 10:1` |

@@ -114,5 +114,5 @@ ADR Writing Guidelines (writing-for-agents):
 三类证据分开陈述，缺任一类都不算验收通过。
 
 - 自动化测试：`tests/report-obligation.test.mjs` 覆盖 Schema 拒绝与缺省类型、账本全局 FIFO 结算，含跨发件人配对门禁与未匹配记录、义务只落接收方、级联清理、`task:remind` 上下文注入、`agent/turn-stopping` 停机拦截、逐回合预算耗尽放行、空账本不注入，以及重启自检返回本进程实际加载的取值与守卫注册状态；`tests/session-create.test.mjs` 覆盖 `session_create` 的初始消息与 `session_call` 记进同一本账。全量回归见 `npm run verify` 的当次输出，不在本文硬编码条数。
-- 红绿对照：逐条撤销守卫的关键判断，包括中途放行、预算恒假、过滤放宽与 steer 传裸字符串时对应用例转红，恢复后全绿，实验记录在 `docs/agents/evidence/0020-turn-stopping.md` 的「T-C 验收：红绿对照」。
+- 红绿对照：逐条撤销守卫的关键判断，包括中途放行、预算恒假、过滤放宽与 steer 传裸字符串时对应用例转红，恢复后全绿，实验记录在 `docs/agents/evidence/0020-turn-stopping.md` 的「红绿对照」。
 - 实机取证：探针 profile 装载本插件后，记录到纯文本收尾与工具调用收尾两条路径都触发 `agent/turn-stopping`；并捕获到裸字符串载荷会让宿主以 `Cannot read properties of undefined (reading 'kind')` 结束回合，换成原生 UserMessage 后同一会话正常续命，时间线见 `docs/agents/evidence/0020-turn-stopping.md`。

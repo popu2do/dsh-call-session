@@ -18,9 +18,9 @@ node ~/.local/bin/dsh --profile probe20 headless "<任务文本>"
 会话日志（宿主事件流）落在 `~/.dsh/sessions/<workspace>/session-*/session.v4.jsonl.zstd`，
 用 `zlib.zstdDecompressSync` 解压后逐行 `JSON.parse` 即可复盘 seq 时间线。
 
-## 四条实测路径
+## 实测路径
 
-### 一、纯文本收尾
+### 文本收尾
 
 任务："只回复两个字：收到。"
 
@@ -35,14 +35,14 @@ node ~/.local/bin/dsh --profile probe20 headless "<任务文本>"
 
 **钩子触发一次，载荷键为 `turn` / `signal` / `agent`，`signal.aborted === false`。**
 
-### 二、工具调用收尾
+### 工具收尾
 
 任务："用 bash 执行 echo hi，然后原样回复 hi。"
 
 与路径一相同：hooks 触发一次，`turn=1`，键集合一致，`signalAborted=false`。
 说明以工具调用收尾的步骤同样会走到回合收尾钩子。
 
-### 三、守卫 steer 之后能否保活
+### 守卫保活
 
 在钩子里对 `payload.agent` 调 `steer(buildNativeUserMessage(...))`（`callType: 'task_hard'`）：
 
@@ -54,7 +54,7 @@ node ~/.local/bin/dsh --profile probe20 headless "<任务文本>"
 
 headless 最终输出 `OK`。**同一 `turn=1` 内钩子被调用第二次，模型继续生成——steer 确实把回合顶回去了。**
 
-### 四、用户中止
+### 用户中止
 
 以 `agent.cancel({ kind: 'user' })` 模拟用户停止：
 
@@ -69,7 +69,7 @@ headless 最终输出 `OK`。**同一 `turn=1` 内钩子被调用第二次，模
 守卫里对 `signal.aborted` 的短路因此是防御性约束（宿主升级后行为可能改变），而不是补偿一个已观测缺陷；
 它的值由 `tests/report-obligation.test.mjs` 用例 7 守住，不靠实机复现。
 
-## 对实现的约束
+## 实现约束
 
 1. 会话 id 只能从 `payload.agent` 解析（`agent.session.id`）；载荷里没有独立 session 字段。
 2. 守卫必须在钩子内 `await agent.steer(...)` 才能真正保活；`followup` 不在该语义内。
@@ -84,11 +84,11 @@ headless 最终输出 `OK`。**同一 `turn=1` 内钩子被调用第二次，模
 `node_modules/dsh-call-session` 软链到主仓库），与 worktree 源码无关；用 worktree 源码构造的
 `task_hard` 消息摘要为 `[Cross-Session TASK_HARD] from …`。
 
-## 实机捕获：催办消息的形状决定宿主能否接收
+## 载荷形态
 
 复现：worktree 源码经 probe20 profile 的 `dsh-call-session` 软链进真实 dsh 宿主，调用方会话建对等会话后投递 `task_hard`，对等会话被要求拒绝汇报。
 
-### 字符串载荷（修复前）
+### 字符载荷
 
 ```
 25 assistant/message turn 2 step 1  TEXT: 拒绝汇报
@@ -100,7 +100,7 @@ headless 最终输出 `OK`。**同一 `turn=1` 内钩子被调用第二次，模
 
 `agent.steer(string)` 的字符串被原样拼进 inbox（`inserted` 是裸字符串，不是消息对象），宿主渲染阶段取 `message.kind` 时崩溃，整个回合以 UNKNOWN 结束，该会话此后不再响应任何入站消息。
 
-### 原生 UserMessage 载荷（修复后）
+### 原生载荷
 
 ```
 25 assistant/message turn 2 step 1  TEXT: 拒绝汇报
@@ -117,7 +117,7 @@ headless 最终输出 `OK`。**同一 `turn=1` 内钩子被调用第二次，模
 
 续命后模型停在文本输出，本 profile 的模型在该场景下未继续调用工具。验收结论以宿主侧事件（`step/start`、`user/message`、无错误 `turn/end`）为准，不以对端是否真的汇报为准。同一子会话在后续回合仍正常投递并以 `reason={"kind":"completed"}` 结束，说明修复前是硬错误、修复后会话保持健康。
 
-## 实机捕获：账本记在哪一侧决定谁会收到催办
+## 账本侧别
 
 复现：调用方会话用 `session_create` 建对等会话，随即投递一条 `task_hard`，然后按指令结束本轮。对等会话侧能正常自回 `task_report`（投递链路通），但两边的会话事件流里都找不到任何 `[Task Hard Obligation]` 注入。
 
@@ -125,11 +125,11 @@ headless 最终输出 `OK`。**同一 `turn=1` 内钩子被调用第二次，模
 
 现在 `lib/call-telemetry.mjs:246` 的 `getPendingTasksForSession` 只按 `targetSessionId` 过滤，1:1 结项先按「发件方 = 回执接收方」配对，再在配对范围内严格先进先出。所以本条实机现象的诚实结论是：账本方向没有缺陷，守卫当时不催办是因为该场景里的发起方并没有欠账；守卫到底会不会在真机上催办，仍只认宿主事件。
 
-## 测试替身的教训
+## 替身教训
 
 `tests/helpers/mock-agent.mjs` 的 `steer`/`followup` 原先接受任意值，「守卫调用了 steer」这条断言在纯字符串载荷下依然通过，而真实宿主直接崩。现改为 `assertNativeUserMessage`：非对象、缺 `id`、`role` 非 `user`、`content` 为空或非 text 分片一律抛 `TypeError`。替身由此复刻宿主的接收规则，「抛错」直接对应「实机会死」。
 
-## T-C 验收：红绿对照
+## 红绿对照
 
 逐条把守卫的一项约束改回缺陷版本，跑 `node --test tests/report-obligation.test.mjs`，确认对应用例转红，再恢复源码确认全绿。
 

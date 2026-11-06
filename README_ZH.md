@@ -158,7 +158,7 @@ dsh plugin --profile web remove dsh-call-session
 
 ## 架构
 
-系统的架构演化与技术决策完整记录于架构决策记录（ADR）：
+系统的架构演化与技术决策完整记录于架构决策记录：
 
 - 决策索引参见 [docs/adrs/README.md](./docs/adrs/README.md)。
 - 离线架构拓扑与交互式全景参见 [docs/architecture/](./docs/architecture/)。
