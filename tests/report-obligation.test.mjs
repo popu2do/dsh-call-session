@@ -1,6 +1,6 @@
 /**
  * Turn-stopping payload shapes used here come from live host captures recorded in
- * docs/agents/evidence/0020-turn-stopping.md.
+ * ADR-0042.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -337,7 +337,7 @@ test('5. Hard task interception: agent/turn-stopping triggers steer on pending t
 
 /**
  * The payload shape below mirrors real host output recorded in
- * docs/agents/evidence/0020-turn-stopping.md: `{ turn, signal, agent }`, where `agent`
+ * ADR-0042: `{ turn, signal, agent }`, where `agent`
  * is the live agent instance and `signal` is the turn's AbortSignal.
  */
 function hostTurnPayload(agent, turn, { aborted = false, reason = undefined } = {}) {

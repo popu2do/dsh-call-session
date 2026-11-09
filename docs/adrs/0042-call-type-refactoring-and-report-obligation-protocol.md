@@ -84,7 +84,7 @@ ADR Writing Guidelines (writing-for-agents):
 
 结合原生宿主机制构建双重推进防护：
 1. **执行前上下文注入**：注册 `systemPrompt.context` 提供者 `task:remind`。当会话存在未结任务时，在每步执行前动态注入待履约任务清单与发件人指示；若无待办则返回空串，不消耗上下文。
-2. **轮次停机拦截守卫**：监听宿主 `agent/turn-stopping` 事件，载荷为 `{ turn, signal, agent }`，会话标识只能从 `agent.session.id` 解析。当会话仍有未结 `task_hard` 且本轮催办次数未达防死锁预算，默认 3 次时，通过 `agent.steer` 注入一个原生 UserMessage 催办消息，把回合顶回去要求智能体履约，因宿主只接受 UserMessage，字符串载荷会让整个回合失败，见 `docs/agents/evidence/0020-turn-stopping.md`；本轮预算耗尽后放行停机并记录一次告警，下一轮次重新获得完整预算。若载荷 signal 已 abort，守卫直接放行——中止的回合不得被拽回。
+2. **轮次停机拦截守卫**：监听宿主 `agent/turn-stopping` 事件，载荷为 `{ turn, signal, agent }`，会话标识只能从 `agent.session.id` 解析。当会话仍有未结 `task_hard` 且本轮催办次数未达防死锁预算，默认 3 次时，通过 `agent.steer` 注入一个原生 UserMessage 催办消息，把回合顶回去要求智能体履约，因宿主只接受 UserMessage，字符串载荷会让整个回合失败（实测报错 `Cannot read properties of undefined (reading 'kind')`）；本轮预算耗尽后放行停机并记录一次告警，下一轮次重新获得完整预算。若载荷 signal 已 abort，守卫直接放行——中止的回合不得被拽回。
 
 ### 动效
 
@@ -114,5 +114,5 @@ ADR Writing Guidelines (writing-for-agents):
 三类证据分开陈述，缺任一类都不算验收通过。
 
 - 自动化测试：`tests/report-obligation.test.mjs` 覆盖 Schema 拒绝与缺省类型、账本全局 FIFO 结算，含跨发件人配对门禁与未匹配记录、义务只落接收方、级联清理、`task:remind` 上下文注入、`agent/turn-stopping` 停机拦截、逐回合预算耗尽放行、空账本不注入，以及重启自检返回本进程实际加载的取值与守卫注册状态；`tests/session-create.test.mjs` 覆盖 `session_create` 的初始消息与 `session_call` 记进同一本账。全量回归见 `npm run verify` 的当次输出，不在本文硬编码条数。
-- 红绿对照：逐条撤销守卫的关键判断，包括中途放行、预算恒假、过滤放宽与 steer 传裸字符串时对应用例转红，恢复后全绿，实验记录在 `docs/agents/evidence/0020-turn-stopping.md` 的「红绿对照」。
-- 实机取证：探针 profile 装载本插件后，记录到纯文本收尾与工具调用收尾两条路径都触发 `agent/turn-stopping`；并捕获到裸字符串载荷会让宿主以 `Cannot read properties of undefined (reading 'kind')` 结束回合，换成原生 UserMessage 后同一会话正常续命，时间线见 `docs/agents/evidence/0020-turn-stopping.md`。
+- 红绿对照：逐条撤销守卫的关键判断，包括中途放行、预算恒假、过滤放宽与 steer 传裸字符串时对应用例转红，恢复后全绿，基线覆盖于 `tests/report-obligation.test.mjs`。
+- 实机取证：探针 profile 装载本插件后，验证纯文本收尾与工具调用收尾两条路径都触发 `agent/turn-stopping`；并捕获到裸字符串载荷会让宿主以 `Cannot read properties of undefined (reading 'kind')` 结束回合，换成原生 UserMessage 后同一会话正常续命。
