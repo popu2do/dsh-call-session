@@ -11,7 +11,7 @@ import { CallTelemetryRingBuffer } from '../lib/call-telemetry.mjs';
 import { createMockAgent, silentLogger } from './helpers/mock-agent.mjs';
 
 // The guard assertions here encode what a live host accepts; the crash that motivated
-// them is recorded in docs/agents/evidence/0020-turn-stopping.md.
+// them is recorded in ADR-0042.
 
 function callCtx(agents, telemetry = new CallTelemetryRingBuffer(20)) {
   const agentsService = {
@@ -298,7 +298,7 @@ test('Boundary Exploration: 6. Turn-stopping guard budget, turn reset & abort si
   });
 
   // 不覆盖 steer：默认替身会校验载荷是不是宿主能接收的原生 UserMessage，
-  // 一旦守卫退化成投递字符串，这里直接抛错而不是默默计数（见 docs/agents/evidence/0020-turn-stopping.md）。
+  // 一旦守卫退化成投递字符串，这里直接抛错而不是默默计数（见 ADR-0042）。
   const workerAgent = createMockAgent({ id: workerSessionId, status: 'running' });
   const steered = () => workerAgent.received.filter((r) => r.method === 'steer');
 
